@@ -1,0 +1,82 @@
+package job
+
+import (
+	"errors"
+	"fmt"
+)
+
+const (
+	ErrMsgJobNotFound         = "job not found"
+	ErrMsgInvalidJobID        = "invalid job id"
+	ErrMsgInvalidAutomationID = "invalid automation id"
+	ErrMsgCreateJob           = "failed to create job"
+	ErrMsgUpdateJob           = "failed to update job"
+	ErrMsgGetJob              = "failed to get job"
+	ErrMsgListJobs            = "failed to list jobs"
+)
+
+var (
+	ErrJobNotFound         = errors.New(ErrMsgJobNotFound)
+	ErrInvalidJobID        = errors.New(ErrMsgInvalidJobID)
+	ErrInvalidAutomationID = errors.New(ErrMsgInvalidAutomationID)
+	ErrCreateJob           = errors.New(ErrMsgCreateJob)
+	ErrUpdateJob           = errors.New(ErrMsgUpdateJob)
+	ErrGetJob              = errors.New(ErrMsgGetJob)
+	ErrListJobs            = errors.New(ErrMsgListJobs)
+)
+
+type JobError struct {
+	Message string
+	Err     error
+}
+
+func (e JobError) Error() string {
+	if e.Err == nil {
+		return e.Message
+	}
+
+	if e.Message == "" {
+		return e.Err.Error()
+	}
+
+	return fmt.Sprintf("%s: %v", e.Message, e.Err)
+}
+
+func (e JobError) Unwrap() error {
+	return e.Err
+}
+
+func NewJobError(message string, err error) error {
+	return JobError{
+		Message: message,
+		Err:     err,
+	}
+}
+
+func NewJobNotFoundError(err error) error {
+	return NewJobError(ErrJobNotFound.Error(), err)
+}
+
+func NewInvalidJobIDError(err error) error {
+	return NewJobError(ErrInvalidJobID.Error(), err)
+}
+
+func NewInvalidAutomationIDError(err error) error {
+	return NewJobError(ErrInvalidAutomationID.Error(), err)
+}
+
+func NewCreateJobError(err error) error {
+	return NewJobError(ErrCreateJob.Error(), err)
+}
+
+func NewUpdateJobError(err error) error {
+	return NewJobError(ErrUpdateJob.Error(), err)
+}
+
+func NewGetJobError(err error) error {
+	return NewJobError(ErrGetJob.Error(), err)
+}
+
+func NewGetJobsError(err error) error {
+	return NewJobError(ErrListJobs.Error(), err)
+}
