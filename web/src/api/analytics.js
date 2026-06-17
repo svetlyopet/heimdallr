@@ -1,0 +1,9 @@
+import { apiRequest } from "./client";
+
+export function getAutomationAnalytics() {
+    return apiRequest("/v1/analytics/automation");
+}
+
+export function getAutomationAnalyticsById(automationId) {
+    return apiRequest(`/v1/analytics/automation/${automationId}`);
+}

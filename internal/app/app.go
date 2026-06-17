@@ -2,6 +2,7 @@ package app
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/svetlyopet/heimdallr/internal/analytics"
 	"github.com/svetlyopet/heimdallr/internal/automation"
 	"github.com/svetlyopet/heimdallr/internal/job"
 	"github.com/svetlyopet/heimdallr/internal/logger"
@@ -21,6 +22,9 @@ type App struct {
 
 	jobService job.Service
 	jobHandler job.Handler
+
+	analyticsService analytics.Service
+	analyticsHandler analytics.Handler
 }
 
 func New(db *gorm.DB, appLogger *logger.Logger) (*App, error) {
@@ -52,6 +56,14 @@ func New(db *gorm.DB, appLogger *logger.Logger) (*App, error) {
 		return nil, err
 	}
 
+	// Analytics
+	analyticsRepository := analytics.NewRepository(db)
+	analyticsService := analytics.NewService(analyticsRepository, appLogger)
+	analyticsHandler, err := analytics.NewHandler(analyticsService)
+	if err != nil {
+		return nil, err
+	}
+
 	return &App{
 		db:     db,
 		logger: appLogger,
@@ -64,6 +76,9 @@ func New(db *gorm.DB, appLogger *logger.Logger) (*App, error) {
 
 		jobService: jobService,
 		jobHandler: jobHandler,
+
+		analyticsService: analyticsService,
+		analyticsHandler: analyticsHandler,
 	}, nil
 }
 
@@ -71,4 +86,5 @@ func (a *App) RegisterRoutes(rg *gin.RouterGroup) {
 	provider.RegisterRoutes(rg, a.providerHandler)
 	automation.RegisterRoutes(rg, a.automationHandler)
 	job.RegisterRoutes(rg, a.jobHandler)
+	analytics.RegisterRoutes(rg, a.analyticsHandler)
 }

@@ -12,6 +12,16 @@
       <nav class="nav">
         <button
           class="nav-item"
+          :class="{ active: activeView === 'dashboard' }"
+          type="button"
+          @click="activeView = 'dashboard'"
+        >
+          <span>📊</span>
+          Dashboard
+        </button>
+
+        <button
+          class="nav-item"
           :class="{ active: activeView === 'providers' }"
           type="button"
           @click="activeView = 'providers'"
@@ -48,7 +58,8 @@
     </aside>
 
     <main class="main">
-      <ProviderPage v-if="activeView === 'providers'" />
+      <DashboardPage v-if="activeView === 'dashboard'" />
+      <ProviderPage v-else-if="activeView === 'providers'" />
       <AutomationPage v-else-if="activeView === 'automations'" />
       <JobPage v-else />
     </main>
@@ -58,8 +69,9 @@
 <script setup>
 import { ref } from "vue";
 import AutomationPage from "./pages/AutomationPage.vue";
+import DashboardPage from "./pages/DashboardPage.vue";
 import JobPage from "./pages/JobPage.vue";
 import ProviderPage from "./pages/ProviderPage.vue";
 
-const activeView = ref("automations");
+const activeView = ref("dashboard");
 </script>
