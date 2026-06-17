@@ -31,8 +31,10 @@ go.work.sum
 .idea/
 .vscode/
 
-# Binary artifacts
+# Output artifacts
 bin/
+out/
+reports/
 
 # Sqlite3 database for local development
 heimdallr.db

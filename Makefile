@@ -1,11 +1,19 @@
 APP_NAME := heimdallr
-MAIN_PATH := ./cmd/main.go
+
 BIN_DIR := ./bin
-BIN_PATH := $(BIN_DIR)/$(APP_NAME)
-LOG_FORMAT ?= text
-LOG_LEVEL ?= info
 WEB_DIR := ./web
 PUBLIC_DIR := ./public
+REPORTS_DIR := ./reports
+
+MAIN_PATH := ./cmd/main.go
+APP_PATH := $(BIN_DIR)/$(APP_NAME)
+
+LOG_FORMAT ?= text
+LOG_LEVEL ?= info
+
+.PHONY: out-reports
+out-reports:
+	@mkdir -p $(REPORTS_DIR)
 
 .PHONY: out-api
 out-api:
@@ -32,13 +40,17 @@ fmt: ## Formats code with go fmt and goimports
 govulncheck: ## Vulnerability detection using govulncheck
 	@go run golang.org/x/vuln/cmd/govulncheck ./...
 
-.PHONY: coverage
-coverage: $(OUT_DIR)/report.json ## Displays coverage per func on cli
-	@go tool cover -func=$(OUT_DIR)/cover.out
+coverage: out-reports $(REPORTS_DIR)/report.json ## Displays coverage per func on cli
+	@go tool cover -func=$(REPORTS_DIR)/cover.out
 
-.PHONY: html-coverage
-html-coverage: $(OUT_DIR)/report.json ## Displays the coverage results in the browser
-	@go tool cover -html=$(OUT_DIR)/cover.out
+html-coverage: out-reports $(REPORTS_DIR)/report.json ## Displays the coverage results in the browser
+	@go tool cover -html=$(REPORTS_DIR)/cover.out
+
+test-reports: out-reports $(REPORTS_DIR)/report.json
+
+.PHONY: $(REPORTS_DIR)/report.json
+$(REPORTS_DIR)/report.json: out-reports
+	@go test -count 1 ./... -coverprofile=$(REPORTS_DIR)/cover.out --json | tee "$(@)"
 
 .PHONY: web-install-deps
 web-install-deps: ## Install web dependencies
@@ -57,15 +69,17 @@ build-web: out-web web-install-deps ## Build web assets
 
 .PHONY: build-api
 build-api: out-api ## Build api release
-	@go build -ldflags="-w -s" -o $(BIN_PATH) $(MAIN_PATH)
+	@go build -ldflags="-w -s" -o $(APP_PATH) $(MAIN_PATH)
 
 build: build-web build-api ## Build api and web assets
 
-run-release: ## Run web app in release mode
-	@GIN_MODE=release go run $(MAIN_PATH) -log-format=$(LOG_FORMAT) -log-level=$(LOG_LEVEL)
-
+.PHONY: run-debug
 run-debug: ## Run web app in debug mode
 	@GIN_MODE=debug go run $(MAIN_PATH) -log-format=$(LOG_FORMAT) -log-level=$(LOG_LEVEL)
+
+.PHONY: run-release
+run-release: ## Run web app in release mode
+	@GIN_MODE=release go run $(MAIN_PATH) -log-format=$(LOG_FORMAT) -log-level=$(LOG_LEVEL)
 
 clean-web: ## Cleans up web generated assets
 	@rm -rf $(PUBLIC_DIR)
@@ -74,7 +88,10 @@ clean-web: ## Cleans up web generated assets
 clean-api: ## Cleans up api generated output
 	@rm -rf $(BIN_DIR)
 
-clean: clean-api clean-web ## Cleans up output and release files
+clean-reports: ## Cleans up coverage reports
+	@rm -rf $(REPORTS_DIR)
+
+clean: clean-api clean-web clean-reports ## Cleans up all produced artifacts
 
 help: ## Shows the help
 	@echo 'Usage: make <OPTIONS> ... <TARGETS>'
