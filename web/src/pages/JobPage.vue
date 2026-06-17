@@ -120,16 +120,16 @@
 
             <tbody>
               <tr v-for="job in jobs" :key="`${selectedAutomationId}:${job.id}`">
-                <td><strong>{{ job.id }}</strong></td>
-                <td>{{ job.automation }}</td>
-                <td><span class="badge">{{ job.provider }}</span></td>
-                <td><span class="badge" :class="`badge-${job.status}`">{{ job.status }}</span></td>
-                <td>{{ job.location }}</td>
-                <td>
+                <td data-label="Job ID"><strong>{{ job.id }}</strong></td>
+                <td data-label="Automation">{{ job.automation }}</td>
+                <td data-label="Provider"><span class="badge">{{ job.provider }}</span></td>
+                <td data-label="Status"><span class="badge" :class="`badge-${job.status}`">{{ job.status }}</span></td>
+                <td data-label="Location">{{ job.location }}</td>
+                <td data-label="URL">
                   <a v-if="job.url" :href="job.url" target="_blank" rel="noreferrer">Open</a>
                   <span v-else>—</span>
                 </td>
-                <td>
+                <td data-label="Actions">
                   <button
                     class="button button-small button-secondary"
                     type="button"

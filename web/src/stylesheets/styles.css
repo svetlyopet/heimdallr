@@ -233,6 +233,27 @@ a:hover {
     min-width: 0;
 }
 
+.table-wrapper {
+    width: 100%;
+    overflow-x: visible;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+}
+
+th,
+td {
+    padding: 14px 12px;
+    border-bottom: 1px solid var(--border);
+    text-align: left;
+    vertical-align: middle;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
 .panel-header {
     margin-bottom: 18px;
     display: flex;
@@ -457,6 +478,7 @@ tbody tr:hover {
     display: flex;
     justify-content: flex-end;
     gap: 8px;
+    flex-wrap: wrap;
 }
 
 .empty-state {
@@ -523,14 +545,19 @@ code {
 }
 
 .rate-cell {
-    min-width: 160px;
     display: flex;
     align-items: center;
     gap: 10px;
+    min-width: 0;
+}
+
+.rate-cell strong {
+    white-space: nowrap;
 }
 
 .rate-bar {
-    width: 100%;
+    flex: 1 1 90px;
+    min-width: 70px;
     height: 10px;
     overflow: hidden;
     border-radius: 999px;
@@ -542,12 +569,6 @@ code {
     height: 100%;
     border-radius: inherit;
     background: linear-gradient(90deg, #22c55e, #16a34a);
-}
-
-@media (min-width: 1400px) {
-    .dashboard-grid {
-        grid-template-columns: 1fr 1fr;
-    }
 }
 
 @media (max-width: 1180px) {
@@ -593,5 +614,79 @@ code {
 
     .pagination {
         justify-content: space-between;
+    }
+}
+
+@media (max-width: 900px) {
+    .panel-header {
+        flex-direction: column;
+    }
+
+    .page-size {
+        width: 100%;
+    }
+
+    table,
+    thead,
+    tbody,
+    tr,
+    th,
+    td {
+        display: block;
+    }
+
+    thead {
+        display: none;
+    }
+
+    tbody tr {
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 12px;
+        background: white;
+    }
+
+    tbody tr + tr {
+        margin-top: 12px;
+    }
+
+    tbody tr:hover {
+        background: white;
+    }
+
+    td {
+        border-bottom: 0;
+        padding: 10px 0;
+        display: grid;
+        grid-template-columns: minmax(96px, 36%) minmax(0, 1fr);
+        gap: 12px;
+        align-items: center;
+    }
+
+    td::before {
+        content: attr(data-label);
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 900;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+    }
+
+    .name-cell {
+        min-width: 0;
+    }
+
+    .row-actions {
+        justify-content: flex-start;
+    }
+
+    .rate-cell {
+        width: 100%;
+    }
+}
+
+@media (max-width: 720px) {
+    .main {
+        padding: 20px;
     }
 }

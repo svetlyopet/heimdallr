@@ -106,27 +106,27 @@
 
             <tbody>
               <tr v-for="automation in automations" :key="automation.id">
-                <td>
+                <td data-label="Name">
                   <div class="name-cell">
                     <span class="avatar">{{ getInitial(automation.name) }}</span>
                     <strong>{{ automation.name }}</strong>
                   </div>
                 </td>
 
-                <td>
+                <td data-label="Provider">
                   <span class="badge">{{ automation.provider }}</span>
                 </td>
 
-                <td>
+                <td data-label="URL">
                   <a v-if="automation.url" :href="automation.url" target="_blank" rel="noreferrer">
                     Open
                   </a>
                   <span v-else>—</span>
                 </td>
 
-                <td>{{ formatNumber(automation.cost_savings) }}</td>
+                <td data-label="Cost savings">{{ formatNumber(automation.cost_savings) }}</td>
 
-                <td>
+                <td data-label="Actions">
                   <div class="row-actions">
                     <button
                       class="button button-small button-secondary"

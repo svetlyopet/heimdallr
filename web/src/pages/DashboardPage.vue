@@ -71,12 +71,12 @@
 
             <tbody>
               <tr v-for="row in analytics.by_location" :key="row.location">
-                <td><strong>{{ row.location }}</strong></td>
-                <td>{{ row.total_jobs }}</td>
-                <td>{{ row.successful_jobs }}</td>
-                <td>{{ row.failed_jobs }}</td>
-                <td>{{ row.started_jobs }}</td>
-                <td>
+                <td data-label="Location"><strong>{{ row.location }}</strong></td>
+                <td data-label="Total">{{ row.total_jobs }}</td>
+                <td data-label="Success">{{ row.successful_jobs }}</td>
+                <td data-label="Failed">{{ row.failed_jobs }}</td>
+                <td data-label="Started">{{ row.started_jobs }}</td>
+                <td data-label="Rate">
                   <div class="rate-cell">
                     <div class="rate-bar">
                       <span :style="{ width: `${Math.min(row.success_rate, 100)}%` }"></span>
@@ -121,13 +121,13 @@
 
             <tbody>
               <tr v-for="row in analytics.by_automation" :key="row.automation_id">
-                <td><strong>{{ row.automation }}</strong></td>
-                <td><span class="badge">{{ row.provider }}</span></td>
-                <td>{{ row.total_jobs }}</td>
-                <td>{{ row.successful_jobs }}</td>
-                <td>{{ row.failed_jobs }}</td>
-                <td>{{ row.started_jobs }}</td>
-                <td>
+                <td data-label="Automation"><strong>{{ row.automation }}</strong></td>
+                <td data-label="Provider"><span class="badge">{{ row.provider }}</span></td>
+                <td data-label="Total">{{ row.total_jobs }}</td>
+                <td data-label="Success">{{ row.successful_jobs }}</td>
+                <td data-label="Failed">{{ row.failed_jobs }}</td>
+                <td data-label="Started">{{ row.started_jobs }}</td>
+                <td data-label="Rate">
                   <div class="rate-cell">
                     <div class="rate-bar">
                       <span :style="{ width: `${Math.min(row.success_rate, 100)}%` }"></span>
