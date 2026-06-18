@@ -2,14 +2,11 @@ package server
 
 import (
 	"fmt"
-	"net/http"
-	"strings"
 
-	"github.com/gin-contrib/static"
 	"github.com/gin-gonic/gin"
 	"github.com/svetlyopet/heimdallr/internal/app"
-	"github.com/svetlyopet/heimdallr/internal/constants"
 	"github.com/svetlyopet/heimdallr/internal/logger"
+	"github.com/svetlyopet/heimdallr/web"
 	"gorm.io/gorm"
 )
 
@@ -27,21 +24,6 @@ func NewServer(host string, port string, db *gorm.DB, appLogger *logger.Logger) 
 		return nil, err
 	}
 
-	// Serve frontend static files
-	handler.Use(static.Serve("/", static.LocalFile(constants.WebPublicPath, false)))
-
-	// SPA fallback for browser routes, while keeping API routes separate.
-	handler.NoRoute(func(ctx *gin.Context) {
-		if strings.HasPrefix(ctx.Request.URL.Path, "/api") {
-			ctx.JSON(http.StatusNotFound, gin.H{
-				"error": http.StatusText(http.StatusNotFound),
-			})
-			return
-		}
-
-		ctx.File(constants.WebPublicPath + "/index.html")
-	})
-
 	application, err := app.New(db, appLogger)
 	if err != nil {
 		return nil, err
@@ -49,6 +31,10 @@ func NewServer(host string, port string, db *gorm.DB, appLogger *logger.Logger) 
 
 	api := handler.Group("/api")
 	application.RegisterRoutes(api)
+
+	if err = web.RegisterRoutes(handler); err != nil {
+		return nil, err
+	}
 
 	addr := fmt.Sprintf(":%s", port)
 

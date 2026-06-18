@@ -55,6 +55,22 @@ a:hover {
     text-decoration: underline;
 }
 
+code {
+    display: inline-block;
+    max-width: 100%;
+    border-radius: 8px;
+    padding: 3px 6px;
+    color: #334155;
+    background: #f1f5f9;
+    font-size: 12px;
+    white-space: nowrap;
+    word-break: normal;
+    overflow-wrap: normal;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    vertical-align: middle;
+}
+
 .app-shell {
     min-height: 100vh;
     display: grid;
@@ -122,11 +138,14 @@ a:hover {
     gap: 10px;
     text-align: left;
     font-weight: 700;
+    text-decoration: none;
 }
 
 .nav-item.active,
+.nav-item.router-link-active,
 .nav-item:hover {
     background: rgba(37, 99, 235, 0.18);
+    text-decoration: none;
 }
 
 .sidebar-footer {
@@ -235,13 +254,48 @@ a:hover {
 
 .table-wrapper {
     width: 100%;
-    overflow-x: visible;
+    overflow-x: auto;
 }
 
 table {
     width: 100%;
+    min-width: 760px;
     border-collapse: collapse;
-    table-layout: fixed;
+}
+
+.automation-table {
+    min-width: 1120px;
+    table-layout: auto;
+}
+
+.automation-table th:nth-child(1),
+.automation-table td:nth-child(1) {
+    width: 220px;
+}
+
+.automation-table th:nth-child(2),
+.automation-table td:nth-child(2) {
+    width: 380px;
+}
+
+.automation-table th:nth-child(3),
+.automation-table td:nth-child(3) {
+    width: 180px;
+}
+
+.automation-table th:nth-child(4),
+.automation-table td:nth-child(4) {
+    width: 110px;
+}
+
+.automation-table th:nth-child(5),
+.automation-table td:nth-child(5) {
+    width: 140px;
+}
+
+.automation-table th:nth-child(6),
+.automation-table td:nth-child(6) {
+    width: 180px;
 }
 
 th,
@@ -250,8 +304,6 @@ td {
     border-bottom: 1px solid var(--border);
     text-align: left;
     vertical-align: middle;
-    overflow-wrap: anywhere;
-    word-break: break-word;
 }
 
 .panel-header {
@@ -509,12 +561,33 @@ tbody tr:hover {
     font-weight: 800;
 }
 
-code {
+.id-cell {
+    display: inline-flex;
+    min-width: max-content;
+    align-items: center;
+    gap: 8px;
+}
+
+.id-cell code {
+    flex: 0 0 auto;
+    max-width: none;
+    overflow: visible;
+    text-overflow: clip;
+}
+
+.copy-button {
+    flex: 0 0 auto;
+    border: 0;
     border-radius: 8px;
-    padding: 3px 6px;
-    color: #334155;
-    background: #f1f5f9;
+    padding: 5px 8px;
+    color: #1e3a8a;
+    background: #dbeafe;
     font-size: 12px;
+    font-weight: 900;
+}
+
+.copy-button:hover {
+    background: #bfdbfe;
 }
 
 .badge-started {
@@ -532,7 +605,8 @@ code {
     background: #fee2e2;
 }
 
-.nav-item.active {
+.nav-item.active,
+.nav-item.router-link-active {
     background: rgba(37, 99, 235, 0.28);
     color: #ffffff;
 }
@@ -626,35 +700,35 @@ code {
         width: 100%;
     }
 
-    table,
-    thead,
-    tbody,
-    tr,
-    th,
-    td {
+    table:not(.automation-table),
+    table:not(.automation-table) thead,
+    table:not(.automation-table) tbody,
+    table:not(.automation-table) tr,
+    table:not(.automation-table) th,
+    table:not(.automation-table) td {
         display: block;
     }
 
-    thead {
+    table:not(.automation-table) thead {
         display: none;
     }
 
-    tbody tr {
+    table:not(.automation-table) tbody tr {
         border: 1px solid var(--border);
         border-radius: 16px;
         padding: 12px;
         background: white;
     }
 
-    tbody tr + tr {
+    table:not(.automation-table) tbody tr + tr {
         margin-top: 12px;
     }
 
-    tbody tr:hover {
+    table:not(.automation-table) tbody tr:hover {
         background: white;
     }
 
-    td {
+    table:not(.automation-table) td {
         border-bottom: 0;
         padding: 10px 0;
         display: grid;
@@ -663,13 +737,17 @@ code {
         align-items: center;
     }
 
-    td::before {
+    table:not(.automation-table) td::before {
         content: attr(data-label);
         color: var(--muted);
         font-size: 12px;
         font-weight: 900;
         letter-spacing: 0.08em;
         text-transform: uppercase;
+    }
+
+    .automation-table {
+        min-width: 1120px;
     }
 
     .name-cell {

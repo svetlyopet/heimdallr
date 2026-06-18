@@ -10,45 +10,25 @@
       </div>
 
       <nav class="nav">
-        <button
-          class="nav-item"
-          :class="{ active: activeView === 'dashboard' }"
-          type="button"
-          @click="activeView = 'dashboard'"
-        >
+        <RouterLink class="nav-item" to="/dashboard">
           <span>📊</span>
           Dashboard
-        </button>
+        </RouterLink>
 
-        <button
-          class="nav-item"
-          :class="{ active: activeView === 'providers' }"
-          type="button"
-          @click="activeView = 'providers'"
-        >
+        <RouterLink class="nav-item" to="/providers">
           <span>🏢</span>
           Providers
-        </button>
+        </RouterLink>
 
-        <button
-          class="nav-item"
-          :class="{ active: activeView === 'automations' }"
-          type="button"
-          @click="activeView = 'automations'"
-        >
+        <RouterLink class="nav-item" to="/automations">
           <span>⚙️</span>
           Automations
-        </button>
+        </RouterLink>
 
-        <button
-          class="nav-item"
-          :class="{ active: activeView === 'jobs' }"
-          type="button"
-          @click="activeView = 'jobs'"
-        >
+        <RouterLink class="nav-item" to="/jobs">
           <span>🧾</span>
           Jobs
-        </button>
+        </RouterLink>
       </nav>
 
       <div class="sidebar-footer">
@@ -58,20 +38,11 @@
     </aside>
 
     <main class="main">
-      <DashboardPage v-if="activeView === 'dashboard'" />
-      <ProviderPage v-else-if="activeView === 'providers'" />
-      <AutomationPage v-else-if="activeView === 'automations'" />
-      <JobPage v-else />
+      <RouterView />
     </main>
   </div>
 </template>
 
 <script setup>
-import { ref } from "vue";
-import AutomationPage from "./pages/AutomationPage.vue";
-import DashboardPage from "./pages/DashboardPage.vue";
-import JobPage from "./pages/JobPage.vue";
-import ProviderPage from "./pages/ProviderPage.vue";
-
-const activeView = ref("dashboard");
+import { RouterLink, RouterView } from "vue-router";
 </script>

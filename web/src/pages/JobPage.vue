@@ -10,19 +10,26 @@
         <button class="button button-secondary" type="button" @click="loadAll">
           Refresh
         </button>
+        <button class="button" type="button" @click="startCreateJob">
+          Create job
+        </button>
       </div>
     </header>
 
     <StatsGrid :pagination="pagination" />
     <AppAlert :message="errorMessage" @dismiss="errorMessage = ''" />
 
-    <section class="content-grid">
-      <article class="panel form-panel">
+    <section class="dashboard-grid">
+      <article v-if="showCreatePanel || editingJob" class="panel form-panel">
         <div class="panel-header">
           <div>
             <p class="eyebrow">{{ editingJob ? "Update" : "Create" }}</p>
             <h3>{{ editingJob ? "Update job" : "Create job" }}</h3>
           </div>
+
+          <button class="icon-button" type="button" @click="cancelJobForm">
+            ×
+          </button>
         </div>
 
         <form class="form" @submit.prevent="submitForm">
@@ -169,6 +176,7 @@ const selectedAutomationId = ref("");
 const editingJob = ref(null);
 const loading = ref(false);
 const errorMessage = ref("");
+const showCreatePanel = ref(false);
 
 const form = reactive({
   id: "",
@@ -264,6 +272,7 @@ async function addJob() {
     });
 
     resetJobForm();
+    showCreatePanel.value = false;
     pagination.page = 1;
     await loadJobsForAutomation();
   } catch (error) {
@@ -275,6 +284,7 @@ async function addJob() {
 
 function editJob(job) {
   editingJob.value = job;
+  showCreatePanel.value = false;
   form.id = job.id;
   form.status = job.status || "started";
   form.location = job.location || "";
@@ -298,6 +308,17 @@ async function saveJob() {
   } finally {
     loading.value = false;
   }
+}
+
+function startCreateJob() {
+  resetJobForm();
+  showCreatePanel.value = true;
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function cancelJobForm() {
+  resetJobForm();
+  showCreatePanel.value = false;
 }
 
 function resetJobForm() {

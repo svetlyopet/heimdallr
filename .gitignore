@@ -41,4 +41,4 @@ heimdallr.db
 
 # Web assets and deps
 web/node_modules/
-public/
+web/dist/

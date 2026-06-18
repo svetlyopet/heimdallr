@@ -10,19 +10,26 @@
         <button class="button button-secondary" type="button" @click="loadProviders">
           Refresh
         </button>
+        <button class="button" type="button" @click="startCreateProvider">
+          Create provider
+        </button>
       </div>
     </header>
 
     <StatsGrid :pagination="pagination" />
     <AppAlert :message="errorMessage" @dismiss="errorMessage = ''" />
 
-    <section class="content-grid">
-      <article class="panel form-panel">
+    <section class="dashboard-grid">
+      <article v-if="showCreatePanel" class="panel form-panel">
         <div class="panel-header">
           <div>
             <p class="eyebrow">Create</p>
             <h3>New provider</h3>
           </div>
+
+          <button class="icon-button" type="button" @click="cancelCreateProvider">
+            ×
+          </button>
         </div>
 
         <form class="form" @submit.prevent="submitProvider">
@@ -107,6 +114,7 @@ import { getInitial } from "../utils/format";
 const providers = ref([]);
 const loading = ref(false);
 const errorMessage = ref("");
+const showCreatePanel = ref(false);
 
 const form = reactive({
   name: "",
@@ -151,8 +159,8 @@ async function submitProvider() {
       url: form.url,
     });
 
-    form.name = "";
-    form.url = "";
+    resetProviderForm();
+    showCreatePanel.value = false;
     pagination.page = 1;
     await loadProviders();
   } catch (error) {
@@ -160,6 +168,22 @@ async function submitProvider() {
   } finally {
     loading.value = false;
   }
+}
+
+function startCreateProvider() {
+  resetProviderForm();
+  showCreatePanel.value = true;
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function cancelCreateProvider() {
+  resetProviderForm();
+  showCreatePanel.value = false;
+}
+
+function resetProviderForm() {
+  form.name = "";
+  form.url = "";
 }
 
 async function previousPage() {

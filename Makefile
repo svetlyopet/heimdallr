@@ -1,9 +1,10 @@
 APP_NAME := heimdallr
 
 BIN_DIR := ./bin
-WEB_DIR := ./web
-PUBLIC_DIR := ./public
 REPORTS_DIR := ./reports
+WEB_DIR := ./web
+WEB_DIST_DIR := $(WEB_DIR)/dist
+WEB_DEPS_DIR := $(WEB_DIR)/node_modules
 
 MAIN_PATH := ./cmd/main.go
 APP_PATH := $(BIN_DIR)/$(APP_NAME)
@@ -21,7 +22,7 @@ out-api:
 
 .PHONY: out-web
 out-web:
-	@mkdir -p $(PUBLIC_DIR)
+	@mkdir -p $(WEB_DIST_DIR)
 
 .PHONY: download
 download: ## Downloads go dependencies
@@ -74,16 +75,16 @@ build-api: out-api ## Build api release
 build: build-web build-api ## Build api and web assets
 
 .PHONY: run-debug
-run-debug: ## Run web app in debug mode
+run-debug: build-web ## Run web app in debug mode
 	@GIN_MODE=debug go run $(MAIN_PATH) -log-format=$(LOG_FORMAT) -log-level=$(LOG_LEVEL)
 
 .PHONY: run-release
-run-release: ## Run web app in release mode
+run-release: build-web ## Run web app in release mode
 	@GIN_MODE=release go run $(MAIN_PATH) -log-format=$(LOG_FORMAT) -log-level=$(LOG_LEVEL)
 
 clean-web: ## Cleans up web generated assets
-	@rm -rf $(PUBLIC_DIR)
-	@rm -rf $(WEB_DIR)/node_modules
+	@rm -rf $(WEB_DIST_DIR)
+	@rm -rf $(WEB_DEPS_DIR)
 
 clean-api: ## Cleans up api generated output
 	@rm -rf $(BIN_DIR)

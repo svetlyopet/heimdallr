@@ -10,20 +10,26 @@
         <button class="button button-secondary" type="button" @click="loadAll">
           Refresh
         </button>
-        <button class="button" type="button" @click="resetForm">New automation</button>
+        <button class="button" type="button" @click="startCreateAutomation">
+          Create automation
+        </button>
       </div>
     </header>
 
     <StatsGrid :pagination="pagination" />
     <AppAlert :message="errorMessage" @dismiss="errorMessage = ''" />
 
-    <section class="content-grid">
-      <article class="panel form-panel">
+    <section class="dashboard-grid">
+      <article v-if="showCreatePanel || editingAutomation" class="panel form-panel">
         <div class="panel-header">
           <div>
             <p class="eyebrow">{{ editingAutomation ? "Update" : "Create" }}</p>
             <h3>{{ editingAutomation ? "Edit automation" : "Create automation" }}</h3>
           </div>
+
+          <button class="icon-button" type="button" @click="cancelAutomationForm">
+            ×
+          </button>
         </div>
 
         <form class="form" @submit.prevent="submitForm">
@@ -93,10 +99,11 @@
         </div>
 
         <div v-else class="table-wrapper">
-          <table>
+          <table class="automation-table">
             <thead>
               <tr>
                 <th>Name</th>
+                <th>ID</th>
                 <th>Provider</th>
                 <th>URL</th>
                 <th>Cost savings</th>
@@ -113,9 +120,23 @@
                   </div>
                 </td>
 
-                <td data-label="Provider">
-                  <span class="badge">{{ automation.provider }}</span>
-                </td>
+                 <td data-label="ID">
+                   <div class="id-cell">
+                     <code :title="automation.id">{{ automation.id }}</code>
+                     <button
+                       class="copy-button"
+                       type="button"
+                       :aria-label="`Copy automation ID ${automation.id}`"
+                       @click="copyAutomationId(automation.id)"
+                     >
+                       Copy
+                     </button>
+                   </div>
+                 </td>
+
+                 <td data-label="Provider">
+                   <span class="badge">{{ automation.provider }}</span>
+                 </td>
 
                 <td data-label="URL">
                   <a v-if="automation.url" :href="automation.url" target="_blank" rel="noreferrer">
@@ -181,6 +202,7 @@ const providers = ref([]);
 const loading = ref(false);
 const errorMessage = ref("");
 const editingAutomation = ref(null);
+const showCreatePanel = ref(false);
 
 const form = reactive({
   name: "",
@@ -240,6 +262,7 @@ async function addAutomation() {
     });
 
     resetForm();
+    showCreatePanel.value = false;
     pagination.page = 1;
     await loadAll();
   } catch (error) {
@@ -251,6 +274,7 @@ async function addAutomation() {
 
 function editAutomation(automation) {
   editingAutomation.value = automation;
+  showCreatePanel.value = false;
   form.name = automation.name || "";
   form.provider_id = automation.provider_id || "";
   form.url = automation.url || "";
@@ -299,12 +323,31 @@ async function removeAutomation(automation) {
   }
 }
 
+function startCreateAutomation() {
+  resetForm();
+  showCreatePanel.value = true;
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function cancelAutomationForm() {
+  resetForm();
+  showCreatePanel.value = false;
+}
+
 function resetForm() {
   editingAutomation.value = null;
   form.name = "";
   form.provider_id = "";
   form.url = "";
   form.cost_savings = 0;
+}
+
+async function copyAutomationId(id) {
+  try {
+    await navigator.clipboard.writeText(id);
+  } catch {
+    errorMessage.value = "Failed to copy automation ID";
+  }
 }
 
 async function previousPage() {
