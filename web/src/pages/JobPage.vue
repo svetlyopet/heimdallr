@@ -10,9 +10,6 @@
         <button class="button button-secondary" type="button" @click="loadAll">
           Refresh
         </button>
-        <button class="button" type="button" @click="startCreateJob">
-          Create job
-        </button>
       </div>
     </header>
 
@@ -20,66 +17,6 @@
     <AppAlert :message="errorMessage" @dismiss="errorMessage = ''" />
 
     <section class="dashboard-grid">
-      <article v-if="showCreatePanel || editingJob" class="panel form-panel">
-        <div class="panel-header">
-          <div>
-            <p class="eyebrow">{{ editingJob ? "Update" : "Create" }}</p>
-            <h3>{{ editingJob ? "Update job" : "Create job" }}</h3>
-          </div>
-
-          <button class="icon-button" type="button" @click="cancelJobForm">
-            ×
-          </button>
-        </div>
-
-        <form class="form" @submit.prevent="submitForm">
-          <label>
-            Automation
-            <select v-model="selectedAutomationId" required :disabled="Boolean(editingJob)">
-              <option value="" disabled>Select automation</option>
-              <option v-for="automation in automations" :key="automation.id" :value="automation.id">
-                {{ automation.name }}
-              </option>
-            </select>
-          </label>
-
-          <label>
-            Job ID
-            <input
-              v-model.trim="form.id"
-              type="text"
-              required
-              :disabled="Boolean(editingJob)"
-            />
-          </label>
-
-          <label>
-            Status
-            <select v-model="form.status" required>
-              <option value="started">started</option>
-              <option value="success">success</option>
-              <option value="failed">failed</option>
-            </select>
-          </label>
-
-          <template v-if="!editingJob">
-            <label>
-              Location
-              <input v-model.trim="form.location" type="text" required />
-            </label>
-
-            <label>
-              URL
-              <input v-model.trim="form.url" type="url" required />
-            </label>
-          </template>
-
-          <button class="button button-full" type="submit" :disabled="loading || !selectedAutomationId">
-            {{ editingJob ? "Save status" : "Create job" }}
-          </button>
-        </form>
-      </article>
-
       <article class="panel table-panel">
         <div class="panel-header">
           <div>
@@ -88,6 +25,16 @@
           </div>
 
           <div class="page-size">
+            <label>
+              Automation
+              <select v-model="selectedAutomationId">
+                <option value="" disabled>Select automation</option>
+                <option v-for="automation in automations" :key="automation.id" :value="automation.id">
+                  {{ automation.name }}
+                </option>
+              </select>
+            </label>
+
             <label>
               Limit
               <select v-model.number="pagination.limit" @change="changeLimit">
@@ -108,7 +55,7 @@
 
         <div v-else-if="jobs.length === 0" class="empty-state">
           <strong>No jobs yet</strong>
-          <span>Create the first job for this automation.</span>
+          <span>No jobs were found for this automation.</span>
         </div>
 
         <div v-else class="table-wrapper">
@@ -137,13 +84,20 @@
                   <span v-else>—</span>
                 </td>
                 <td data-label="Actions">
-                  <button
-                    class="button button-small button-secondary"
-                    type="button"
-                    @click="editJob(job)"
-                  >
-                    Update status
-                  </button>
+                  <div class="row-actions">
+                    <RouterLink
+                      class="button button-small button-secondary"
+                      :to="{
+                        name: 'job-detail',
+                        params: {
+                          automationId: selectedAutomationId,
+                          jobId: job.id,
+                        },
+                      }"
+                    >
+                      View
+                    </RouterLink>
+                  </div>
                 </td>
               </tr>
             </tbody>
@@ -164,8 +118,9 @@
 
 <script setup>
 import { onMounted, reactive, ref, watch } from "vue";
+import { RouterLink } from "vue-router";
 import { listAutomations } from "../api/automations";
-import { createJob, listJobs, updateJob } from "../api/jobs";
+import { listJobs } from "../api/jobs";
 import AppAlert from "../components/AppAlert.vue";
 import PaginationControls from "../components/PaginationControls.vue";
 import StatsGrid from "../components/StatsGrid.vue";
@@ -173,17 +128,8 @@ import StatsGrid from "../components/StatsGrid.vue";
 const automations = ref([]);
 const jobs = ref([]);
 const selectedAutomationId = ref("");
-const editingJob = ref(null);
 const loading = ref(false);
 const errorMessage = ref("");
-const showCreatePanel = ref(false);
-
-const form = reactive({
-  id: "",
-  status: "started",
-  location: "",
-  url: "",
-});
 
 const pagination = reactive({
   page: 1,
@@ -196,7 +142,6 @@ onMounted(loadAll);
 
 watch(selectedAutomationId, async () => {
   pagination.page = 1;
-  resetJobForm();
   await loadJobsForAutomation();
 });
 
@@ -248,85 +193,6 @@ async function loadJobsForAutomation() {
   } finally {
     loading.value = false;
   }
-}
-
-async function submitForm() {
-  if (editingJob.value) {
-    await saveJob();
-    return;
-  }
-
-  await addJob();
-}
-
-async function addJob() {
-  loading.value = true;
-  errorMessage.value = "";
-
-  try {
-    await createJob(selectedAutomationId.value, {
-      id: form.id,
-      status: form.status,
-      location: form.location,
-      url: form.url,
-    });
-
-    resetJobForm();
-    showCreatePanel.value = false;
-    pagination.page = 1;
-    await loadJobsForAutomation();
-  } catch (error) {
-    errorMessage.value = error.message;
-  } finally {
-    loading.value = false;
-  }
-}
-
-function editJob(job) {
-  editingJob.value = job;
-  showCreatePanel.value = false;
-  form.id = job.id;
-  form.status = job.status || "started";
-  form.location = job.location || "";
-  form.url = job.url || "";
-  window.scrollTo({ top: 0, behavior: "smooth" });
-}
-
-async function saveJob() {
-  loading.value = true;
-  errorMessage.value = "";
-
-  try {
-    await updateJob(selectedAutomationId.value, editingJob.value.id, {
-      status: form.status,
-    });
-
-    resetJobForm();
-    await loadJobsForAutomation();
-  } catch (error) {
-    errorMessage.value = error.message;
-  } finally {
-    loading.value = false;
-  }
-}
-
-function startCreateJob() {
-  resetJobForm();
-  showCreatePanel.value = true;
-  window.scrollTo({ top: 0, behavior: "smooth" });
-}
-
-function cancelJobForm() {
-  resetJobForm();
-  showCreatePanel.value = false;
-}
-
-function resetJobForm() {
-  editingJob.value = null;
-  form.id = "";
-  form.status = "started";
-  form.location = "";
-  form.url = "";
 }
 
 async function previousPage() {

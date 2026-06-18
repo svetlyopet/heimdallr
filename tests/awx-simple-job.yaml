@@ -1,0 +1,63 @@
+# Required extra vars for testing
+# ansible-playbook -e "job_id=INTEGER" -e "job_status=STATUS" -e "automation_id=UUID" tests/awx-simple-job.yaml
+#
+# Available statuses: started, success, failed
+
+- name: Test Ansible Playbook
+  hosts: localhost
+  vars:
+    heimdallr_url: "http://localhost:8080"
+    job_id: "1000"
+    job_location: "global"
+    job_url: "https://example.com/#/jobs/playbook/100"
+  tasks:
+    - name: Assert automation_id is set
+      ansible.builtin.assert:
+        that:
+          - job_status is defined and job_status != ""
+          - automation_id is defined and automation_id != ""
+        fail_msg: "job_status or automation_id are not set"
+
+    - name: Register job
+      ansible.builtin.uri:
+        url: "{{ heimdallr_url }}/api/v1/automation/{{ automation_id }}/job"
+        method: POST
+        body_format: json
+        body:
+          id: "{{ job_id }}"
+          status: "started"
+          location: "{{ job_location }}"
+          url: "{{ job_url }}"
+        status_code: 201
+
+    - block:
+        - name: Do work
+          ansible.builtin.debug:
+            msg: "Doing work"
+          failed_when: job_status != "success"
+
+        - name: Set success job status
+          ansible.builtin.uri:
+            url: "{{ heimdallr_url }}/api/v1/automation/{{ automation_id }}/job/{{ job_id }}"
+            method: PATCH
+            body_format: json
+            body:
+              status: "{{ job_status }}"
+            status_code: 200
+
+        - name: Handle success job work
+          ansible.builtin.debug:
+            msg: "Job succeeded"
+      rescue:
+        - name: Set failed job status
+          ansible.builtin.uri:
+            url: "{{ heimdallr_url }}/api/v1/automation/{{ automation_id }}/job/{{ job_id }}"
+            method: PATCH
+            body_format: json
+            body:
+              status: "failed"
+            status_code: 200
+
+        - name: Handle failed job work
+          ansible.builtin.debug:
+            msg: "Job failed"

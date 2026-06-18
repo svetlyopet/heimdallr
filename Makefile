@@ -65,7 +65,7 @@ test: ## Run unit tests
 	@go test -v -covermode=atomic ./...
 
 .PHONY: build-web
-build-web: out-web web-install-deps ## Build web assets
+build-web: out-web ## Build web assets
 	@cd $(WEB_DIR) && npm run build
 
 .PHONY: build-api
@@ -82,9 +82,11 @@ run-debug: build-web ## Run web app in debug mode
 run-release: build-web ## Run web app in release mode
 	@GIN_MODE=release go run $(MAIN_PATH) -log-format=$(LOG_FORMAT) -log-level=$(LOG_LEVEL)
 
+clean-deps:	## Cleans up web dependencies
+	@rm -rf $(WEB_DEPS_DIR)
+
 clean-web: ## Cleans up web generated assets
 	@rm -rf $(WEB_DIST_DIR)
-	@rm -rf $(WEB_DEPS_DIR)
 
 clean-api: ## Cleans up api generated output
 	@rm -rf $(BIN_DIR)
@@ -92,7 +94,7 @@ clean-api: ## Cleans up api generated output
 clean-reports: ## Cleans up coverage reports
 	@rm -rf $(REPORTS_DIR)
 
-clean: clean-api clean-web clean-reports ## Cleans up all produced artifacts
+clean: clean-api clean-web clean-deps clean-reports ## Cleans up all produced artifacts
 
 help: ## Shows the help
 	@echo 'Usage: make <OPTIONS> ... <TARGETS>'

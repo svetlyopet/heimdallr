@@ -594,6 +594,10 @@ components:
           minLength: 1
         url:
           $ref: "#/components/schemas/URL"
+        metadata:
+          $ref: "#/components/schemas/JobMetadata"
+        output:
+          $ref: "#/components/schemas/JobOutput"
 
     JobUpdateRequest:
       type: object
@@ -602,13 +606,25 @@ components:
       properties:
         status:
           $ref: "#/components/schemas/JobStatus"
+        metadata:
+          $ref: "#/components/schemas/JobMetadata"
+        output:
+          $ref: "#/components/schemas/JobOutput"
 
     JobStatus:
       type: string
       enum:
         - started
+        - skipped
         - success
         - failed
+
+    JobMetadata:
+      type: object
+      properties: {}
+
+    JobOutput:
+      type: string
 
     JobDataResponse:
       type: object

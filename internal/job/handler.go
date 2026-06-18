@@ -1,6 +1,8 @@
 package job
 
 import (
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
@@ -106,6 +108,18 @@ func (h handler) Create(ctx *gin.Context) {
 		return
 	}
 
+	if req.Metadata != nil && !json.Valid(req.Metadata) {
+		jobErr := NewInvalidMetadataError(errors.New("not valid json"))
+		returnErrorResponse(ctx, http.StatusBadRequest, jobErr)
+		return
+	}
+
+	if req.Output != "" && !isValidBase64(req.Output) {
+		jobErr := NewInvalidOutputError(errors.New("not valid encoding"))
+		returnErrorResponse(ctx, http.StatusBadRequest, jobErr)
+		return
+	}
+
 	job, err := h.service.Create(ctx.Request.Context(), automationID, req)
 	if err != nil {
 		statusCode := http.StatusInternalServerError
@@ -137,6 +151,18 @@ func (h handler) Update(ctx *gin.Context) {
 	var req UpdateRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		jobErr := NewJobError("invalid request body", err)
+		returnErrorResponse(ctx, http.StatusBadRequest, jobErr)
+		return
+	}
+
+	if req.Metadata != nil && !json.Valid(req.Metadata) {
+		jobErr := NewInvalidMetadataError(errors.New("not valid json"))
+		returnErrorResponse(ctx, http.StatusBadRequest, jobErr)
+		return
+	}
+
+	if req.Output != "" && !isValidBase64(req.Output) {
+		jobErr := NewInvalidOutputError(errors.New("not valid encoding"))
 		returnErrorResponse(ctx, http.StatusBadRequest, jobErr)
 		return
 	}
@@ -203,4 +229,13 @@ func returnErrorResponse(ctx *gin.Context, statusCode int, err error) {
 	ctx.JSON(http.StatusInternalServerError, gin.H{
 		"error": http.StatusText(http.StatusInternalServerError),
 	})
+}
+
+func isValidBase64(value string) bool {
+	if value == "" {
+		return true
+	}
+
+	_, err := base64.StdEncoding.DecodeString(value)
+	return err == nil
 }

@@ -9,6 +9,8 @@ const (
 	ErrMsgJobNotFound         = "job not found"
 	ErrMsgInvalidJobID        = "invalid job id"
 	ErrMsgInvalidAutomationID = "invalid automation id"
+	ErrMsgInvalidMetadata     = "invalid metadata structure"
+	ErrMsgInvalidOutput       = "invalid output encoding"
 	ErrMsgCreateJob           = "failed to create job"
 	ErrMsgUpdateJob           = "failed to update job"
 	ErrMsgGetJob              = "failed to get job"
@@ -19,6 +21,8 @@ var (
 	ErrJobNotFound         = errors.New(ErrMsgJobNotFound)
 	ErrInvalidJobID        = errors.New(ErrMsgInvalidJobID)
 	ErrInvalidAutomationID = errors.New(ErrMsgInvalidAutomationID)
+	ErrInvalidMetadata     = errors.New(ErrMsgInvalidMetadata)
+	ErrInvalidOutput       = errors.New(ErrMsgInvalidOutput)
 	ErrCreateJob           = errors.New(ErrMsgCreateJob)
 	ErrUpdateJob           = errors.New(ErrMsgUpdateJob)
 	ErrGetJob              = errors.New(ErrMsgGetJob)
@@ -64,6 +68,10 @@ func NewInvalidJobIDError(err error) error {
 func NewInvalidAutomationIDError(err error) error {
 	return NewJobError(ErrInvalidAutomationID.Error(), err)
 }
+
+func NewInvalidMetadataError(err error) error { return NewJobError(ErrInvalidMetadata.Error(), err) }
+
+func NewInvalidOutputError(err error) error { return NewJobError(ErrInvalidOutput.Error(), err) }
 
 func NewCreateJobError(err error) error {
 	return NewJobError(ErrCreateJob.Error(), err)

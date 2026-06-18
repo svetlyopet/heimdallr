@@ -126,7 +126,7 @@ func (r repository) Update(ctx context.Context, automation Automation) (Automati
 	result := r.db.WithContext(ctx).
 		Model(&Automation{}).
 		Where("id = ?", automation.ID).
-		Select("name", "url", "provider", "provider_id", "cost_savings").
+		Select("url", "cost_savings").
 		Updates(automation)
 
 	if result.Error != nil {

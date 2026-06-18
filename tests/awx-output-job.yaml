@@ -1,5 +1,5 @@
 # Required extra vars for testing
-# ansible-playbook -e "job_id=INTEGER" -e "job_status=STATUS" -e "automation_id=UUID" tests/awx-job.yaml
+# ansible-playbook -e "job_id=INTEGER" -e "job_status=STATUS" -e "automation_id=UUID" tests/awx-simple-job.yaml
 #
 # Available statuses: started, success, failed
 
@@ -9,7 +9,7 @@
     heimdallr_url: "http://localhost:8080"
     job_id: "1000"
     job_location: "global"
-    job_url: "https://example.com/#/jobs/playbook/100"
+    job_url: "https://example.com/#/jobs/playbook/200"
   tasks:
     - name: Assert automation_id is set
       ansible.builtin.assert:
@@ -28,6 +28,9 @@
           status: "started"
           location: "{{ job_location }}"
           url: "{{ job_url }}"
+          metadata:
+            hypervisor: "kvm"
+            inventory: "true"
         status_code: 201
 
     - block:
@@ -43,6 +46,7 @@
             body_format: json
             body:
               status: "{{ job_status }}"
+              output: "{{ '<h2>This is a test output.</h2><br>Placeholder for output report.</br>' | b64encode }}"
             status_code: 200
 
         - name: Handle success job work

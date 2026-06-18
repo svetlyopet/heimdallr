@@ -84,6 +84,7 @@ func (r repository) Create(ctx context.Context, job Job) (Job, error) {
 	job.Status = strings.TrimSpace(job.Status)
 	job.Location = strings.TrimSpace(job.Location)
 	job.Url = strings.TrimSpace(job.Url)
+	job.Output = strings.TrimSpace(job.Output)
 
 	if job.ID == "" || job.AutomationID == uuid.Nil {
 		return Job{}, gorm.ErrRecordNotFound
@@ -125,6 +126,7 @@ func (r repository) Create(ctx context.Context, job Job) (Job, error) {
 func (r repository) Update(ctx context.Context, job Job) (Job, error) {
 	job.ID = strings.TrimSpace(job.ID)
 	job.Status = strings.TrimSpace(job.Status)
+	job.Output = strings.TrimSpace(job.Output)
 
 	if job.ID == "" || job.AutomationID == uuid.Nil {
 		return Job{}, gorm.ErrRecordNotFound
@@ -136,9 +138,11 @@ func (r repository) Update(ctx context.Context, job Job) (Job, error) {
 		result := tx.
 			Model(&Job{}).
 			Where("id = ? AND automation_id = ?", job.ID, job.AutomationID).
-			Select("status").
+			Select("status", "metadata", "output").
 			Updates(Job{
-				Status: job.Status,
+				Status:   job.Status,
+				Metadata: job.Metadata,
+				Output:   job.Output,
 			})
 
 		if result.Error != nil {
@@ -215,7 +219,9 @@ func findJobById(ctx context.Context, db *gorm.DB, jobId string, automationId st
 			jobs.location,
 			jobs.url,
 			jobs.created_at,
-			jobs.updated_at
+			jobs.updated_at,
+			jobs.metadata,
+			jobs.output
 		`).
 		Joins("JOIN automations ON automations.id = jobs.automation_id").
 		Joins("JOIN providers ON providers.id = automations.provider_id").
