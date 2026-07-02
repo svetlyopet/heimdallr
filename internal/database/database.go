@@ -2,6 +2,7 @@ package database
 
 import (
 	"github.com/svetlyopet/heimdallr/internal/automation"
+	"github.com/svetlyopet/heimdallr/internal/auth"
 	"github.com/svetlyopet/heimdallr/internal/job"
 	"github.com/svetlyopet/heimdallr/internal/provider"
 	"gorm.io/driver/sqlite"
@@ -15,6 +16,7 @@ func NewSQLiteDatabase(databasePath string) (*gorm.DB, error) {
 	}
 
 	if err = db.AutoMigrate(
+		&auth.User{},
 		&provider.Provider{},
 		&automation.Automation{},
 		&job.Job{},

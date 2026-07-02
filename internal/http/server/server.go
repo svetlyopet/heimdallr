@@ -1,10 +1,12 @@
 package server
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/gin-gonic/gin"
 	"github.com/svetlyopet/heimdallr/internal/app"
+	"github.com/svetlyopet/heimdallr/internal/http/middleware"
 	"github.com/svetlyopet/heimdallr/internal/logger"
 	"github.com/svetlyopet/heimdallr/web"
 	"gorm.io/gorm"
@@ -29,7 +31,12 @@ func NewServer(host string, port string, db *gorm.DB, appLogger *logger.Logger) 
 		return nil, err
 	}
 
+	if err = application.Bootstrap(context.Background()); err != nil {
+		return nil, err
+	}
+
 	api := handler.Group("/api")
+	api.Use(middleware.Authentication(application.AuthService()))
 	application.RegisterRoutes(api)
 
 	if err = web.RegisterRoutes(handler); err != nil {

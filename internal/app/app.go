@@ -1,8 +1,12 @@
 package app
 
 import (
+	"context"
+	"log/slog"
+
 	"github.com/gin-gonic/gin"
 	"github.com/svetlyopet/heimdallr/internal/analytics"
+	"github.com/svetlyopet/heimdallr/internal/auth"
 	"github.com/svetlyopet/heimdallr/internal/automation"
 	"github.com/svetlyopet/heimdallr/internal/job"
 	"github.com/svetlyopet/heimdallr/internal/logger"
@@ -25,6 +29,9 @@ type App struct {
 
 	analyticsService analytics.Service
 	analyticsHandler analytics.Handler
+
+	authService auth.Service
+	authHandler auth.Handler
 }
 
 func New(db *gorm.DB, appLogger *logger.Logger) (*App, error) {
@@ -36,6 +43,14 @@ func New(db *gorm.DB, appLogger *logger.Logger) (*App, error) {
 	providerRepository := provider.NewRepository(db)
 	providerService := provider.NewService(providerRepository, appLogger)
 	providerHandler, err := provider.NewHandler(providerService)
+	if err != nil {
+		return nil, err
+	}
+
+	// Auth
+	authRepository := auth.NewRepository(db)
+	authService := auth.NewService(authRepository, appLogger)
+	authHandler, err := auth.NewHandler(authService)
 	if err != nil {
 		return nil, err
 	}
@@ -79,6 +94,9 @@ func New(db *gorm.DB, appLogger *logger.Logger) (*App, error) {
 
 		analyticsService: analyticsService,
 		analyticsHandler: analyticsHandler,
+
+		authService: authService,
+		authHandler: authHandler,
 	}, nil
 }
 
@@ -87,4 +105,32 @@ func (a *App) RegisterRoutes(rg *gin.RouterGroup) {
 	automation.RegisterRoutes(rg, a.automationHandler)
 	job.RegisterRoutes(rg, a.jobHandler)
 	analytics.RegisterRoutes(rg, a.analyticsHandler)
+	auth.RegisterRoutes(rg, a.authHandler, a.authService)
+}
+
+func (a *App) AuthService() auth.Service {
+	return a.authService
+}
+
+func (a *App) Bootstrap(ctx context.Context) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	rootPassword, err := a.authService.EnsureRootUser(ctx)
+	if err != nil {
+		return err
+	}
+
+	if rootPassword == "" {
+		a.logger.Info(ctx, "root user bootstrap skipped; root user already exists")
+		return nil
+	}
+
+	a.logger.Warn(ctx, "root user bootstrapped with generated credentials",
+		slog.String("username", "root"),
+		slog.String("password", rootPassword),
+	)
+
+	return nil
 }
