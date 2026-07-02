@@ -66,6 +66,10 @@ func (r repository) GetAutomationOverviewByID(ctx context.Context, automationID 
 		return AutomationAnalyticsResponse{}, err
 	}
 
+	if totalAutomations == 0 {
+		return AutomationAnalyticsResponse{}, ErrAutomationNotFound
+	}
+
 	totals, err := r.getTotals(ctx, automationID)
 	if err != nil {
 		return AutomationAnalyticsResponse{}, err

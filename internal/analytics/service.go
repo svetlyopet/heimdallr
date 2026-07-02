@@ -2,6 +2,7 @@ package analytics
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 
 	"github.com/svetlyopet/heimdallr/internal/logger"
@@ -34,6 +35,10 @@ func (s service) GetAutomationOverview(ctx context.Context) (AutomationAnalytics
 func (s service) GetAutomationOverviewByID(ctx context.Context, automationID string) (AutomationAnalyticsResponse, error) {
 	response, err := s.repository.GetAutomationOverviewByID(ctx, automationID)
 	if err != nil {
+		if errors.Is(err, ErrAutomationNotFound) {
+			return AutomationAnalyticsResponse{}, ErrAutomationNotFound
+		}
+
 		s.logger.ErrorWithStack(
 			ctx,
 			"failed to get automation analytics by id",

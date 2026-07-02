@@ -47,6 +47,12 @@ func (h handler) GetAutomationOverviewByID(ctx *gin.Context) {
 
 	response, err := h.service.GetAutomationOverviewByID(ctx.Request.Context(), automationID)
 	if err != nil {
+		if errors.Is(err, ErrAutomationNotFound) {
+			analyticsErr := NewAnalyticsError("automation not found", err)
+			returnErrorResponse(ctx, http.StatusNotFound, analyticsErr)
+			return
+		}
+
 		analyticsErr := NewGetAutomationAnalyticsError(err)
 		returnErrorResponse(ctx, http.StatusInternalServerError, analyticsErr)
 		return
@@ -58,6 +64,10 @@ func (h handler) GetAutomationOverviewByID(ctx *gin.Context) {
 }
 
 func NewHandler(service Service) (Handler, error) {
+	if service == nil {
+		return nil, errors.New("analytics service is required")
+	}
+
 	return &handler{
 		service: service,
 	}, nil

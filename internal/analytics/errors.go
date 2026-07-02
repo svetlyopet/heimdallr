@@ -7,10 +7,12 @@ import (
 
 const (
 	ErrMsgGetAutomationAnalytics = "failed to get automation analytics"
+	ErrMsgAutomationNotFound     = "automation not found"
 )
 
 var (
 	ErrGetAutomationAnalytics = errors.New(ErrMsgGetAutomationAnalytics)
+	ErrAutomationNotFound     = errors.New(ErrMsgAutomationNotFound)
 )
 
 type AnalyticsError struct {
