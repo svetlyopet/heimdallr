@@ -14,6 +14,7 @@ import (
 	"github.com/svetlyopet/heimdallr/internal/provider"
 	"github.com/svetlyopet/heimdallr/internal/release"
 	"github.com/svetlyopet/heimdallr/internal/report"
+	"github.com/svetlyopet/heimdallr/internal/token"
 	"gorm.io/gorm"
 )
 
@@ -44,6 +45,9 @@ type App struct {
 
 	authService auth.Service
 	authHandler auth.Handler
+
+	tokenService token.Service
+	tokenHandler token.Handler
 }
 
 func New(db *gorm.DB, appLogger *logger.Logger) (*App, error) {
@@ -61,6 +65,13 @@ func New(db *gorm.DB, appLogger *logger.Logger) (*App, error) {
 	authRepository := auth.NewRepository(db)
 	authService := auth.NewService(authRepository, appLogger)
 	authHandler, err := auth.NewHandler(authService)
+	if err != nil {
+		return nil, err
+	}
+
+	tokenRepository := token.NewRepository(db)
+	tokenService := token.NewService(tokenRepository, appLogger)
+	tokenHandler, err := token.NewHandler(tokenService)
 	if err != nil {
 		return nil, err
 	}
@@ -134,6 +145,9 @@ func New(db *gorm.DB, appLogger *logger.Logger) (*App, error) {
 
 		authService: authService,
 		authHandler: authHandler,
+
+		tokenService: tokenService,
+		tokenHandler: tokenHandler,
 	}, nil
 }
 
@@ -146,10 +160,15 @@ func (a *App) RegisterRoutes(rg *gin.RouterGroup) {
 	report.RegisterRoutes(rg, a.reportHandler)
 	analytics.RegisterRoutes(rg, a.analyticsHandler)
 	auth.RegisterRoutes(rg, a.authHandler, a.authService)
+	token.RegisterRoutes(rg, a.tokenHandler, a.authService)
 }
 
 func (a *App) AuthService() auth.Service {
 	return a.authService
+}
+
+func (a *App) TokenService() token.Service {
+	return a.tokenService
 }
 
 func (a *App) Bootstrap(ctx context.Context) error {

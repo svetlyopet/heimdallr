@@ -8,8 +8,10 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/svetlyopet/heimdallr/internal/auth"
+	"github.com/svetlyopet/heimdallr/internal/token"
 )
 
 type authServiceStub struct{}
@@ -46,12 +48,34 @@ func (authServiceStub) HasAnyRole(_ auth.GetResponse, _ ...string) bool {
 	return false
 }
 
+type tokenServiceStub struct{}
+
+func (tokenServiceStub) List(context.Context) ([]token.GetResponse, error) {
+	return nil, token.ErrInvalidToken
+}
+
+func (tokenServiceStub) Create(context.Context, token.CreateRequest, *uuid.UUID) (token.CreateResponse, error) {
+	return token.CreateResponse{}, token.ErrInvalidToken
+}
+
+func (tokenServiceStub) Delete(context.Context, string) error {
+	return token.ErrInvalidToken
+}
+
+func (tokenServiceStub) Authenticate(context.Context, string) (auth.GetResponse, error) {
+	return auth.GetResponse{}, token.ErrInvalidToken
+}
+
+func (tokenServiceStub) HasScope(auth.GetResponse, string) bool {
+	return false
+}
+
 func TestAuthenticationRejectsMissingHeaders(t *testing.T) {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 
 	r := gin.New()
-	r.Use(Authentication(authServiceStub{}))
+	r.Use(Authentication(authServiceStub{}, tokenServiceStub{}))
 	r.GET("/secure", func(ctx *gin.Context) {
 		ctx.Status(http.StatusOK)
 	})
@@ -68,7 +92,7 @@ func TestAuthenticationRejectsInvalidCredentials(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	r := gin.New()
-	r.Use(Authentication(authServiceStub{}))
+	r.Use(Authentication(authServiceStub{}, tokenServiceStub{}))
 	r.GET("/secure", func(ctx *gin.Context) {
 		ctx.Status(http.StatusOK)
 	})
@@ -88,7 +112,7 @@ func TestAuthenticationAcceptsValidCredentials(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	r := gin.New()
-	r.Use(Authentication(authServiceStub{}))
+	r.Use(Authentication(authServiceStub{}, tokenServiceStub{}))
 	r.GET("/secure", func(ctx *gin.Context) {
 		user, exists := ctx.Get("auth.user")
 		require.True(t, exists)

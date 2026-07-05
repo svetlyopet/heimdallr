@@ -36,7 +36,7 @@ func NewServer(host string, port string, db *gorm.DB, appLogger *logger.Logger) 
 	}
 
 	api := handler.Group("/api")
-	api.Use(middleware.Authentication(application.AuthService()))
+	api.Use(middleware.Authentication(application.AuthService(), application.TokenService()))
 	application.RegisterRoutes(api)
 
 	if err = web.RegisterRoutes(handler); err != nil {

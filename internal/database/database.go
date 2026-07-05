@@ -11,6 +11,7 @@ import (
 	"github.com/svetlyopet/heimdallr/internal/provider"
 	"github.com/svetlyopet/heimdallr/internal/release"
 	"github.com/svetlyopet/heimdallr/internal/report"
+	"github.com/svetlyopet/heimdallr/internal/token"
 	"gorm.io/driver/postgres"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -74,6 +75,7 @@ func autoMigrateSQLite(db *gorm.DB) error {
 		&application.Application{},
 		&release.Release{},
 		&report.Report{},
+		&token.APIToken{},
 	)
 }
 
