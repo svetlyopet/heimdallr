@@ -4,7 +4,7 @@ set -euo pipefail
 HEIMDALLR_URL="${HEIMDALLR_URL:-http://localhost:8080}"
 STATE_DIR="${STATE_DIR:?STATE_DIR is required}"
 RELEASE_VERSION="${RELEASE_VERSION:-v1.0.0-e2e}"
-REPORT_ID="${REPORT_ID:-sast-e2e-1}"
+REPORT_ID="${REPORT_ID:-sast-e2e-${E2E_RUN_ID:-$(date +%s)}}"
 
 APPLICATION_ID="$(cat "${STATE_DIR}/application_id")"
 TOKEN="$(cat "${STATE_DIR}/token")"

@@ -11,16 +11,19 @@ RELEASE_ID="$(cat "${STATE_DIR}/release_id")"
 RELEASE_VERSION="$(cat "${STATE_DIR}/release_version")"
 REPORT_ID="$(cat "${STATE_DIR}/report_id")"
 
-auth=(-u "${HEIMDALLR_USER}:${HEIMDALLR_PASSWORD}")
+auth_headers=(
+  -H "X-Auth-Username: ${HEIMDALLR_USER}"
+  -H "X-Auth-Password: ${HEIMDALLR_PASSWORD}"
+)
 
-release_json="$(curl -sf "${auth[@]}" "${HEIMDALLR_URL}/api/v1/application/${APPLICATION_ID}/release/${RELEASE_ID}")"
+release_json="$(curl -sf "${auth_headers[@]}" "${HEIMDALLR_URL}/api/v1/application/${APPLICATION_ID}/release/${RELEASE_ID}")"
 echo "${release_json}" | jq -e ".data.version == \"${RELEASE_VERSION}\"" >/dev/null
 echo "${release_json}" | jq -e '.data.commit_sha == "abc123"' >/dev/null
 
-report_json="$(curl -sf "${auth[@]}" "${HEIMDALLR_URL}/api/v1/application/${APPLICATION_ID}/release/${RELEASE_ID}/report/${REPORT_ID}")"
+report_json="$(curl -sf "${auth_headers[@]}" "${HEIMDALLR_URL}/api/v1/application/${APPLICATION_ID}/release/${RELEASE_ID}/report/${REPORT_ID}")"
 echo "${report_json}" | jq -e '.data.status == "success"' >/dev/null
 
-list_json="$(curl -sf "${auth[@]}" "${HEIMDALLR_URL}/api/v1/report?status=success")"
+list_json="$(curl -sf "${auth_headers[@]}" "${HEIMDALLR_URL}/api/v1/report?status=success")"
 echo "${list_json}" | jq -e --arg id "${REPORT_ID}" '.data[] | select(.id == $id)' >/dev/null
 
 echo "Compliance E2E verification passed"

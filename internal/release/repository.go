@@ -7,7 +7,6 @@ import (
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 )
 
 type Repository interface {
@@ -120,16 +119,39 @@ func (r repository) Upsert(ctx context.Context, release Release) (Release, error
 			return findErr
 		}
 
-		if err := tx.Clauses(clause.OnConflict{
-			Columns:   []clause.Column{{Name: "application_id"}, {Name: "version"}},
-			DoNothing: true,
-		}).Create(&release).Error; err != nil {
-			return err
+		if err := tx.Create(&release).Error; err != nil {
+			if !errors.Is(err, gorm.ErrDuplicatedKey) {
+				return err
+			}
+
+			if err := tx.
+				Where("application_id = ? AND version = ?", release.ApplicationID, release.Version).
+				First(&existing).Error; err != nil {
+				return err
+			}
+
+			updates := map[string]any{}
+			if release.CommitSHA != "" {
+				updates["commit_sha"] = release.CommitSHA
+			}
+			if release.PipelineURL != "" {
+				updates["pipeline_url"] = release.PipelineURL
+			}
+			if release.Branch != "" {
+				updates["branch"] = release.Branch
+			}
+
+			if len(updates) > 0 {
+				if err := tx.Model(&existing).Updates(updates).Error; err != nil {
+					return err
+				}
+			}
+
+			release = existing
+			return nil
 		}
 
-		return tx.
-			Where("application_id = ? AND version = ?", release.ApplicationID, release.Version).
-			First(&release).Error
+		return nil
 	})
 
 	if err != nil {

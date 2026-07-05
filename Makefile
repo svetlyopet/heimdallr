@@ -74,6 +74,7 @@ test-integration: test-web-stub ## Run integration tests
 
 .PHONY: e2e-up
 e2e-up: ## Start docker-compose stack and wait for health
+	@docker compose down -v --remove-orphans 2>/dev/null || true
 	@docker compose up --build -d
 	@HEIMDALLR_PASSWORD=e2e-test-password ./scripts/wait-for-health.sh
 
@@ -81,13 +82,19 @@ e2e-up: ## Start docker-compose stack and wait for health
 e2e-down: ## Stop docker-compose stack
 	@docker compose down -v
 
-.PHONY: e2e-operations
-e2e-operations: e2e-up ## Run operations E2E (Ansible job flow)
+.PHONY: e2e-operations-run
+e2e-operations-run: ## Run operations E2E scripts (stack must already be up)
 	@HEIMDALLR_PASSWORD=e2e-test-password ./tests/e2e/operations/run.sh
 
-.PHONY: e2e-compliance
-e2e-compliance: e2e-up ## Run compliance E2E (release/report flow)
+.PHONY: e2e-compliance-run
+e2e-compliance-run: ## Run compliance E2E scripts (stack must already be up)
 	@HEIMDALLR_PASSWORD=e2e-test-password ./tests/e2e/compliance/run.sh
+
+.PHONY: e2e-operations
+e2e-operations: e2e-up e2e-operations-run ## Run operations E2E (Ansible job flow)
+
+.PHONY: e2e-compliance
+e2e-compliance: e2e-up e2e-compliance-run ## Run compliance E2E (release/report flow)
 
 .PHONY: e2e
 e2e: e2e-operations e2e-compliance e2e-down ## Run all E2E suites

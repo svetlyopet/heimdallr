@@ -49,7 +49,7 @@ jobs:
       - name: Start stack
         run: make e2e-up
       - name: Run operations E2E
-        run: make e2e-operations
+        run: make e2e-operations-run
       - name: Stop stack
         if: always()
         run: make e2e-down
@@ -62,7 +62,7 @@ jobs:
       - name: Start stack
         run: make e2e-up
       - name: Run compliance E2E
-        run: make e2e-compliance
+        run: make e2e-compliance-run
       - name: Stop stack
         if: always()
         run: make e2e-down
