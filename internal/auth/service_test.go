@@ -24,6 +24,17 @@ func newTestService(t *testing.T) (Service, Repository, *gorm.DB) {
 	return svc, repo, db
 }
 
+func TestServiceEnsureRootUserUsesBootstrapPasswordEnv(t *testing.T) {
+	t.Setenv("HEIMDALLR_BOOTSTRAP_ROOT_PASSWORD", "EnvBootstrapPassword12!")
+	t.Cleanup(func() { t.Setenv("HEIMDALLR_BOOTSTRAP_ROOT_PASSWORD", "") })
+
+	svc, _, _ := newTestService(t)
+
+	password, err := svc.EnsureRootUser(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, "EnvBootstrapPassword12!", password)
+}
+
 func TestServiceEnsureRootUserCreatesOnce(t *testing.T) {
 	svc, repo, _ := newTestService(t)
 

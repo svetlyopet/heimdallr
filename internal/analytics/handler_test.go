@@ -12,10 +12,12 @@ import (
 )
 
 type stubService struct {
-	getOverviewResponse     AutomationAnalyticsResponse
-	getOverviewError        error
-	getOverviewByIDResponse AutomationAnalyticsResponse
-	getOverviewByIDError    error
+	getOverviewResponse       AutomationAnalyticsResponse
+	getOverviewError          error
+	getOverviewByIDResponse   AutomationAnalyticsResponse
+	getOverviewByIDError      error
+	getComplianceResponse     ComplianceAnalyticsResponse
+	getComplianceError        error
 }
 
 func (s stubService) GetAutomationOverview(_ context.Context) (AutomationAnalyticsResponse, error) {
@@ -35,7 +37,11 @@ func (s stubService) GetAutomationOverviewByID(_ context.Context, _ string) (Aut
 }
 
 func (s stubService) GetComplianceOverview(_ context.Context) (ComplianceAnalyticsResponse, error) {
-	return ComplianceAnalyticsResponse{}, nil
+	if s.getComplianceError != nil {
+		return ComplianceAnalyticsResponse{}, s.getComplianceError
+	}
+
+	return s.getComplianceResponse, nil
 }
 
 func newAnalyticsRouter(t *testing.T, svc Service) *gin.Engine {
@@ -83,6 +89,31 @@ func TestGetAutomationOverviewReturnsInternalServerError(t *testing.T) {
 	r := newAnalyticsRouter(t, stubService{getOverviewError: errors.New("db failed")})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/analytics/automation", nil)
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+
+	require.Equal(t, http.StatusInternalServerError, rr.Code)
+}
+
+func TestGetComplianceOverviewReturnsOverview(t *testing.T) {
+	r := newAnalyticsRouter(t, stubService{
+		getComplianceResponse: ComplianceAnalyticsResponse{
+			TotalApplications: 2,
+			TotalReleases:     5,
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/analytics/compliance", nil)
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+}
+
+func TestGetComplianceOverviewReturnsInternalServerError(t *testing.T) {
+	r := newAnalyticsRouter(t, stubService{getComplianceError: errors.New("db failed")})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/analytics/compliance", nil)
 	rr := httptest.NewRecorder()
 	r.ServeHTTP(rr, req)
 

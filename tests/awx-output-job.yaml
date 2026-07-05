@@ -10,6 +10,9 @@
     job_id: "1000"
     job_location: "global"
     job_url: "https://example.com/#/jobs/playbook/200"
+    auth_headers:
+      X-Auth-Username: "{{ lookup('env', 'HEIMDALLR_USER') | default('root', true) }}"
+      X-Auth-Password: "{{ lookup('env', 'HEIMDALLR_PASSWORD') | default('', true) }}"
   tasks:
     - name: Assert automation_id is set
       ansible.builtin.assert:
@@ -22,6 +25,7 @@
       ansible.builtin.uri:
         url: "{{ heimdallr_url }}/api/v1/automation/{{ automation_id }}/job"
         method: POST
+        headers: "{{ auth_headers }}"
         body_format: json
         body:
           id: "{{ job_id }}"
@@ -43,6 +47,7 @@
           ansible.builtin.uri:
             url: "{{ heimdallr_url }}/api/v1/automation/{{ automation_id }}/job/{{ job_id }}"
             method: PATCH
+            headers: "{{ auth_headers }}"
             body_format: json
             body:
               status: "{{ job_status }}"
@@ -57,6 +62,7 @@
           ansible.builtin.uri:
             url: "{{ heimdallr_url }}/api/v1/automation/{{ automation_id }}/job/{{ job_id }}"
             method: PATCH
+            headers: "{{ auth_headers }}"
             body_format: json
             body:
               status: "failed"

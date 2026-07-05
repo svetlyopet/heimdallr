@@ -22,6 +22,7 @@ services:
         condition: service_healthy
     environment:
       DATABASE_URL: postgres://heimdallr:heimdallr@postgres:5432/heimdallr?sslmode=disable
+      HEIMDALLR_BOOTSTRAP_ROOT_PASSWORD: e2e-test-password
       GIN_MODE: release
     ports:
       - "8080:8080"

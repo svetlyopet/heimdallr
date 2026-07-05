@@ -1,0 +1,41 @@
+---
+- name: Seed provider and automation
+  hosts: localhost
+  vars:
+    heimdallr_url: "{{ lookup('env', 'HEIMDALLR_URL') | default('http://localhost:8080', true) }}"
+    heimdallr_user: "{{ lookup('env', 'HEIMDALLR_USER') | default('root', true) }}"
+    heimdallr_password: "{{ lookup('env', 'HEIMDALLR_PASSWORD') | default('e2e-test-password', true) }}"
+    auth_headers:
+      X-Auth-Username: "{{ heimdallr_user }}"
+      X-Auth-Password: "{{ heimdallr_password }}"
+  tasks:
+    - name: Create provider
+      ansible.builtin.uri:
+        url: "{{ heimdallr_url }}/api/v1/provider"
+        method: POST
+        headers: "{{ auth_headers }}"
+        body_format: json
+        body:
+          name: "e2e-awx"
+          url: "https://awx.example.com"
+        status_code: 201
+      register: provider_response
+
+    - name: Create automation
+      ansible.builtin.uri:
+        url: "{{ heimdallr_url }}/api/v1/automation"
+        method: POST
+        headers: "{{ auth_headers }}"
+        body_format: json
+        body:
+          name: "e2e-deploy"
+          url: "https://awx.example.com/#/templates/job_template/1"
+          provider_id: "{{ provider_response.json.data.id }}"
+        status_code: 201
+      register: automation_response
+
+    - name: Write automation id for downstream playbooks
+      ansible.builtin.copy:
+        dest: "{{ playbook_dir }}/.automation_id"
+        content: "{{ automation_response.json.data.id }}"
+        mode: "0600"

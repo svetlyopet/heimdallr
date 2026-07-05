@@ -20,6 +20,10 @@ func NewHandler(host string, appLogger *logger.Logger) (*gin.Engine, error) {
 	handler.Use(middleware.Log(appLogger))
 	handler.Use(middleware.Recover(appLogger))
 
+	handler.GET("/api/health", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	})
+
 	err := handler.SetTrustedProxies(constants.AppDefaultTrustedProxies)
 	if err != nil {
 		return nil, err

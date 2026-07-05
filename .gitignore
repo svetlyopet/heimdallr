@@ -42,3 +42,6 @@ heimdallr.db
 # Web assets and deps
 web/node_modules/
 web/dist/
+
+# E2E generated state
+tests/e2e/operations/.automation_id

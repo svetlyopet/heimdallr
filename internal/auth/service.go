@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"slices"
 	"strings"
 
@@ -229,9 +230,15 @@ func (s service) EnsureRootUser(ctx context.Context) (string, error) {
 		return "", ErrRootBootstrap
 	}
 
-	password, err := generateSecurePassword(rootPasswordLength)
-	if err != nil {
-		s.logger.ErrorWithStack(ctx, "failed to generate root password", err)
+	password := strings.TrimSpace(os.Getenv("HEIMDALLR_BOOTSTRAP_ROOT_PASSWORD"))
+	if password == "" {
+		var err error
+		password, err = generateSecurePassword(rootPasswordLength)
+		if err != nil {
+			s.logger.ErrorWithStack(ctx, "failed to generate root password", err)
+			return "", ErrRootBootstrap
+		}
+	} else if len(password) < minimumPasswordSize {
 		return "", ErrRootBootstrap
 	}
 

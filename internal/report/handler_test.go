@@ -10,12 +10,17 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"github.com/svetlyopet/heimdallr/internal/testutil"
 )
 
 type stubService struct {
 	getAllGlobalResponse []GetResponse
 	getAllGlobalTotal    int64
 	getAllGlobalError    error
+	createResponse       GetResponse
+	createError          error
+	updateResponse       GetResponse
+	updateError          error
 }
 
 func (s stubService) GetAll(_ context.Context, _ string, _ string, _ int, _ int) ([]GetResponse, int64, error) {
@@ -35,11 +40,19 @@ func (s stubService) GetById(_ context.Context, _ string, _ string, _ string) (G
 }
 
 func (s stubService) Create(_ context.Context, _ string, _ string, _ CreateRequest) (GetResponse, error) {
-	return GetResponse{}, nil
+	if s.createError != nil {
+		return GetResponse{}, s.createError
+	}
+
+	return s.createResponse, nil
 }
 
 func (s stubService) Update(_ context.Context, _ string, _ string, _ string, _ UpdateRequest) (GetResponse, error) {
-	return GetResponse{}, nil
+	if s.updateError != nil {
+		return GetResponse{}, s.updateError
+	}
+
+	return s.updateResponse, nil
 }
 
 func newReportRouter(t *testing.T, svc Service) *gin.Engine {
@@ -111,4 +124,39 @@ func TestListAllReturnsInternalServerError(t *testing.T) {
 	r.ServeHTTP(rr, req)
 
 	require.Equal(t, http.StatusInternalServerError, rr.Code)
+}
+
+func TestCreateReportReturnsCreated(t *testing.T) {
+	applicationID := uuid.MustParse("5d8dd803-fca6-4f7c-9dd2-24417622d630")
+	releaseID := uuid.MustParse("8b1e2f4a-9c3d-4e5f-a6b7-c8d9e0f1a2b3")
+
+	r := newReportRouter(t, stubService{
+		createResponse: GetResponse{
+			ID:            "sast-1",
+			ApplicationID: applicationID,
+			ReleaseID:     releaseID,
+			Type:          "sast",
+			Status:        "started",
+		},
+	})
+
+	path := "/api/v1/application/" + applicationID.String() + "/release/" + releaseID.String() + "/report"
+	rr := testutil.DoGinJSONRequest(t, r, http.MethodPost, path, CreateRequest{
+		ID: "sast-1", Type: "sast", Status: "started", Location: "ci",
+	}, nil)
+	response := testutil.AssertJSONStatus(t, rr, http.StatusCreated)
+	data, ok := response["data"].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "started", data["status"])
+}
+
+func TestUpdateReportReturnsNotFound(t *testing.T) {
+	applicationID := uuid.MustParse("5d8dd803-fca6-4f7c-9dd2-24417622d630")
+	releaseID := uuid.MustParse("8b1e2f4a-9c3d-4e5f-a6b7-c8d9e0f1a2b3")
+
+	r := newReportRouter(t, stubService{updateError: ErrReportNotFound})
+
+	path := "/api/v1/application/" + applicationID.String() + "/release/" + releaseID.String() + "/report/sast-1"
+	rr := testutil.DoGinJSONRequest(t, r, http.MethodPatch, path, UpdateRequest{Status: "success"}, nil)
+	require.Equal(t, http.StatusNotFound, rr.Code)
 }

@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/svetlyopet/heimdallr/internal/app"
@@ -56,4 +57,8 @@ func NewServer(host string, port string, db *gorm.DB, appLogger *logger.Logger) 
 
 func (s *Server) Run() error {
 	return s.handler.Run(s.addr)
+}
+
+func (s *Server) HTTPHandler() http.Handler {
+	return s.handler
 }

@@ -93,7 +93,13 @@ OpenAPI spec: [`api/docs/openapi.yaml`](api/docs/openapi.yaml)
 ## Development
 
 ```bash
-make test          # Go unit tests
-make lint-api      # golangci-lint
-make build         # Web + API binary
+make test               # Go unit tests
+make test-integration   # Full-stack API integration tests
+make e2e                # Docker E2E (operations + compliance)
+make e2e-operations     # Ansible job lifecycle E2E
+make e2e-compliance     # Release/report push E2E
+make lint-api           # golangci-lint
+make build              # Web + API binary
 ```
+
+E2E prerequisites: Docker, `jq`, and Ansible (for operations flow). Consumer templates for external CI systems remain under [`tests/`](tests/).

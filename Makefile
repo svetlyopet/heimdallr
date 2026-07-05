@@ -64,6 +64,30 @@ lint-api: fmt download ## Lints all code with golangci-lint
 test: ## Run unit tests
 	@go test -v -covermode=atomic ./...
 
+.PHONY: test-integration
+test-integration: ## Run integration tests
+	@go test -tags=integration -v -count=1 ./tests/integration/...
+
+.PHONY: e2e-up
+e2e-up: ## Start docker-compose stack and wait for health
+	@docker compose up --build -d
+	@HEIMDALLR_PASSWORD=e2e-test-password ./scripts/wait-for-health.sh
+
+.PHONY: e2e-down
+e2e-down: ## Stop docker-compose stack
+	@docker compose down -v
+
+.PHONY: e2e-operations
+e2e-operations: e2e-up ## Run operations E2E (Ansible job flow)
+	@HEIMDALLR_PASSWORD=e2e-test-password ./tests/e2e/operations/run.sh
+
+.PHONY: e2e-compliance
+e2e-compliance: e2e-up ## Run compliance E2E (release/report flow)
+	@HEIMDALLR_PASSWORD=e2e-test-password ./tests/e2e/compliance/run.sh
+
+.PHONY: e2e
+e2e: e2e-operations e2e-compliance e2e-down ## Run all E2E suites
+
 .PHONY: build-web
 build-web: out-web ## Build web assets
 	@cd $(WEB_DIR) && npm run build
