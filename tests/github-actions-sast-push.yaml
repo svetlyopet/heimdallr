@@ -1,0 +1,68 @@
+# Reusable GitHub Actions workflow snippet for pushing SAST results to Heimdallr.
+#
+# Required secrets:
+#   HEIMDALLR_URL          - e.g. https://heimdallr.example.com
+#   HEIMDALLR_TOKEN        - API token with application:write scope
+#   HEIMDALLR_APPLICATION  - Application UUID
+
+name: Push SAST report to Heimdallr
+
+on:
+  workflow_dispatch:
+
+jobs:
+  sast-push:
+    runs-on: ubuntu-latest
+    env:
+      HEIMDALLR_URL: ${{ secrets.HEIMDALLR_URL }}
+      HEIMDALLR_TOKEN: ${{ secrets.HEIMDALLR_TOKEN }}
+      HEIMDALLR_APPLICATION: ${{ secrets.HEIMDALLR_APPLICATION }}
+      RELEASE_VERSION: ${{ github.ref_name }}
+      REPORT_ID: sast-${{ github.run_id }}
+    steps:
+      - name: Upsert release
+        run: |
+          curl -sf -X POST \
+            -H "Authorization: Bearer ${HEIMDALLR_TOKEN}" \
+            -H "Content-Type: application/json" \
+            "${HEIMDALLR_URL}/api/v1/application/${HEIMDALLR_APPLICATION}/release?upsert=true" \
+            -d "{
+              \"version\": \"${RELEASE_VERSION}\",
+              \"commit_sha\": \"${{ github.sha }}\",
+              \"branch\": \"${{ github.ref_name }}\",
+              \"pipeline_url\": \"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"
+            }" > release.json
+
+          echo "RELEASE_ID=$(jq -r '.data.id' release.json)" >> "$GITHUB_ENV"
+
+      - name: Register report (started)
+        run: |
+          curl -sf -X POST \
+            -H "Authorization: Bearer ${HEIMDALLR_TOKEN}" \
+            -H "Content-Type: application/json" \
+            "${HEIMDALLR_URL}/api/v1/application/${HEIMDALLR_APPLICATION}/release/${RELEASE_ID}/report" \
+            -d "{
+              \"id\": \"${REPORT_ID}\",
+              \"type\": \"sast\",
+              \"status\": \"started\",
+              \"location\": \"ci\",
+              \"url\": \"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\",
+              \"metadata\": {\"tool\": \"example-sast\", \"workflow\": \"${{ github.workflow }}\"}
+            }"
+
+      - name: Run SAST scanner
+        run: |
+          echo "<h1>SAST report placeholder</h1>" > sast-report.html
+
+      - name: Push report results
+        run: |
+          OUTPUT_B64=$(base64 -w0 sast-report.html 2>/dev/null || base64 sast-report.html | tr -d '\n')
+          curl -sf -X PATCH \
+            -H "Authorization: Bearer ${HEIMDALLR_TOKEN}" \
+            -H "Content-Type: application/json" \
+            "${HEIMDALLR_URL}/api/v1/application/${HEIMDALLR_APPLICATION}/release/${RELEASE_ID}/report/${REPORT_ID}" \
+            -d "{
+              \"status\": \"success\",
+              \"metadata\": {\"findings\": 0, \"tool\": \"example-sast\"},
+              \"output\": \"${OUTPUT_B64}\"
+            }"

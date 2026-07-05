@@ -2,18 +2,22 @@ openapi: 3.1.0
 info:
   title: Heimdallr API
   version: 1.0.0
-  description: API for managing providers, automations, and automation jobs.
+  description: API for managing applications, releases, compliance reports, providers, automations, and automation jobs.
 
 servers:
   - url: /api
     description: API base path
 
 tags:
+  - name: Application
+  - name: Release
+  - name: Report
   - name: Provider
   - name: Automation
   - name: Job
   - name: Analytics
   - name: Auth
+  - name: Token
 
 paths:
   /v1/provider:

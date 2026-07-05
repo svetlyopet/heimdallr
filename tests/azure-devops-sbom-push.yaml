@@ -1,0 +1,66 @@
+# Azure DevOps pipeline example for pushing SBOM results to Heimdallr.
+#
+# Variables (pipeline or variable group):
+#   heimdallrUrl
+#   heimdallrToken
+#   heimdallrApplicationId
+
+trigger: none
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  releaseVersion: $(Build.SourceBranchName)
+  reportId: sbom-$(Build.BuildId)
+
+steps:
+  - bash: |
+      set -euo pipefail
+      curl -sf -X POST \
+        -H "Authorization: Bearer $(heimdallrToken)" \
+        -H "Content-Type: application/json" \
+        "$(heimdallrUrl)/api/v1/application/$(heimdallrApplicationId)/release?upsert=true" \
+        -d "{
+          \"version\": \"$(releaseVersion)\",
+          \"commit_sha\": \"$(Build.SourceVersion)\",
+          \"branch\": \"$(Build.SourceBranchName)\",
+          \"pipeline_url\": \"$(System.CollectionUri)$(System.TeamProject)/_build/results?buildId=$(Build.BuildId)\"
+        }" > release.json
+
+      echo "##vso[task.setvariable variable=releaseId]$(jq -r '.data.id' release.json)"
+    displayName: Upsert release
+
+  - bash: |
+      set -euo pipefail
+      curl -sf -X POST \
+        -H "Authorization: Bearer $(heimdallrToken)" \
+        -H "Content-Type: application/json" \
+        "$(heimdallrUrl)/api/v1/application/$(heimdallrApplicationId)/release/$(releaseId)/report" \
+        -d "{
+          \"id\": \"$(reportId)\",
+          \"type\": \"sbom\",
+          \"status\": \"started\",
+          \"location\": \"ci\",
+          \"metadata\": {\"format\": \"cyclonedx\", \"tool\": \"syft\"}
+        }"
+    displayName: Register SBOM report
+
+  - bash: |
+      set -euo pipefail
+      echo '{"bomFormat":"CycloneDX","specVersion":"1.5"}' > sbom.json
+    displayName: Generate SBOM
+
+  - bash: |
+      set -euo pipefail
+      OUTPUT_B64=$(base64 -w0 sbom.json 2>/dev/null || base64 sbom.json | tr -d '\n')
+      curl -sf -X PATCH \
+        -H "Authorization: Bearer $(heimdallrToken)" \
+        -H "Content-Type: application/json" \
+        "$(heimdallrUrl)/api/v1/application/$(heimdallrApplicationId)/release/$(releaseId)/report/$(reportId)" \
+        -d "{
+          \"status\": \"success\",
+          \"metadata\": {\"format\": \"cyclonedx\", \"components\": 1},
+          \"output\": \"${OUTPUT_B64}\"
+        }"
+    displayName: Push SBOM report
