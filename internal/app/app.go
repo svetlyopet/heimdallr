@@ -12,6 +12,7 @@ import (
 	"github.com/svetlyopet/heimdallr/internal/job"
 	"github.com/svetlyopet/heimdallr/internal/logger"
 	"github.com/svetlyopet/heimdallr/internal/provider"
+	"github.com/svetlyopet/heimdallr/internal/release"
 	"gorm.io/gorm"
 )
 
@@ -30,6 +31,9 @@ type App struct {
 
 	applicationService application.Service
 	applicationHandler application.Handler
+
+	releaseService release.Service
+	releaseHandler release.Handler
 
 	analyticsService analytics.Service
 	analyticsHandler analytics.Handler
@@ -60,6 +64,13 @@ func New(db *gorm.DB, appLogger *logger.Logger) (*App, error) {
 	applicationRepository := application.NewRepository(db)
 	applicationService := application.NewService(applicationRepository, appLogger)
 	applicationHandler, err := application.NewHandler(applicationService)
+	if err != nil {
+		return nil, err
+	}
+
+	releaseRepository := release.NewRepository(db)
+	releaseService := release.NewService(releaseRepository, applicationService, appLogger)
+	releaseHandler, err := release.NewHandler(releaseService)
 	if err != nil {
 		return nil, err
 	}
@@ -101,6 +112,9 @@ func New(db *gorm.DB, appLogger *logger.Logger) (*App, error) {
 		applicationService: applicationService,
 		applicationHandler: applicationHandler,
 
+		releaseService: releaseService,
+		releaseHandler: releaseHandler,
+
 		analyticsService: analyticsService,
 		analyticsHandler: analyticsHandler,
 
@@ -114,6 +128,7 @@ func (a *App) RegisterRoutes(rg *gin.RouterGroup) {
 	automation.RegisterRoutes(rg, a.automationHandler)
 	job.RegisterRoutes(rg, a.jobHandler)
 	application.RegisterRoutes(rg, a.applicationHandler)
+	release.RegisterRoutes(rg, a.releaseHandler)
 	analytics.RegisterRoutes(rg, a.analyticsHandler)
 	auth.RegisterRoutes(rg, a.authHandler, a.authService)
 }
