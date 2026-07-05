@@ -23,9 +23,9 @@ type Service interface {
 }
 
 type service struct {
-	repository                Repository
+	repository               Repository
 	applicationLookupService application.LookupService
-	logger                    *logger.Logger
+	logger                   *logger.Logger
 }
 
 func (s service) GetAll(ctx context.Context, applicationID string, page int, limit int) ([]ListItemResponse, int64, error) {
@@ -182,9 +182,9 @@ func NewService(
 	}
 
 	return &service{
-		repository:                repository,
+		repository:               repository,
 		applicationLookupService: applicationLookupService,
-		logger:                    appLogger,
+		logger:                   appLogger,
 	}
 }
 

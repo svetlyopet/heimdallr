@@ -12,12 +12,12 @@ import (
 )
 
 type stubService struct {
-	getOverviewResponse       AutomationAnalyticsResponse
-	getOverviewError          error
-	getOverviewByIDResponse   AutomationAnalyticsResponse
-	getOverviewByIDError      error
-	getComplianceResponse     ComplianceAnalyticsResponse
-	getComplianceError        error
+	getOverviewResponse     AutomationAnalyticsResponse
+	getOverviewError        error
+	getOverviewByIDResponse AutomationAnalyticsResponse
+	getOverviewByIDError    error
+	getComplianceResponse   ComplianceAnalyticsResponse
+	getComplianceError      error
 }
 
 func (s stubService) GetAutomationOverview(_ context.Context) (AutomationAnalyticsResponse, error) {

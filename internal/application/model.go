@@ -7,10 +7,10 @@ import (
 )
 
 type Application struct {
-	ID             uuid.UUID `gorm:"type:uuid;primary_key" json:"id"`
-	Name           string    `gorm:"type:varchar(255);not null;uniqueIndex;check:name <> ''" json:"name"`
-	Description    string    `gorm:"type:text;not null" json:"description"`
-	RepositoryURL  string    `gorm:"type:varchar(255);not null" json:"repository_url"`
+	ID            uuid.UUID `gorm:"type:uuid;primary_key" json:"id"`
+	Name          string    `gorm:"type:varchar(255);not null;uniqueIndex;check:name <> ''" json:"name"`
+	Description   string    `gorm:"type:text;not null" json:"description"`
+	RepositoryURL string    `gorm:"type:varchar(255);not null" json:"repository_url"`
 	model.Timestamp
 }
 

@@ -77,9 +77,9 @@ func (authServiceStub) Create(context.Context, auth.CreateRequest) (auth.GetResp
 func (authServiceStub) Update(context.Context, string, auth.UpdateRequest) (auth.GetResponse, error) {
 	return auth.GetResponse{}, nil
 }
-func (authServiceStub) Delete(context.Context, string) error { return nil }
+func (authServiceStub) Delete(context.Context, string) error           { return nil }
 func (authServiceStub) EnsureRootUser(context.Context) (string, error) { return "", nil }
-func (authServiceStub) HasAnyRole(auth.GetResponse, ...string) bool { return true }
+func (authServiceStub) HasAnyRole(auth.GetResponse, ...string) bool    { return true }
 
 func TestHandlerCreateReturnsBadRequestForInvalidScopes(t *testing.T) {
 	r := newTokenRouter(t, stubTokenService{createError: ErrInvalidScopes})

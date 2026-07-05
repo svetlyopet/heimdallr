@@ -3,9 +3,9 @@ package token
 import "github.com/google/uuid"
 
 type GetResponse struct {
-	ID        uuid.UUID `json:"id"`
-	Name      string    `json:"name"`
-	Scopes    []string  `json:"scopes"`
+	ID        uuid.UUID  `json:"id"`
+	Name      string     `json:"name"`
+	Scopes    []string   `json:"scopes"`
 	CreatedBy *uuid.UUID `json:"created_by,omitempty"`
 }
 

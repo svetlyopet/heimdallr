@@ -21,9 +21,9 @@ type Service interface {
 }
 
 type service struct {
-	repository            Repository
+	repository           Repository
 	releaseLookupService release.LookupService
-	logger                *logger.Logger
+	logger               *logger.Logger
 }
 
 func (s service) GetAll(ctx context.Context, applicationID string, releaseID string, page int, limit int) ([]GetResponse, int64, error) {
@@ -209,9 +209,9 @@ func NewService(
 	}
 
 	return &service{
-		repository:            repository,
+		repository:           repository,
 		releaseLookupService: releaseLookupService,
-		logger:                appLogger,
+		logger:               appLogger,
 	}
 }
 
@@ -232,7 +232,7 @@ func mapEntityToResponse(report Report) (GetResponse, error) {
 		Location:      report.Location,
 		URL:           report.URL,
 		Metadata:      metadata,
-		Output:      report.Output,
+		Output:        report.Output,
 		CreatedAt:     report.CreatedAt,
 	}, nil
 }

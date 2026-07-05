@@ -14,11 +14,11 @@ const (
 )
 
 type APIToken struct {
-	ID         uuid.UUID  `gorm:"type:uuid;primary_key" json:"id"`
-	Name       string     `gorm:"type:varchar(255);not null;check:name <> ''" json:"name"`
-	TokenHash  string     `gorm:"type:char(64);not null;uniqueIndex" json:"-"`
-	Scopes     []string   `gorm:"serializer:json;type:text;not null" json:"scopes"`
-	CreatedBy  *uuid.UUID `gorm:"type:uuid" json:"created_by"`
+	ID        uuid.UUID  `gorm:"type:uuid;primary_key" json:"id"`
+	Name      string     `gorm:"type:varchar(255);not null;check:name <> ''" json:"name"`
+	TokenHash string     `gorm:"type:char(64);not null;uniqueIndex" json:"-"`
+	Scopes    []string   `gorm:"serializer:json;type:text;not null" json:"scopes"`
+	CreatedBy *uuid.UUID `gorm:"type:uuid" json:"created_by"`
 	model.Timestamp
 }
 

@@ -172,11 +172,7 @@ func (r repository) GetComplianceSummary(ctx context.Context, releaseID uuid.UUI
 			summary.StartedReports += row.Count
 		}
 
-		summary.ByType = append(summary.ByType, ReportSummary{
-			Type:   row.Type,
-			Status: row.Status,
-			Count:  row.Count,
-		})
+		summary.ByType = append(summary.ByType, ReportSummary(row))
 	}
 
 	if summary.TotalReports > 0 {

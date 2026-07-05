@@ -6,12 +6,12 @@ import (
 )
 
 var (
-	ErrTokenNotFound    = errors.New("api token not found")
-	ErrInvalidToken     = errors.New("invalid api token")
-	ErrCreateToken      = errors.New("failed to create api token")
-	ErrListTokens       = errors.New("failed to list api tokens")
-	ErrDeleteToken      = errors.New("failed to delete api token")
-	ErrInvalidScopes    = errors.New("invalid token scopes")
+	ErrTokenNotFound = errors.New("api token not found")
+	ErrInvalidToken  = errors.New("invalid api token")
+	ErrCreateToken   = errors.New("failed to create api token")
+	ErrListTokens    = errors.New("failed to list api tokens")
+	ErrDeleteToken   = errors.New("failed to delete api token")
+	ErrInvalidScopes = errors.New("invalid token scopes")
 )
 
 type TokenError struct {

@@ -14,15 +14,15 @@ import (
 )
 
 type stubJobService struct {
-	listResponse  []GetResponse
-	listTotal     int64
-	listError     error
-	getResponse   GetResponse
-	getError      error
-	createResp    GetResponse
-	createError   error
-	updateResp    GetResponse
-	updateError   error
+	listResponse []GetResponse
+	listTotal    int64
+	listError    error
+	getResponse  GetResponse
+	getError     error
+	createResp   GetResponse
+	createError  error
+	updateResp   GetResponse
+	updateError  error
 }
 
 func (s stubJobService) GetAll(_ context.Context, _ string, _ int, _ int) ([]GetResponse, int64, error) {

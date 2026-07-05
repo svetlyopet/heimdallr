@@ -6,17 +6,17 @@ import (
 )
 
 const (
-	ErrMsgReportNotFound      = "report not found"
-	ErrMsgInvalidReportID     = "invalid report id"
-	ErrMsgInvalidReleaseID    = "invalid release id"
+	ErrMsgReportNotFound       = "report not found"
+	ErrMsgInvalidReportID      = "invalid report id"
+	ErrMsgInvalidReleaseID     = "invalid release id"
 	ErrMsgInvalidApplicationID = "invalid application id"
-	ErrMsgInvalidMetadata     = "invalid metadata structure"
-	ErrMsgInvalidOutput       = "invalid output encoding"
-	ErrMsgInvalidReportType   = "invalid report type"
-	ErrMsgCreateReport        = "failed to create report"
-	ErrMsgUpdateReport        = "failed to update report"
-	ErrMsgGetReport           = "failed to get report"
-	ErrMsgListReports         = "failed to list reports"
+	ErrMsgInvalidMetadata      = "invalid metadata structure"
+	ErrMsgInvalidOutput        = "invalid output encoding"
+	ErrMsgInvalidReportType    = "invalid report type"
+	ErrMsgCreateReport         = "failed to create report"
+	ErrMsgUpdateReport         = "failed to update report"
+	ErrMsgGetReport            = "failed to get report"
+	ErrMsgListReports          = "failed to list reports"
 )
 
 var (
