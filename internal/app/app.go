@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/svetlyopet/heimdallr/internal/analytics"
+	"github.com/svetlyopet/heimdallr/internal/application"
 	"github.com/svetlyopet/heimdallr/internal/auth"
 	"github.com/svetlyopet/heimdallr/internal/automation"
 	"github.com/svetlyopet/heimdallr/internal/job"
@@ -27,6 +28,9 @@ type App struct {
 	jobService job.Service
 	jobHandler job.Handler
 
+	applicationService application.Service
+	applicationHandler application.Handler
+
 	analyticsService analytics.Service
 	analyticsHandler analytics.Handler
 
@@ -39,7 +43,6 @@ func New(db *gorm.DB, appLogger *logger.Logger) (*App, error) {
 		appLogger = logger.Default()
 	}
 
-	// Provider
 	providerRepository := provider.NewRepository(db)
 	providerService := provider.NewService(providerRepository, appLogger)
 	providerHandler, err := provider.NewHandler(providerService)
@@ -47,7 +50,6 @@ func New(db *gorm.DB, appLogger *logger.Logger) (*App, error) {
 		return nil, err
 	}
 
-	// Auth
 	authRepository := auth.NewRepository(db)
 	authService := auth.NewService(authRepository, appLogger)
 	authHandler, err := auth.NewHandler(authService)
@@ -55,7 +57,13 @@ func New(db *gorm.DB, appLogger *logger.Logger) (*App, error) {
 		return nil, err
 	}
 
-	// Automation
+	applicationRepository := application.NewRepository(db)
+	applicationService := application.NewService(applicationRepository, appLogger)
+	applicationHandler, err := application.NewHandler(applicationService)
+	if err != nil {
+		return nil, err
+	}
+
 	automationRepository := automation.NewRepository(db)
 	automationService := automation.NewService(automationRepository, providerService, appLogger)
 	automationHandler, err := automation.NewHandler(automationService)
@@ -63,7 +71,6 @@ func New(db *gorm.DB, appLogger *logger.Logger) (*App, error) {
 		return nil, err
 	}
 
-	// Job
 	jobRepository := job.NewRepository(db)
 	jobService := job.NewService(jobRepository, automationService, appLogger)
 	jobHandler, err := job.NewHandler(jobService)
@@ -71,7 +78,6 @@ func New(db *gorm.DB, appLogger *logger.Logger) (*App, error) {
 		return nil, err
 	}
 
-	// Analytics
 	analyticsRepository := analytics.NewRepository(db)
 	analyticsService := analytics.NewService(analyticsRepository, appLogger)
 	analyticsHandler, err := analytics.NewHandler(analyticsService)
@@ -92,6 +98,9 @@ func New(db *gorm.DB, appLogger *logger.Logger) (*App, error) {
 		jobService: jobService,
 		jobHandler: jobHandler,
 
+		applicationService: applicationService,
+		applicationHandler: applicationHandler,
+
 		analyticsService: analyticsService,
 		analyticsHandler: analyticsHandler,
 
@@ -104,6 +113,7 @@ func (a *App) RegisterRoutes(rg *gin.RouterGroup) {
 	provider.RegisterRoutes(rg, a.providerHandler)
 	automation.RegisterRoutes(rg, a.automationHandler)
 	job.RegisterRoutes(rg, a.jobHandler)
+	application.RegisterRoutes(rg, a.applicationHandler)
 	analytics.RegisterRoutes(rg, a.analyticsHandler)
 	auth.RegisterRoutes(rg, a.authHandler, a.authService)
 }
