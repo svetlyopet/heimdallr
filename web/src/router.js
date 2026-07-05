@@ -1,10 +1,14 @@
 import { createRouter, createWebHistory } from "vue-router";
+import ApplicationDetailPage from "./pages/ApplicationDetailPage.vue";
+import ApplicationPage from "./pages/ApplicationPage.vue";
 import AutomationPage from "./pages/AutomationPage.vue";
 import DashboardPage from "./pages/DashboardPage.vue";
 import JobDetailPage from "./pages/JobDetailPage.vue";
 import JobPage from "./pages/JobPage.vue";
 import LoginPage from "./pages/LoginPage.vue";
 import ProviderPage from "./pages/ProviderPage.vue";
+import ReleaseDetailPage from "./pages/ReleaseDetailPage.vue";
+import ReportDetailPage from "./pages/ReportDetailPage.vue";
 import UsersPage from "./pages/UsersPage.vue";
 import { ensureSessionAccess, sessionState } from "./auth/session";
 
@@ -25,6 +29,38 @@ const routes = [
         path: "/dashboard",
         name: "dashboard",
         component: DashboardPage,
+        meta: {
+            requiresAuth: true,
+        },
+    },
+    {
+        path: "/applications",
+        name: "applications",
+        component: ApplicationPage,
+        meta: {
+            requiresAuth: true,
+        },
+    },
+    {
+        path: "/applications/:id",
+        name: "application-detail",
+        component: ApplicationDetailPage,
+        meta: {
+            requiresAuth: true,
+        },
+    },
+    {
+        path: "/applications/:id/releases/:releaseId",
+        name: "release-detail",
+        component: ReleaseDetailPage,
+        meta: {
+            requiresAuth: true,
+        },
+    },
+    {
+        path: "/applications/:id/releases/:releaseId/reports/:reportId",
+        name: "report-detail",
+        component: ReportDetailPage,
         meta: {
             requiresAuth: true,
         },

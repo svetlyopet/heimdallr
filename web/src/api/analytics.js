@@ -7,3 +7,7 @@ export function getAutomationAnalytics() {
 export function getAutomationAnalyticsById(automationId) {
     return apiRequest(`/v1/analytics/automation/${automationId}`);
 }
+
+export function getComplianceAnalytics() {
+    return apiRequest("/v1/analytics/compliance");
+}

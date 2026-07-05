@@ -7,7 +7,7 @@
         <div class="brand-icon">H</div>
         <div>
           <h1>Heimdallr</h1>
-          <p>Automation Console</p>
+          <p>Automation & Compliance Hub</p>
         </div>
       </div>
 
@@ -15,6 +15,11 @@
         <RouterLink class="nav-item" to="/dashboard">
           <span>📊</span>
           Dashboard
+        </RouterLink>
+
+        <RouterLink class="nav-item" to="/applications">
+          <span>📦</span>
+          Applications
         </RouterLink>
 
         <RouterLink class="nav-item" to="/providers">
