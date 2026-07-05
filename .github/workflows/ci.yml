@@ -14,7 +14,7 @@ jobs:
         with:
           go-version-file: go.mod
       - name: Run unit tests
-        run: go test -race -covermode=atomic ./...
+        run: make test
 
   lint-api:
     runs-on: ubuntu-latest

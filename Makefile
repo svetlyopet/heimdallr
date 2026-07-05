@@ -24,6 +24,10 @@ out-api:
 out-web:
 	@mkdir -p $(WEB_DIST_DIR)
 
+.PHONY: test-web-stub
+test-web-stub: out-web
+	@test -f $(WEB_DIST_DIR)/index.html || printf '%s\n' '<!DOCTYPE html><html><head><title>Heimdallr</title></head><body></body></html>' > $(WEB_DIST_DIR)/index.html
+
 .PHONY: download
 download: ## Downloads go dependencies
 	@go mod download
@@ -50,7 +54,7 @@ html-coverage: out-reports $(REPORTS_DIR)/report.json ## Displays the coverage r
 test-reports: out-reports $(REPORTS_DIR)/report.json
 
 .PHONY: $(REPORTS_DIR)/report.json
-$(REPORTS_DIR)/report.json: out-reports
+$(REPORTS_DIR)/report.json: out-reports test-web-stub
 	@go test -count 1 ./... -coverprofile=$(REPORTS_DIR)/cover.out --json | tee "$(@)"
 
 .PHONY: web-install-deps
@@ -58,14 +62,14 @@ web-install-deps: ## Install web dependencies
 	cd $(WEB_DIR) && npm install
 
 .PHONY: lint-api
-lint-api: fmt download ## Lints all code with golangci-lint
+lint-api: fmt download test-web-stub ## Lints all code with golangci-lint
 	@go run github.com/golangci/golangci-lint/cmd/golangci-lint run
 
-test: ## Run unit tests
+test: test-web-stub ## Run unit tests
 	@go test -v -covermode=atomic ./...
 
 .PHONY: test-integration
-test-integration: ## Run integration tests
+test-integration: test-web-stub ## Run integration tests
 	@go test -tags=integration -v -count=1 ./tests/integration/...
 
 .PHONY: e2e-up
