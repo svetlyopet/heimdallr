@@ -14,6 +14,7 @@ import (
 
 type Service interface {
 	GetAll(ctx context.Context, applicationID string, releaseID string, page int, limit int) ([]GetResponse, int64, error)
+	GetAllGlobal(ctx context.Context, filters ListFilters, page int, limit int) ([]GetResponse, int64, error)
 	GetById(ctx context.Context, applicationID string, releaseID string, reportID string) (GetResponse, error)
 	Create(ctx context.Context, applicationID string, releaseID string, req CreateRequest) (GetResponse, error)
 	Update(ctx context.Context, applicationID string, releaseID string, reportID string, req UpdateRequest) (GetResponse, error)
@@ -42,6 +43,40 @@ func (s service) GetAll(ctx context.Context, applicationID string, releaseID str
 			slog.String("release_id", releaseID),
 			slog.String("application_id", applicationID),
 		)
+		return nil, 0, ErrListReports
+	}
+
+	responses := make([]GetResponse, 0, len(reports))
+	for _, report := range reports {
+		reportResponse, mapErr := mapEntityToResponse(report)
+		if mapErr != nil {
+			return nil, 0, ErrListReports
+		}
+
+		responses = append(responses, reportResponse)
+	}
+
+	return responses, total, nil
+}
+
+func (s service) GetAllGlobal(ctx context.Context, filters ListFilters, page int, limit int) ([]GetResponse, int64, error) {
+	if filters.ApplicationID != "" {
+		if _, err := uuid.Parse(filters.ApplicationID); err != nil {
+			return nil, 0, ErrInvalidApplicationID
+		}
+	}
+
+	if filters.ReleaseID != "" {
+		if _, err := uuid.Parse(filters.ReleaseID); err != nil {
+			return nil, 0, ErrInvalidReleaseID
+		}
+	}
+
+	offset := (page - 1) * limit
+
+	reports, total, err := s.repository.FindAllGlobal(ctx, filters, limit, offset)
+	if err != nil {
+		s.logger.ErrorWithStack(ctx, "failed to find reports globally", err)
 		return nil, 0, ErrListReports
 	}
 
@@ -187,14 +222,17 @@ func mapEntityToResponse(report Report) (GetResponse, error) {
 	}
 
 	return GetResponse{
-		ID:          report.ID,
-		Application: report.Application,
-		Version:     report.Version,
-		Type:        report.Type,
-		Status:      report.Status,
-		Location:    report.Location,
-		URL:         report.URL,
-		Metadata:    metadata,
+		ID:            report.ID,
+		ApplicationID: report.ApplicationID,
+		ReleaseID:     report.ReleaseID,
+		Application:   report.Application,
+		Version:       report.Version,
+		Type:          report.Type,
+		Status:        report.Status,
+		Location:      report.Location,
+		URL:           report.URL,
+		Metadata:      metadata,
 		Output:      report.Output,
+		CreatedAt:     report.CreatedAt,
 	}, nil
 }

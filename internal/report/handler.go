@@ -14,6 +14,7 @@ import (
 
 type Handler interface {
 	List(ctx *gin.Context)
+	ListAll(ctx *gin.Context)
 	Get(ctx *gin.Context)
 	Create(ctx *gin.Context)
 	Update(ctx *gin.Context)
@@ -46,6 +47,85 @@ func (h handler) List(ctx *gin.Context) {
 		statusCode := http.StatusInternalServerError
 		if errors.Is(err, ErrReportNotFound) {
 			statusCode = http.StatusNotFound
+		}
+
+		returnErrorResponse(ctx, statusCode, NewGetReportsError(err))
+		return
+	}
+
+	totalPages := int64(0)
+	if total > 0 {
+		totalPages = (total + int64(limit) - 1) / int64(limit)
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{
+		"data": reports,
+		"pagination": gin.H{
+			"page":        page,
+			"limit":       limit,
+			"total":       total,
+			"total_pages": totalPages,
+		},
+	})
+}
+
+func (h handler) ListAll(ctx *gin.Context) {
+	page, err := strconv.Atoi(ctx.DefaultQuery("page", "1"))
+	if err != nil || page < 1 {
+		returnErrorResponse(ctx, http.StatusBadRequest, NewReportError("invalid query param value", errors.New("page must be a positive integer")))
+		return
+	}
+
+	limit, err := strconv.Atoi(ctx.DefaultQuery("limit", "10"))
+	if err != nil || limit < 1 {
+		returnErrorResponse(ctx, http.StatusBadRequest, NewReportError("invalid query param value", errors.New("limit must be a positive integer")))
+		return
+	}
+
+	filters := ListFilters{
+		ApplicationID: strings.TrimSpace(ctx.Query("application_id")),
+		ReleaseID:     strings.TrimSpace(ctx.Query("release_id")),
+		Status:        strings.TrimSpace(ctx.Query("status")),
+		Type:          strings.TrimSpace(ctx.Query("type")),
+	}
+
+	if filters.ApplicationID != "" {
+		if _, parseErr := uuid.Parse(filters.ApplicationID); parseErr != nil {
+			returnErrorResponse(ctx, http.StatusBadRequest, NewInvalidApplicationIDError(parseErr))
+			return
+		}
+	}
+
+	if filters.ReleaseID != "" {
+		if _, parseErr := uuid.Parse(filters.ReleaseID); parseErr != nil {
+			returnErrorResponse(ctx, http.StatusBadRequest, NewInvalidReleaseIDError(parseErr))
+			return
+		}
+	}
+
+	if filters.Status != "" {
+		switch filters.Status {
+		case "started", "skipped", "success", "failed":
+		default:
+			returnErrorResponse(ctx, http.StatusBadRequest, NewReportError("invalid query param value", errors.New("status must be one of started, skipped, success, failed")))
+			return
+		}
+	}
+
+	if filters.Type != "" {
+		switch filters.Type {
+		case "sast", "dast", "sbom", "code_coverage", "custom":
+		default:
+			returnErrorResponse(ctx, http.StatusBadRequest, NewReportError("invalid query param value", errors.New("type must be one of sast, dast, sbom, code_coverage, custom")))
+			return
+		}
+	}
+
+	reports, total, err := h.service.GetAllGlobal(ctx.Request.Context(), filters, page, limit)
+	if err != nil {
+		statusCode := http.StatusInternalServerError
+		if errors.Is(err, ErrInvalidApplicationID) || errors.Is(err, ErrInvalidReleaseID) {
+			statusCode = http.StatusBadRequest
 		}
 
 		returnErrorResponse(ctx, statusCode, NewGetReportsError(err))

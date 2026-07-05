@@ -692,10 +692,57 @@ tbody tr:hover {
     background: #fee2e2;
 }
 
+.nav-section {
+    margin: 18px 0 8px;
+    padding: 0 14px;
+    color: #64748b;
+    font-size: 11px;
+    font-weight: 900;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+
 .nav-item.active,
 .nav-item.router-link-active {
     background: rgba(37, 99, 235, 0.28);
     color: #ffffff;
+}
+
+.breadcrumb {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 16px;
+    color: #cbd5e1;
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.breadcrumb a {
+    color: #93c5fd;
+    text-decoration: none;
+}
+
+.breadcrumb a:hover {
+    text-decoration: underline;
+}
+
+.breadcrumb-separator {
+    color: #64748b;
+}
+
+.panel-header-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+}
+
+.page-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
 }
 
 .dashboard-grid {
@@ -703,6 +750,12 @@ tbody tr:hover {
     grid-template-columns: 1fr;
     gap: 18px;
     align-items: start;
+}
+
+@media (min-width: 1180px) {
+    .dashboard-grid {
+        grid-template-columns: 1fr 1fr;
+    }
 }
 
 .rate-cell {
@@ -910,11 +963,5 @@ tbody tr:hover {
 
     .rate-cell {
         width: 100%;
-    }
-}
-
-@media (max-width: 720px) {
-    .main {
-        padding: 20px;
     }
 }

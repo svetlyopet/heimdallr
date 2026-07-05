@@ -1,5 +1,7 @@
 <template>
   <section>
+    <BreadcrumbNav :items="breadcrumbItems" />
+
     <header class="topbar">
       <div>
         <p class="eyebrow">Compliance</p>
@@ -7,12 +9,7 @@
       </div>
 
       <div class="topbar-actions">
-        <RouterLink
-          class="button button-secondary"
-          :to="{ name: 'application-detail', params: { id: applicationId } }"
-        >
-          Back
-        </RouterLink>
+        <RouterLink class="button button-secondary" to="/releases">All releases</RouterLink>
         <button class="button button-secondary" type="button" @click="loadData">Refresh</button>
       </div>
     </header>
@@ -81,6 +78,16 @@
             <p class="eyebrow">Reports</p>
             <h3>All reports for this release</h3>
           </div>
+
+          <RouterLink
+            class="button button-secondary"
+            :to="{
+              name: 'reports',
+              query: { application_id: applicationId, release_id: releaseId },
+            }"
+          >
+            Open inbox
+          </RouterLink>
         </div>
 
         <div v-if="loading" class="empty-state">Loading reports...</div>
@@ -95,16 +102,20 @@
                 <th>Type</th>
                 <th>Status</th>
                 <th>Location</th>
+                <th>Created</th>
                 <th></th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="report in reports" :key="report.id">
-                <td><code>{{ report.id }}</code></td>
-                <td>{{ report.type }}</td>
-                <td><span class="badge" :class="`badge-${report.status}`">{{ report.status }}</span></td>
-                <td>{{ report.location || "—" }}</td>
-                <td>
+                <td data-label="ID"><code>{{ report.id }}</code></td>
+                <td data-label="Type">{{ report.type }}</td>
+                <td data-label="Status">
+                  <span class="badge" :class="`badge-${report.status}`">{{ report.status }}</span>
+                </td>
+                <td data-label="Location">{{ report.location || "—" }}</td>
+                <td data-label="Created">{{ formatDateTime(report.created_at) }}</td>
+                <td data-label="Actions">
                   <RouterLink
                     class="button button-secondary"
                     :to="{
@@ -138,7 +149,9 @@ import { RouterLink, useRoute } from "vue-router";
 import { listReports } from "../api/reports";
 import { getRelease } from "../api/releases";
 import AppAlert from "../components/AppAlert.vue";
+import BreadcrumbNav from "../components/BreadcrumbNav.vue";
 import PaginationControls from "../components/PaginationControls.vue";
+import { formatDateTime, formatPercent } from "../utils/format";
 
 const route = useRoute();
 const applicationId = route.params.id;
@@ -156,6 +169,16 @@ const pagination = reactive({
   total: 0,
   total_pages: 0,
 });
+
+const breadcrumbItems = computed(() => [
+  { label: "Applications", to: { name: "applications" } },
+  {
+    label: release.value?.application || "Application",
+    to: { name: "application-detail", params: { id: applicationId } },
+  },
+  { label: "Releases", to: { name: "releases" } },
+  { label: release.value?.version || "Release" },
+]);
 
 const matrixRows = computed(() => {
   const byType = {};
@@ -191,10 +214,6 @@ async function loadData() {
   } finally {
     loading.value = false;
   }
-}
-
-function formatPercent(value) {
-  return `${Number(value || 0).toFixed(2)}%`;
 }
 
 async function previousPage() {

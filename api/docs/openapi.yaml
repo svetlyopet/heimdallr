@@ -304,6 +304,58 @@ paths:
         "500":
           $ref: "#/components/responses/InternalServerError"
 
+  /v1/report:
+    get:
+      tags:
+        - Report
+      summary: List reports across applications
+      operationId: listReportsGlobal
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+        - name: application_id
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/UUID"
+        - name: release_id
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/UUID"
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - started
+              - skipped
+              - success
+              - failed
+        - name: type
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - sast
+              - dast
+              - sbom
+              - code_coverage
+              - custom
+      responses:
+        "200":
+          description: Reports returned successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReportListResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
   /v1/analytics/automation:
     get:
       tags:
@@ -804,6 +856,54 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Job"
+        pagination:
+          $ref: "#/components/schemas/Pagination"
+
+    Report:
+      type: object
+      required:
+        - id
+        - application_id
+        - release_id
+        - application
+        - version
+        - type
+        - status
+        - created_at
+      properties:
+        id:
+          type: string
+        application_id:
+          $ref: "#/components/schemas/UUID"
+        release_id:
+          $ref: "#/components/schemas/UUID"
+        application:
+          type: string
+        version:
+          type: string
+        type:
+          type: string
+        status:
+          type: string
+        location:
+          type: string
+        url:
+          type: string
+          format: uri
+        created_at:
+          type: string
+          format: date-time
+
+    ReportListResponse:
+      type: object
+      required:
+        - data
+        - pagination
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Report"
         pagination:
           $ref: "#/components/schemas/Pagination"
 

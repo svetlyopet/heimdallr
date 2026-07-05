@@ -8,7 +8,9 @@ import JobPage from "./pages/JobPage.vue";
 import LoginPage from "./pages/LoginPage.vue";
 import ProviderPage from "./pages/ProviderPage.vue";
 import ReleaseDetailPage from "./pages/ReleaseDetailPage.vue";
+import ReleasePage from "./pages/ReleasePage.vue";
 import ReportDetailPage from "./pages/ReportDetailPage.vue";
+import ReportPage from "./pages/ReportPage.vue";
 import UsersPage from "./pages/UsersPage.vue";
 import { ensureSessionAccess, sessionState } from "./auth/session";
 
@@ -61,6 +63,22 @@ const routes = [
         path: "/applications/:id/releases/:releaseId/reports/:reportId",
         name: "report-detail",
         component: ReportDetailPage,
+        meta: {
+            requiresAuth: true,
+        },
+    },
+    {
+        path: "/releases",
+        name: "releases",
+        component: ReleasePage,
+        meta: {
+            requiresAuth: true,
+        },
+    },
+    {
+        path: "/reports",
+        name: "reports",
+        component: ReportPage,
         meta: {
             requiresAuth: true,
         },

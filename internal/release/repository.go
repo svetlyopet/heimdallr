@@ -17,6 +17,7 @@ type Repository interface {
 	Create(ctx context.Context, release Release) (Release, error)
 	Upsert(ctx context.Context, release Release) (Release, error)
 	GetComplianceSummary(ctx context.Context, releaseID uuid.UUID) (ComplianceSummary, error)
+	GetComplianceSummariesForReleases(ctx context.Context, releaseIDs []uuid.UUID) (map[uuid.UUID]ComplianceSummary, error)
 }
 
 type repository struct {
@@ -179,10 +180,66 @@ func (r repository) GetComplianceSummary(ctx context.Context, releaseID uuid.UUI
 	}
 
 	if summary.TotalReports > 0 {
-		summary.SuccessRate = float64(summary.SuccessfulReports) / float64(summary.TotalReports)
+		summary.SuccessRate = float64(summary.SuccessfulReports) / float64(summary.TotalReports) * 100
 	}
 
 	return summary, nil
+}
+
+func (r repository) GetComplianceSummariesForReleases(ctx context.Context, releaseIDs []uuid.UUID) (map[uuid.UUID]ComplianceSummary, error) {
+	summaries := make(map[uuid.UUID]ComplianceSummary, len(releaseIDs))
+	if len(releaseIDs) == 0 {
+		return summaries, nil
+	}
+
+	type row struct {
+		ReleaseID uuid.UUID
+		Type      string
+		Status    string
+		Count     int64
+	}
+
+	var rows []row
+	if err := r.db.WithContext(ctx).
+		Table("reports").
+		Select("release_id, type, status, COUNT(*) AS count").
+		Where("release_id IN ?", releaseIDs).
+		Group("release_id, type, status").
+		Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+
+	for _, row := range rows {
+		summary := summaries[row.ReleaseID]
+		summary.TotalReports += row.Count
+
+		switch row.Status {
+		case "success":
+			summary.SuccessfulReports += row.Count
+		case "failed":
+			summary.FailedReports += row.Count
+		case "started":
+			summary.StartedReports += row.Count
+		}
+
+		summary.ByType = append(summary.ByType, ReportSummary{
+			Type:   row.Type,
+			Status: row.Status,
+			Count:  row.Count,
+		})
+
+		summaries[row.ReleaseID] = summary
+	}
+
+	for releaseID, summary := range summaries {
+		if summary.TotalReports > 0 {
+			summary.SuccessRate = float64(summary.SuccessfulReports) / float64(summary.TotalReports) * 100
+		}
+
+		summaries[releaseID] = summary
+	}
+
+	return summaries, nil
 }
 
 func NewRepository(db *gorm.DB) Repository {

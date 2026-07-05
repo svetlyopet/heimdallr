@@ -10,6 +10,7 @@ import (
 
 type Repository interface {
 	FindAll(ctx context.Context, releaseID string, applicationID string, limit int, offset int) ([]Report, int64, error)
+	FindAllGlobal(ctx context.Context, filters ListFilters, limit int, offset int) ([]Report, int64, error)
 	FindById(ctx context.Context, reportID string, releaseID string, applicationID string) (Report, error)
 	Create(ctx context.Context, report Report) (Report, error)
 	Update(ctx context.Context, report Report) (Report, error)
@@ -33,6 +34,63 @@ func (r repository) FindAll(ctx context.Context, releaseID string, applicationID
 	query := r.db.WithContext(ctx).
 		Table("reports").
 		Where("release_id = ? AND application_id = ?", releaseID, applicationID)
+
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	findQuery := query.
+		Select(`
+			reports.id,
+			reports.release_id,
+			reports.application_id,
+			reports.application,
+			reports.version,
+			reports.type,
+			reports.status,
+			reports.location,
+			reports.url,
+			reports.created_at,
+			reports.updated_at
+		`).
+		Order("reports.created_at DESC")
+
+	if limit > 0 {
+		findQuery = findQuery.Limit(limit)
+	}
+
+	if offset > 0 {
+		findQuery = findQuery.Offset(offset)
+	}
+
+	if err := findQuery.Find(&reports).Error; err != nil {
+		return nil, 0, err
+	}
+
+	return reports, total, nil
+}
+
+func (r repository) FindAllGlobal(ctx context.Context, filters ListFilters, limit int, offset int) ([]Report, int64, error) {
+	var reports []Report
+	var total int64
+
+	query := r.db.WithContext(ctx).Table("reports")
+
+	if filters.ApplicationID != "" {
+		query = query.Where("application_id = ?", filters.ApplicationID)
+	}
+
+	if filters.ReleaseID != "" {
+		query = query.Where("release_id = ?", filters.ReleaseID)
+	}
+
+	if filters.Status != "" {
+		query = query.Where("status = ?", filters.Status)
+	}
+
+	if filters.Type != "" {
+		query = query.Where("type = ?", filters.Type)
+	}
 
 	if err := query.Count(&total).Error; err != nil {
 		return nil, 0, err

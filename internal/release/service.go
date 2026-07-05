@@ -17,7 +17,7 @@ type LookupService interface {
 }
 
 type Service interface {
-	GetAll(ctx context.Context, applicationID string, page int, limit int) ([]GetResponse, int64, error)
+	GetAll(ctx context.Context, applicationID string, page int, limit int) ([]ListItemResponse, int64, error)
 	GetById(ctx context.Context, releaseID string, applicationID string) (GetWithSummaryResponse, error)
 	Create(ctx context.Context, applicationID string, req CreateRequest, upsert bool) (GetResponse, error)
 }
@@ -28,7 +28,7 @@ type service struct {
 	logger                    *logger.Logger
 }
 
-func (s service) GetAll(ctx context.Context, applicationID string, page int, limit int) ([]GetResponse, int64, error) {
+func (s service) GetAll(ctx context.Context, applicationID string, page int, limit int) ([]ListItemResponse, int64, error) {
 	if _, err := uuid.Parse(applicationID); err != nil {
 		return nil, 0, ErrInvalidApplicationID
 	}
@@ -51,9 +51,26 @@ func (s service) GetAll(ctx context.Context, applicationID string, page int, lim
 		return nil, 0, ErrListReleases
 	}
 
-	responses := make([]GetResponse, 0, len(releases))
+	releaseIDs := make([]uuid.UUID, 0, len(releases))
 	for _, release := range releases {
-		responses = append(responses, mapEntityToResponse(release))
+		releaseIDs = append(releaseIDs, release.ID)
+	}
+
+	summaries, err := s.repository.GetComplianceSummariesForReleases(ctx, releaseIDs)
+	if err != nil {
+		s.logger.ErrorWithStack(ctx, "failed to get release compliance summaries", err,
+			slog.String("application_id", applicationID),
+		)
+		return nil, 0, ErrListReleases
+	}
+
+	responses := make([]ListItemResponse, 0, len(releases))
+	for _, release := range releases {
+		summary := summaries[release.ID]
+		responses = append(responses, ListItemResponse{
+			GetResponse: mapEntityToResponse(release),
+			Compliance:  summary,
+		})
 	}
 
 	return responses, total, nil
@@ -180,5 +197,6 @@ func mapEntityToResponse(release Release) GetResponse {
 		CommitSHA:     release.CommitSHA,
 		PipelineURL:   release.PipelineURL,
 		Branch:        release.Branch,
+		CreatedAt:     release.CreatedAt,
 	}
 }

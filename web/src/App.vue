@@ -17,10 +17,24 @@
           Dashboard
         </RouterLink>
 
+        <p class="nav-section">Compliance</p>
+
         <RouterLink class="nav-item" to="/applications">
           <span>📦</span>
           Applications
         </RouterLink>
+
+        <RouterLink class="nav-item" to="/releases">
+          <span>🚀</span>
+          Releases
+        </RouterLink>
+
+        <RouterLink class="nav-item" to="/reports">
+          <span>📋</span>
+          Reports
+        </RouterLink>
+
+        <p class="nav-section">Operations</p>
 
         <RouterLink class="nav-item" to="/providers">
           <span>🏢</span>

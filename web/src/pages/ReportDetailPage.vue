@@ -1,5 +1,7 @@
 <template>
   <section>
+    <BreadcrumbNav :items="breadcrumbItems" />
+
     <header class="topbar">
       <div>
         <p class="eyebrow">Compliance</p>
@@ -7,6 +9,15 @@
       </div>
 
       <div class="topbar-actions">
+        <RouterLink
+          class="button button-secondary"
+          :to="{
+            name: 'reports',
+            query: { application_id: applicationId, release_id: releaseId },
+          }"
+        >
+          All reports
+        </RouterLink>
         <RouterLink
           class="button button-secondary"
           :to="{ name: 'release-detail', params: { id: applicationId, releaseId } }"
@@ -47,6 +58,10 @@
           <div>
             <dt>Location</dt>
             <dd>{{ report.location || "—" }}</dd>
+          </div>
+          <div>
+            <dt>Created</dt>
+            <dd>{{ formatDateTime(report.created_at) }}</dd>
           </div>
           <div>
             <dt>URL</dt>
@@ -92,6 +107,8 @@ import { computed, onMounted, ref } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 import { getReport } from "../api/reports";
 import AppAlert from "../components/AppAlert.vue";
+import BreadcrumbNav from "../components/BreadcrumbNav.vue";
+import { formatDateTime } from "../utils/format";
 
 const route = useRoute();
 const applicationId = route.params.id;
@@ -101,6 +118,21 @@ const reportId = route.params.reportId;
 const report = ref(null);
 const loading = ref(false);
 const errorMessage = ref("");
+
+const breadcrumbItems = computed(() => [
+  { label: "Applications", to: { name: "applications" } },
+  {
+    label: report.value?.application || "Application",
+    to: { name: "application-detail", params: { id: applicationId } },
+  },
+  { label: "Releases", to: { name: "releases" } },
+  {
+    label: report.value?.version || "Release",
+    to: { name: "release-detail", params: { id: applicationId, releaseId } },
+  },
+  { label: "Reports", to: { name: "reports", query: { application_id: applicationId, release_id: releaseId } } },
+  { label: report.value?.id || reportId },
+]);
 
 const decodedOutput = computed(() => decodeBase64(report.value?.output || ""));
 

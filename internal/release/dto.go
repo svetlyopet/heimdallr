@@ -1,6 +1,10 @@
 package release
 
-import "github.com/google/uuid"
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
 
 type GetResponse struct {
 	ID            uuid.UUID `json:"id"`
@@ -10,6 +14,7 @@ type GetResponse struct {
 	CommitSHA     string    `json:"commit_sha"`
 	PipelineURL   string    `json:"pipeline_url"`
 	Branch        string    `json:"branch"`
+	CreatedAt     time.Time `json:"created_at"`
 }
 
 type CreateRequest struct {
@@ -35,6 +40,11 @@ type ComplianceSummary struct {
 }
 
 type GetWithSummaryResponse struct {
+	GetResponse
+	Compliance ComplianceSummary `json:"compliance"`
+}
+
+type ListItemResponse struct {
 	GetResponse
 	Compliance ComplianceSummary `json:"compliance"`
 }
