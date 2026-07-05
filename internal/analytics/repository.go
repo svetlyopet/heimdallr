@@ -9,6 +9,7 @@ import (
 type Repository interface {
 	GetAutomationOverview(ctx context.Context) (AutomationAnalyticsResponse, error)
 	GetAutomationOverviewByID(ctx context.Context, automationID string) (AutomationAnalyticsResponse, error)
+	GetComplianceOverview(ctx context.Context) (ComplianceAnalyticsResponse, error)
 }
 
 type repository struct {
@@ -188,6 +189,110 @@ func calculateSuccessRate(successfulJobs int64, totalJobs int64) float64 {
 	}
 
 	return float64(successfulJobs) / float64(totalJobs) * 100
+}
+
+func (r repository) GetComplianceOverview(ctx context.Context) (ComplianceAnalyticsResponse, error) {
+	var totalApplications int64
+	if err := r.db.WithContext(ctx).
+		Table("applications").
+		Count(&totalApplications).Error; err != nil {
+		return ComplianceAnalyticsResponse{}, err
+	}
+
+	var totalReleases int64
+	if err := r.db.WithContext(ctx).
+		Table("releases").
+		Count(&totalReleases).Error; err != nil {
+		return ComplianceAnalyticsResponse{}, err
+	}
+
+	type reportTotals struct {
+		TotalReports      int64
+		SuccessfulReports int64
+		FailedReports     int64
+		StartedReports    int64
+	}
+
+	var totals reportTotals
+	if err := r.db.WithContext(ctx).
+		Table("reports").
+		Select(`
+			COUNT(*) AS total_reports,
+			SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) AS successful_reports,
+			SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed_reports,
+			SUM(CASE WHEN status = 'started' THEN 1 ELSE 0 END) AS started_reports
+		`).
+		Take(&totals).Error; err != nil {
+		return ComplianceAnalyticsResponse{}, err
+	}
+
+	type latestReleaseRow struct {
+		ApplicationID   string
+		Application     string
+		LatestReleaseID string
+		LatestVersion   string
+	}
+
+	var latestReleases []latestReleaseRow
+	if err := r.db.WithContext(ctx).
+		Table("releases AS r").
+		Select(`
+			r.application_id AS application_id,
+			r.application AS application,
+			r.id AS latest_release_id,
+			r.version AS latest_version
+		`).
+		Joins(`
+			INNER JOIN (
+				SELECT application_id, MAX(created_at) AS max_created_at
+				FROM releases
+				GROUP BY application_id
+			) latest ON latest.application_id = r.application_id AND latest.max_created_at = r.created_at
+		`).
+		Order("r.application ASC").
+		Find(&latestReleases).Error; err != nil {
+		return ComplianceAnalyticsResponse{}, err
+	}
+
+	byApplication := make([]ApplicationComplianceStats, 0, len(latestReleases))
+	for _, row := range latestReleases {
+		var releaseTotals reportTotals
+		if err := r.db.WithContext(ctx).
+			Table("reports").
+			Select(`
+				COUNT(*) AS total_reports,
+				SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) AS successful_reports,
+				SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed_reports,
+				SUM(CASE WHEN status = 'started' THEN 1 ELSE 0 END) AS started_reports
+			`).
+			Where("release_id = ?", row.LatestReleaseID).
+			Take(&releaseTotals).Error; err != nil {
+			return ComplianceAnalyticsResponse{}, err
+		}
+
+		byApplication = append(byApplication, ApplicationComplianceStats{
+			ApplicationID:     row.ApplicationID,
+			Application:       row.Application,
+			LatestReleaseID:   row.LatestReleaseID,
+			LatestVersion:     row.LatestVersion,
+			TotalReports:      releaseTotals.TotalReports,
+			SuccessfulReports: releaseTotals.SuccessfulReports,
+			FailedReports:     releaseTotals.FailedReports,
+			StartedReports:    releaseTotals.StartedReports,
+			SuccessRate:       calculateSuccessRate(releaseTotals.SuccessfulReports, releaseTotals.TotalReports),
+		})
+	}
+
+	return ComplianceAnalyticsResponse{
+		TotalApplications: totalApplications,
+		TotalReleases:     totalReleases,
+		TotalReports:      totals.TotalReports,
+		SuccessfulReports: totals.SuccessfulReports,
+		FailedReports:     totals.FailedReports,
+		StartedReports:    totals.StartedReports,
+		SuccessRate:       calculateSuccessRate(totals.SuccessfulReports, totals.TotalReports),
+		ByApplication:     byApplication,
+	}, nil
 }
 
 func NewRepository(db *gorm.DB) Repository {

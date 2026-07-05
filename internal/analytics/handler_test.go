@@ -34,6 +34,10 @@ func (s stubService) GetAutomationOverviewByID(_ context.Context, _ string) (Aut
 	return s.getOverviewByIDResponse, nil
 }
 
+func (s stubService) GetComplianceOverview(_ context.Context) (ComplianceAnalyticsResponse, error) {
+	return ComplianceAnalyticsResponse{}, nil
+}
+
 func newAnalyticsRouter(t *testing.T, svc Service) *gin.Engine {
 	t.Helper()
 

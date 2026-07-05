@@ -7,11 +7,13 @@ import (
 
 const (
 	ErrMsgGetAutomationAnalytics = "failed to get automation analytics"
+	ErrMsgGetComplianceAnalytics = "failed to get compliance analytics"
 	ErrMsgAutomationNotFound     = "automation not found"
 )
 
 var (
 	ErrGetAutomationAnalytics = errors.New(ErrMsgGetAutomationAnalytics)
+	ErrGetComplianceAnalytics = errors.New(ErrMsgGetComplianceAnalytics)
 	ErrAutomationNotFound     = errors.New(ErrMsgAutomationNotFound)
 )
 
@@ -45,4 +47,8 @@ func NewAnalyticsError(message string, err error) error {
 
 func NewGetAutomationAnalyticsError(err error) error {
 	return NewAnalyticsError(ErrGetAutomationAnalytics.Error(), err)
+}
+
+func NewGetComplianceAnalyticsError(err error) error {
+	return NewAnalyticsError(ErrGetComplianceAnalytics.Error(), err)
 }

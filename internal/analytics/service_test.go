@@ -30,6 +30,10 @@ func (s stubRepository) GetAutomationOverviewByID(_ context.Context, _ string) (
 	return s.getAutomationOverviewByIDResponse, nil
 }
 
+func (s stubRepository) GetComplianceOverview(_ context.Context) (ComplianceAnalyticsResponse, error) {
+	return ComplianceAnalyticsResponse{}, nil
+}
+
 func TestServiceGetAutomationOverviewByIDReturnsNotFound(t *testing.T) {
 	svc := NewService(stubRepository{getAutomationOverviewByIDError: ErrAutomationNotFound}, nil)
 

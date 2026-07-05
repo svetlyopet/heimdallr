@@ -30,3 +30,26 @@ type AutomationJobAnalytics struct {
 	StartedJobs    int64   `json:"started_jobs"`
 	SuccessRate    float64 `json:"success_rate"`
 }
+
+type ComplianceAnalyticsResponse struct {
+	TotalApplications int64                         `json:"total_applications"`
+	TotalReleases     int64                         `json:"total_releases"`
+	TotalReports      int64                         `json:"total_reports"`
+	SuccessfulReports int64                         `json:"successful_reports"`
+	FailedReports     int64                         `json:"failed_reports"`
+	StartedReports    int64                         `json:"started_reports"`
+	SuccessRate       float64                       `json:"success_rate"`
+	ByApplication     []ApplicationComplianceStats  `json:"by_application"`
+}
+
+type ApplicationComplianceStats struct {
+	ApplicationID     string  `json:"application_id"`
+	Application       string  `json:"application"`
+	LatestReleaseID   string  `json:"latest_release_id"`
+	LatestVersion     string  `json:"latest_version"`
+	TotalReports      int64   `json:"total_reports"`
+	SuccessfulReports int64   `json:"successful_reports"`
+	FailedReports     int64   `json:"failed_reports"`
+	StartedReports    int64   `json:"started_reports"`
+	SuccessRate       float64 `json:"success_rate"`
+}

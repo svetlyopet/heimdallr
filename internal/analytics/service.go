@@ -11,6 +11,7 @@ import (
 type Service interface {
 	GetAutomationOverview(ctx context.Context) (AutomationAnalyticsResponse, error)
 	GetAutomationOverviewByID(ctx context.Context, automationID string) (AutomationAnalyticsResponse, error)
+	GetComplianceOverview(ctx context.Context) (ComplianceAnalyticsResponse, error)
 }
 
 type service struct {
@@ -46,6 +47,16 @@ func (s service) GetAutomationOverviewByID(ctx context.Context, automationID str
 			slog.String("automation_id", automationID),
 		)
 		return AutomationAnalyticsResponse{}, ErrGetAutomationAnalytics
+	}
+
+	return response, nil
+}
+
+func (s service) GetComplianceOverview(ctx context.Context) (ComplianceAnalyticsResponse, error) {
+	response, err := s.repository.GetComplianceOverview(ctx)
+	if err != nil {
+		s.logger.ErrorWithStack(ctx, "failed to get compliance analytics", err)
+		return ComplianceAnalyticsResponse{}, ErrGetComplianceAnalytics
 	}
 
 	return response, nil

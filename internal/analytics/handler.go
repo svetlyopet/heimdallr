@@ -12,6 +12,7 @@ import (
 type Handler interface {
 	GetAutomationOverview(ctx *gin.Context)
 	GetAutomationOverviewByID(ctx *gin.Context)
+	GetComplianceOverview(ctx *gin.Context)
 }
 
 type handler struct {
@@ -55,6 +56,18 @@ func (h handler) GetAutomationOverviewByID(ctx *gin.Context) {
 
 		analyticsErr := NewGetAutomationAnalyticsError(err)
 		returnErrorResponse(ctx, http.StatusInternalServerError, analyticsErr)
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{
+		"data": response,
+	})
+}
+
+func (h handler) GetComplianceOverview(ctx *gin.Context) {
+	response, err := h.service.GetComplianceOverview(ctx.Request.Context())
+	if err != nil {
+		returnErrorResponse(ctx, http.StatusInternalServerError, NewGetComplianceAnalyticsError(err))
 		return
 	}
 
