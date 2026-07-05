@@ -17,6 +17,7 @@ func main() {
 	logLevel := flag.String("log-level", "info", "log level: debug, info, warn, or error")
 	serverName := flag.String("server-name", constants.ApiDefaultHost, "server name")
 	serverPort := flag.String("server-port", constants.ApiDefaultPort, "server port")
+	databasePath := flag.String("database-path", constants.AppDefaultName+".db", "sqlite database path when DATABASE_URL is unset")
 	flag.Parse()
 
 	appLogger := logger.New(logger.Config{
@@ -27,7 +28,10 @@ func main() {
 
 	ctx := context.Background()
 
-	db, err := database.NewSQLiteDatabase(constants.AppDefaultName + ".db")
+	db, err := database.Open(database.Config{
+		DatabaseURL:  os.Getenv("DATABASE_URL"),
+		DatabasePath: *databasePath,
+	})
 	if err != nil {
 		appLogger.ErrorWithStack(ctx, "failed to initialize database", err)
 		os.Exit(1)
@@ -43,7 +47,7 @@ func main() {
 		ctx,
 		"starting server",
 		slog.String("host", "localhost"),
-		slog.String("addr", ":8080"),
+		slog.String("addr", ":"+*serverPort),
 		slog.String("log_format", *logFormat),
 		slog.String("log_level", *logLevel),
 	)

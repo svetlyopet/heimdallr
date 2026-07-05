@@ -1,0 +1,30 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: heimdallr
+      POSTGRES_PASSWORD: heimdallr
+      POSTGRES_DB: heimdallr
+    ports:
+      - "5432:5432"
+    volumes:
+      - heimdallr_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U heimdallr -d heimdallr"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  heimdallr:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://heimdallr:heimdallr@postgres:5432/heimdallr?sslmode=disable
+      GIN_MODE: release
+    ports:
+      - "8080:8080"
+
+volumes:
+  heimdallr_pg_data:

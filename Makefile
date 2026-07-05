@@ -82,6 +82,20 @@ run-debug: build-web ## Run web app in debug mode
 run-release: build-web ## Run web app in release mode
 	@GIN_MODE=release go run $(MAIN_PATH) -log-format=$(LOG_FORMAT) -log-level=$(LOG_LEVEL)
 
+DATABASE_URL ?=
+
+.PHONY: docker-up
+docker-up: ## Start Postgres and Heimdallr via docker-compose
+	@docker compose up --build -d
+
+.PHONY: docker-down
+docker-down: ## Stop docker-compose services
+	@docker compose down
+
+.PHONY: migrate
+migrate: ## Migrations run automatically on startup (Postgres via DATABASE_URL)
+	@echo "Migrations are applied automatically when the server starts with DATABASE_URL set."
+
 clean-deps:	## Cleans up web dependencies
 	@rm -rf $(WEB_DEPS_DIR)
 
