@@ -10,6 +10,7 @@
 
 <script setup>
 import { RouterLink } from "vue-router";
+import "../stylesheets/breadcrumb.css";
 
 defineProps({
   items: {

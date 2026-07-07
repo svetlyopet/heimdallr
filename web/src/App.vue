@@ -87,6 +87,7 @@
 
 <script setup>
 import { computed, onMounted } from "vue";
+import "./stylesheets/app-shell.css";
 import { RouterLink, RouterView, useRoute, useRouter } from "vue-router";
 import { clearSession, ensureSessionAccess, sessionState } from "./auth/session";
 

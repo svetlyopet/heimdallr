@@ -10,7 +10,7 @@
         <button class="button button-secondary" type="button" @click="loadApplications">
           Refresh
         </button>
-        <button class="button" type="button" @click="startCreateApplication">
+        <button class="button" type="button" @click="openCreateDialog">
           Create application
         </button>
       </div>
@@ -19,38 +19,35 @@
     <StatsGrid :pagination="pagination" />
     <AppAlert :message="errorMessage" @dismiss="errorMessage = ''" />
 
+    <FormDialog
+      :open="showCreateDialog"
+      eyebrow="Create"
+      title="New application"
+      @close="closeCreateDialog"
+    >
+      <form class="form" @submit.prevent="submitApplication">
+        <label>
+          Name
+          <input v-model.trim="form.name" type="text" required minlength="2" maxlength="100" />
+        </label>
+
+        <label>
+          Description
+          <textarea v-model.trim="form.description" rows="3" maxlength="1000"></textarea>
+        </label>
+
+        <label>
+          Repository URL
+          <input v-model.trim="form.repository_url" type="url" />
+        </label>
+
+        <button class="button button-full" type="submit" :disabled="loading">
+          Create application
+        </button>
+      </form>
+    </FormDialog>
+
     <section class="dashboard-grid">
-      <article v-if="showCreatePanel" class="panel form-panel">
-        <div class="panel-header">
-          <div>
-            <p class="eyebrow">Create</p>
-            <h3>New application</h3>
-          </div>
-          <button class="icon-button" type="button" @click="cancelCreateApplication">×</button>
-        </div>
-
-        <form class="form" @submit.prevent="submitApplication">
-          <label>
-            Name
-            <input v-model.trim="form.name" type="text" required minlength="2" maxlength="100" />
-          </label>
-
-          <label>
-            Description
-            <textarea v-model.trim="form.description" rows="3" maxlength="1000"></textarea>
-          </label>
-
-          <label>
-            Repository URL
-            <input v-model.trim="form.repository_url" type="url" />
-          </label>
-
-          <button class="button button-full" type="submit" :disabled="loading">
-            Create application
-          </button>
-        </form>
-      </article>
-
       <article class="panel table-panel">
         <div class="panel-header">
           <div>
@@ -126,6 +123,7 @@ import { onMounted, reactive, ref } from "vue";
 import { RouterLink } from "vue-router";
 import { createApplication, listApplications } from "../api/applications";
 import AppAlert from "../components/AppAlert.vue";
+import FormDialog from "../components/FormDialog.vue";
 import PaginationControls from "../components/PaginationControls.vue";
 import StatsGrid from "../components/StatsGrid.vue";
 import { getInitial } from "../utils/format";
@@ -133,7 +131,7 @@ import { getInitial } from "../utils/format";
 const applications = ref([]);
 const loading = ref(false);
 const errorMessage = ref("");
-const showCreatePanel = ref(false);
+const showCreateDialog = ref(false);
 
 const form = reactive({
   name: "",
@@ -181,7 +179,7 @@ async function submitApplication() {
     });
 
     resetForm();
-    showCreatePanel.value = false;
+    showCreateDialog.value = false;
     pagination.page = 1;
     await loadApplications();
   } catch (error) {
@@ -191,14 +189,14 @@ async function submitApplication() {
   }
 }
 
-function startCreateApplication() {
+function openCreateDialog() {
   resetForm();
-  showCreatePanel.value = true;
+  showCreateDialog.value = true;
 }
 
-function cancelCreateApplication() {
+function closeCreateDialog() {
   resetForm();
-  showCreatePanel.value = false;
+  showCreateDialog.value = false;
 }
 
 function resetForm() {

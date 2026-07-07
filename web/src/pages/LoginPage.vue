@@ -31,6 +31,7 @@
 
 <script setup>
 import { onMounted, reactive, ref } from "vue";
+import "../stylesheets/auth.css";
 import { useRouter } from "vue-router";
 import AppAlert from "../components/AppAlert.vue";
 import { clearSession, ensureSessionAccess, sessionState, setSessionCredentials } from "../auth/session";

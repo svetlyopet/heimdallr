@@ -105,6 +105,7 @@
 
 <script setup>
 import { computed, onMounted, ref } from "vue";
+import "../stylesheets/detail.css";
 import { RouterLink, useRoute } from "vue-router";
 import { getJob } from "../api/jobs";
 import AppAlert from "../components/AppAlert.vue";

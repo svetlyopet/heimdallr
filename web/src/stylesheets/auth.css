@@ -1,0 +1,20 @@
+.auth-page {
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    padding: 24px;
+    background:
+            radial-gradient(circle at top right, rgba(37, 99, 235, 0.22), transparent 24rem),
+            radial-gradient(circle at bottom left, rgba(59, 130, 246, 0.2), transparent 20rem);
+}
+
+.auth-panel {
+    width: min(460px, 100%);
+    padding: 28px;
+}
+
+.auth-panel h2 {
+    margin: 4px 0 0;
+    font-size: clamp(32px, 6vw, 40px);
+    letter-spacing: -0.03em;
+}

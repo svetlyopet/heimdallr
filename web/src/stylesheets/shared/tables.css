@@ -1,0 +1,100 @@
+.table-wrapper {
+    width: 100%;
+    overflow-x: auto;
+}
+
+table {
+    width: 100%;
+    min-width: 760px;
+    border-collapse: collapse;
+}
+
+th,
+td {
+    padding: 14px 12px;
+    border-bottom: 1px solid var(--border);
+    text-align: left;
+    vertical-align: middle;
+}
+
+th {
+    color: var(--muted);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+tbody tr:hover {
+    background: var(--panel-muted);
+}
+
+.name-cell {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+}
+
+.name-cell strong {
+    display: block;
+}
+
+.name-cell small {
+    display: block;
+    max-width: 190px;
+    color: var(--muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 13px;
+    color: white;
+    background: linear-gradient(135deg, #38bdf8, #2563eb);
+    display: grid;
+    place-items: center;
+    font-weight: 900;
+    flex: 0 0 auto;
+}
+
+.badge {
+    display: inline-flex;
+    border-radius: 999px;
+    padding: 5px 9px;
+    color: #1e3a8a;
+    background: #dbeafe;
+    font-size: 12px;
+    font-weight: 900;
+}
+
+.badge-started {
+    color: #92400e;
+    background: #fef3c7;
+}
+
+.badge-success {
+    color: #166534;
+    background: #dcfce7;
+}
+
+.badge-failed {
+    color: #991b1b;
+    background: #fee2e2;
+}
+
+.row-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.page-size {
+    min-width: 110px;
+}
+
+.page-size label {
+    font-size: 12px;
+}

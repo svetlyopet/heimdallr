@@ -16,47 +16,41 @@
 
     <AppAlert :message="errorMessage" @dismiss="errorMessage = ''" />
 
-    <div v-if="showCreateDialog" class="dialog-backdrop" @click.self="closeCreateDialog">
-      <article class="panel dialog-panel">
-        <div class="panel-header">
-          <div>
-            <p class="eyebrow">Create</p>
-            <h3>New user</h3>
-          </div>
+    <FormDialog
+      :open="showCreateDialog"
+      eyebrow="Create"
+      title="New user"
+      @close="closeCreateDialog"
+    >
+      <form class="form" @submit.prevent="submitCreate">
+        <label>
+          Username
+          <input v-model.trim="createForm.username" type="text" required minlength="2" maxlength="64" />
+        </label>
 
-          <button class="icon-button" type="button" @click="closeCreateDialog">×</button>
-        </div>
+        <label>
+          Email
+          <input v-model.trim="createForm.email" type="email" required />
+        </label>
 
-        <form class="form" @submit.prevent="submitCreate">
-          <label>
-            Username
-            <input v-model.trim="createForm.username" type="text" required minlength="2" maxlength="64" />
-          </label>
+        <label>
+          Password
+          <input v-model="createForm.password" type="password" required minlength="12" />
+        </label>
 
-          <label>
-            Email
-            <input v-model.trim="createForm.email" type="email" required />
-          </label>
+        <label>
+          Roles
+          <select v-model="createForm.role">
+            <option value="reader">reader</option>
+            <option value="admin">admin</option>
+          </select>
+        </label>
 
-          <label>
-            Password
-            <input v-model="createForm.password" type="password" required minlength="12" />
-          </label>
+        <button class="button button-full" type="submit" :disabled="loading">Create user</button>
+      </form>
+    </FormDialog>
 
-          <label>
-            Roles
-            <select v-model="createForm.role">
-              <option value="reader">reader</option>
-              <option value="admin">admin</option>
-            </select>
-          </label>
-
-          <button class="button button-full" type="submit" :disabled="loading">Create user</button>
-        </form>
-      </article>
-    </div>
-
-    <section class="dashboard-grid users-grid">
+    <section class="dashboard-grid">
       <article class="panel table-panel">
         <div class="panel-header">
           <div>
@@ -116,8 +110,10 @@
 
 <script setup>
 import { onMounted, reactive, ref } from "vue";
+import "../stylesheets/users-table.css";
 import { createUser, deleteUser, listUsers, updateUser } from "../api/users";
 import AppAlert from "../components/AppAlert.vue";
+import FormDialog from "../components/FormDialog.vue";
 
 const loading = ref(false);
 const errorMessage = ref("");

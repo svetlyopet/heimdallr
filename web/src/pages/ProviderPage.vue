@@ -10,7 +10,7 @@
         <button class="button button-secondary" type="button" @click="loadProviders">
           Refresh
         </button>
-        <button class="button" type="button" @click="startCreateProvider">
+        <button class="button" type="button" @click="openCreateDialog">
           Create provider
         </button>
       </div>
@@ -19,36 +19,30 @@
     <StatsGrid :pagination="pagination" />
     <AppAlert :message="errorMessage" @dismiss="errorMessage = ''" />
 
+    <FormDialog
+      :open="showCreateDialog"
+      eyebrow="Create"
+      title="New provider"
+      @close="closeCreateDialog"
+    >
+      <form class="form" @submit.prevent="submitProvider">
+        <label>
+          Name
+          <input v-model.trim="form.name" type="text" required minlength="2" maxlength="100" />
+        </label>
+
+        <label>
+          URL
+          <input v-model.trim="form.url" type="url" required />
+        </label>
+
+        <button class="button button-full" type="submit" :disabled="loading">
+          Create provider
+        </button>
+      </form>
+    </FormDialog>
+
     <section class="dashboard-grid">
-      <article v-if="showCreatePanel" class="panel form-panel">
-        <div class="panel-header">
-          <div>
-            <p class="eyebrow">Create</p>
-            <h3>New provider</h3>
-          </div>
-
-          <button class="icon-button" type="button" @click="cancelCreateProvider">
-            ×
-          </button>
-        </div>
-
-        <form class="form" @submit.prevent="submitProvider">
-          <label>
-            Name
-            <input v-model.trim="form.name" type="text" required minlength="2" maxlength="100" />
-          </label>
-
-          <label>
-            URL
-            <input v-model.trim="form.url" type="url" required />
-          </label>
-
-          <button class="button button-full" type="submit" :disabled="loading">
-            Create provider
-          </button>
-        </form>
-      </article>
-
       <article class="panel table-panel">
         <div class="panel-header">
           <div>
@@ -107,6 +101,7 @@
 import { onMounted, reactive, ref } from "vue";
 import { createProvider, listProviders } from "../api/providers";
 import AppAlert from "../components/AppAlert.vue";
+import FormDialog from "../components/FormDialog.vue";
 import PaginationControls from "../components/PaginationControls.vue";
 import StatsGrid from "../components/StatsGrid.vue";
 import { getInitial } from "../utils/format";
@@ -114,7 +109,7 @@ import { getInitial } from "../utils/format";
 const providers = ref([]);
 const loading = ref(false);
 const errorMessage = ref("");
-const showCreatePanel = ref(false);
+const showCreateDialog = ref(false);
 
 const form = reactive({
   name: "",
@@ -160,7 +155,7 @@ async function submitProvider() {
     });
 
     resetProviderForm();
-    showCreatePanel.value = false;
+    showCreateDialog.value = false;
     pagination.page = 1;
     await loadProviders();
   } catch (error) {
@@ -170,15 +165,14 @@ async function submitProvider() {
   }
 }
 
-function startCreateProvider() {
+function openCreateDialog() {
   resetProviderForm();
-  showCreatePanel.value = true;
-  window.scrollTo({ top: 0, behavior: "smooth" });
+  showCreateDialog.value = true;
 }
 
-function cancelCreateProvider() {
+function closeCreateDialog() {
   resetProviderForm();
-  showCreatePanel.value = false;
+  showCreateDialog.value = false;
 }
 
 function resetProviderForm() {

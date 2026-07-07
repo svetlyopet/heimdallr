@@ -1,0 +1,29 @@
+.dialog-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    display: grid;
+    place-items: center;
+    padding: 20px;
+    background: rgba(15, 23, 42, 0.52);
+    backdrop-filter: blur(3px);
+}
+
+.dialog-panel {
+    width: min(560px, 100%);
+    padding: 24px;
+}
+
+.dialog-panel--wide {
+    width: min(640px, 100%);
+}
+
+.icon-button {
+    width: 36px;
+    height: 36px;
+    border: 0;
+    border-radius: 12px;
+    background: #f1f5f9;
+    color: #0f172a;
+    font-weight: 900;
+}

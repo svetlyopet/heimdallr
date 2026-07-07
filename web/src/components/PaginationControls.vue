@@ -23,6 +23,8 @@
 </template>
 
 <script setup>
+import "../stylesheets/pagination.css";
+
 defineProps({
   page: {
     type: Number,

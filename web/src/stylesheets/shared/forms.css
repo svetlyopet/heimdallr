@@ -1,0 +1,37 @@
+.form {
+    display: grid;
+    gap: 14px;
+}
+
+label {
+    display: grid;
+    gap: 7px;
+    color: #334155;
+    font-size: 14px;
+    font-weight: 800;
+}
+
+input,
+select {
+    width: 100%;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: white;
+    color: var(--text);
+    padding: 11px 12px;
+    outline: none;
+    transition:
+            border-color 160ms ease,
+            box-shadow 160ms ease;
+}
+
+input:focus,
+select:focus {
+    border-color: rgba(37, 99, 235, 0.75);
+    box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.14);
+}
+
+input:disabled {
+    background: #f1f5f9;
+    color: #64748b;
+}

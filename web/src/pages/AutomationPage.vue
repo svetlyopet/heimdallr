@@ -19,58 +19,53 @@
     <StatsGrid :pagination="pagination" />
     <AppAlert :message="errorMessage" @dismiss="errorMessage = ''" />
 
+    <FormDialog
+      :open="showCreatePanel || Boolean(editingAutomation)"
+      :eyebrow="editingAutomation ? 'Update' : 'Create'"
+      :title="editingAutomation ? 'Edit automation' : 'Create automation'"
+      wide
+      @close="cancelAutomationForm"
+    >
+      <form class="form" @submit.prevent="submitForm">
+        <label>
+          Name
+          <input
+            v-model.trim="form.name"
+            type="text"
+            required
+            minlength="2"
+            maxlength="100"
+            :disabled="Boolean(editingAutomation)"
+          />
+        </label>
+
+        <label>
+          Provider
+          <select v-model="form.provider_id" required :disabled="Boolean(editingAutomation)">
+            <option value="" disabled>Select provider</option>
+            <option v-for="provider in providers" :key="provider.id" :value="provider.id">
+              {{ provider.name }}
+            </option>
+          </select>
+        </label>
+
+        <label>
+          URL
+          <input v-model.trim="form.url" type="url" />
+        </label>
+
+        <label>
+          Cost savings
+          <input v-model.number="form.cost_savings" type="number" min="0" step="0.01" />
+        </label>
+
+        <button class="button button-full" type="submit" :disabled="loading">
+          {{ editingAutomation ? "Save changes" : "Create automation" }}
+        </button>
+      </form>
+    </FormDialog>
+
     <section class="dashboard-grid">
-      <article v-if="showCreatePanel || editingAutomation" class="panel form-panel">
-        <div class="panel-header">
-          <div>
-            <p class="eyebrow">{{ editingAutomation ? "Update" : "Create" }}</p>
-            <h3>{{ editingAutomation ? "Edit automation" : "Create automation" }}</h3>
-          </div>
-
-          <button class="icon-button" type="button" @click="cancelAutomationForm">
-            ×
-          </button>
-        </div>
-
-        <form class="form" @submit.prevent="submitForm">
-          <label>
-            Name
-            <input
-              v-model.trim="form.name"
-              type="text"
-              required
-              minlength="2"
-              maxlength="100"
-              :disabled="Boolean(editingAutomation)"
-            />
-          </label>
-
-          <label>
-            Provider
-            <select v-model="form.provider_id" required :disabled="Boolean(editingAutomation)">
-              <option value="" disabled>Select provider</option>
-              <option v-for="provider in providers" :key="provider.id" :value="provider.id">
-                {{ provider.name }}
-              </option>
-            </select>
-          </label>
-
-          <label>
-            URL
-            <input v-model.trim="form.url" type="url" />
-          </label>
-
-          <label>
-            Cost savings
-            <input v-model.number="form.cost_savings" type="number" min="0" step="0.01" />
-          </label>
-
-          <button class="button button-full" type="submit" :disabled="loading">
-            {{ editingAutomation ? "Save changes" : "Create automation" }}
-          </button>
-        </form>
-      </article>
-
       <article class="panel table-panel">
         <div class="panel-header">
           <div>
@@ -185,6 +180,7 @@
 
 <script setup>
 import { onMounted, reactive, ref } from "vue";
+import "../stylesheets/automation-table.css";
 import {
   createAutomation,
   deleteAutomation,
@@ -193,6 +189,7 @@ import {
 } from "../api/automations";
 import { listProviders } from "../api/providers";
 import AppAlert from "../components/AppAlert.vue";
+import FormDialog from "../components/FormDialog.vue";
 import PaginationControls from "../components/PaginationControls.vue";
 import StatsGrid from "../components/StatsGrid.vue";
 import { formatNumber, getInitial } from "../utils/format";
@@ -279,8 +276,6 @@ function editAutomation(automation) {
   form.provider_id = automation.provider_id || "";
   form.url = automation.url || "";
   form.cost_savings = Number(automation.cost_savings || 0);
-
-  window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
 async function saveAutomation() {
@@ -326,7 +321,6 @@ async function removeAutomation(automation) {
 function startCreateAutomation() {
   resetForm();
   showCreatePanel.value = true;
-  window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
 function cancelAutomationForm() {

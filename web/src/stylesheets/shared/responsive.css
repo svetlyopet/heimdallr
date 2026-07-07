@@ -1,0 +1,88 @@
+@media (max-width: 1180px) {
+    .stats-grid {
+        grid-template-columns: repeat(2, minmax(120px, 1fr));
+    }
+}
+
+@media (max-width: 720px) {
+    .topbar {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .topbar-actions {
+        width: 100%;
+    }
+
+    .topbar-actions .button {
+        flex: 1;
+    }
+
+    .stats-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 900px) {
+    .panel-header {
+        flex-direction: column;
+    }
+
+    .page-size {
+        width: 100%;
+    }
+
+    table:not(.automation-table),
+    table:not(.automation-table) thead,
+    table:not(.automation-table) tbody,
+    table:not(.automation-table) tr,
+    table:not(.automation-table) th,
+    table:not(.automation-table) td {
+        display: block;
+    }
+
+    table:not(.automation-table) thead {
+        display: none;
+    }
+
+    table:not(.automation-table) tbody tr {
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 12px;
+        background: white;
+    }
+
+    table:not(.automation-table) tbody tr + tr {
+        margin-top: 12px;
+    }
+
+    table:not(.automation-table) tbody tr:hover {
+        background: white;
+    }
+
+    table:not(.automation-table) td {
+        border-bottom: 0;
+        padding: 10px 0;
+        display: grid;
+        grid-template-columns: minmax(96px, 36%) minmax(0, 1fr);
+        gap: 12px;
+        align-items: center;
+    }
+
+    table:not(.automation-table) td::before {
+        content: attr(data-label);
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 900;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+    }
+
+    .name-cell {
+        min-width: 0;
+    }
+
+    .row-actions {
+        justify-content: flex-start;
+    }
+}

@@ -1,0 +1,164 @@
+.app-shell {
+    min-height: 100vh;
+    display: grid;
+    grid-template-columns: 280px 1fr;
+}
+
+.sidebar {
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    padding: 28px;
+    color: white;
+    background: rgba(2, 6, 23, 0.68);
+    border-right: 1px solid rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(16px);
+    display: flex;
+    flex-direction: column;
+}
+
+.brand {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 36px;
+}
+
+.brand-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 16px;
+    background: linear-gradient(135deg, #60a5fa, #2563eb);
+    display: grid;
+    place-items: center;
+    font-weight: 900;
+    font-size: 22px;
+    box-shadow: 0 14px 40px rgba(37, 99, 235, 0.35);
+}
+
+.brand h1 {
+    margin: 0;
+    font-size: 22px;
+    line-height: 1;
+}
+
+.brand p {
+    margin: 6px 0 0;
+    color: #94a3b8;
+    font-size: 14px;
+}
+
+.nav {
+    display: grid;
+    gap: 10px;
+}
+
+.nav-item {
+    width: 100%;
+    border: 0;
+    border-radius: 14px;
+    padding: 13px 14px;
+    color: #dbeafe;
+    background: transparent;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    text-align: left;
+    font-weight: 700;
+    text-decoration: none;
+}
+
+.nav-item.active,
+.nav-item.router-link-active,
+.nav-item:hover {
+    background: rgba(37, 99, 235, 0.18);
+    text-decoration: none;
+}
+
+.nav-item.active,
+.nav-item.router-link-active {
+    background: rgba(37, 99, 235, 0.28);
+    color: #ffffff;
+}
+
+.nav-section {
+    margin: 18px 0 8px;
+    padding: 0 14px;
+    color: #64748b;
+    font-size: 11px;
+    font-weight: 900;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+
+.sidebar-footer {
+    margin-top: auto;
+    color: #cbd5e1;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 14px;
+}
+
+.status-dot {
+    width: 10px;
+    height: 10px;
+    background: var(--success);
+    border-radius: 999px;
+    box-shadow: 0 0 0 6px rgba(22, 163, 74, 0.16);
+}
+
+.main {
+    padding: 34px;
+}
+
+.app-topbar {
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.user-card {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: white;
+}
+
+.role-pill {
+    border-radius: 999px;
+    padding: 6px 10px;
+    font-size: 12px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.role-pill-admin {
+    background: rgba(22, 163, 74, 0.22);
+    color: #86efac;
+}
+
+.role-pill-reader {
+    background: rgba(59, 130, 246, 0.24);
+    color: #bfdbfe;
+}
+
+@media (max-width: 1180px) {
+    .app-shell {
+        grid-template-columns: 1fr;
+    }
+
+    .sidebar {
+        position: static;
+        height: auto;
+    }
+}
+
+@media (max-width: 720px) {
+    .main {
+        padding: 20px;
+    }
+}

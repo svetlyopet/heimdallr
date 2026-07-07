@@ -1,0 +1,19 @@
+.alert {
+    margin-bottom: 18px;
+    padding: 14px 16px;
+    border-radius: 16px;
+    color: #7f1d1d;
+    background: #fee2e2;
+    border: 1px solid #fecaca;
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    font-weight: 700;
+}
+
+.alert button {
+    border: 0;
+    background: transparent;
+    color: #991b1b;
+    font-weight: 900;
+}

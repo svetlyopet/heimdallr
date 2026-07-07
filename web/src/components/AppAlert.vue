@@ -6,6 +6,8 @@
 </template>
 
 <script setup>
+import "../stylesheets/alert.css";
+
     defineProps({
     message: {
     type: String,

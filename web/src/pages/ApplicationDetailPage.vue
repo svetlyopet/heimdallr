@@ -122,6 +122,7 @@
 
 <script setup>
 import { onMounted, reactive, ref } from "vue";
+import "../stylesheets/dialog.css";
 import { RouterLink, useRoute } from "vue-router";
 import { getApplication } from "../api/applications";
 import { createRelease, listReleases } from "../api/releases";
