@@ -12,7 +12,8 @@ label {
 }
 
 input,
-select {
+select,
+textarea {
     width: 100%;
     border: 1px solid var(--border);
     border-radius: 14px;
@@ -26,7 +27,8 @@ select {
 }
 
 input:focus,
-select:focus {
+select:focus,
+textarea:focus {
     border-color: rgba(37, 99, 235, 0.75);
     box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.14);
 }
@@ -34,4 +36,11 @@ select:focus {
 input:disabled {
     background: #f1f5f9;
     color: #64748b;
+}
+
+.form-error {
+    margin: -6px 0 0;
+    color: #b91c1c;
+    font-size: 13px;
+    font-weight: 600;
 }

@@ -34,6 +34,16 @@
           Reports
         </RouterLink>
 
+        <RouterLink class="nav-item" to="/servers">
+          <span>🖥️</span>
+          Servers
+        </RouterLink>
+
+        <RouterLink class="nav-item" to="/agents">
+          <span>🤖</span>
+          Agents
+        </RouterLink>
+
         <p class="nav-section">Operations</p>
 
         <RouterLink class="nav-item" to="/providers">

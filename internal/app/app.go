@@ -5,6 +5,7 @@ import (
 	"log/slog"
 
 	"github.com/gin-gonic/gin"
+	"github.com/svetlyopet/heimdallr/internal/agent"
 	"github.com/svetlyopet/heimdallr/internal/analytics"
 	"github.com/svetlyopet/heimdallr/internal/application"
 	"github.com/svetlyopet/heimdallr/internal/auth"
@@ -14,6 +15,7 @@ import (
 	"github.com/svetlyopet/heimdallr/internal/provider"
 	"github.com/svetlyopet/heimdallr/internal/release"
 	"github.com/svetlyopet/heimdallr/internal/report"
+	"github.com/svetlyopet/heimdallr/internal/server"
 	"github.com/svetlyopet/heimdallr/internal/token"
 	"gorm.io/gorm"
 )
@@ -48,6 +50,12 @@ type App struct {
 
 	tokenService token.Service
 	tokenHandler token.Handler
+
+	serverService server.Service
+	serverHandler server.Handler
+
+	agentService agent.Service
+	agentHandler agent.Handler
 }
 
 func (a *App) RegisterRoutes(rg *gin.RouterGroup) {
@@ -58,6 +66,9 @@ func (a *App) RegisterRoutes(rg *gin.RouterGroup) {
 	release.RegisterRoutes(rg, a.releaseHandler)
 	report.RegisterRoutes(rg, a.reportHandler)
 	analytics.RegisterRoutes(rg, a.analyticsHandler)
+	server.RegisterRoutes(rg, a.serverHandler)
+	agent.RegisterRoutes(rg, a.agentHandler)
+	agent.RegisterGlobalRoutes(rg, a.agentHandler)
 	auth.RegisterRoutes(rg, a.authHandler, a.authService)
 	token.RegisterRoutes(rg, a.tokenHandler, a.authService)
 }

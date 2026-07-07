@@ -118,3 +118,80 @@ func TestHealthEndpoint(t *testing.T) {
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	require.Equal(t, "ok", body["status"])
 }
+
+func TestServerAgentComplianceFlow(t *testing.T) {
+	ts := startTestServer(t)
+	headers := authHeaders("root", ts.RootPass)
+
+	resp, orphanBody := doRequest(t, ts, http.MethodPost, "/api/v1/agent", map[string]any{
+		"name":    "datadog",
+		"type":    "monitoring",
+		"version": "7.0.0",
+	}, headers)
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
+	orphanData := dataField(t, orphanBody)
+	orphanID := orphanData["id"].(string)
+	_, hasServerID := orphanData["server_id"]
+	require.False(t, hasServerID)
+
+	resp, serverBody := doRequest(t, ts, http.MethodPost, "/api/v1/server", map[string]any{
+		"hostname":         "compliance-host.example.com",
+		"operating_system": "linux",
+		"hypervisor":       "kvm",
+		"location":         "dc1",
+		"agent_ids":        []string{orphanID},
+		"agents": []map[string]any{{
+			"name":    "crowdstrike",
+			"type":    "security",
+			"version": "1.0.0",
+		}},
+	}, headers)
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
+	serverID := dataField(t, serverBody)["id"].(string)
+
+	resp, serverDetailBody := doRequest(t, ts, http.MethodGet, "/api/v1/server/"+serverID, nil, headers)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	relations, ok := dataField(t, serverDetailBody)["relations"].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, float64(2), relations["agent_count"])
+
+	resp, unassignedBody := doRequest(t, ts, http.MethodGet, "/api/v1/agent?unassigned=true", nil, headers)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	unassigned, ok := unassignedBody["data"].([]any)
+	require.True(t, ok)
+	require.Empty(t, unassigned)
+
+	resp, secondOrphanBody := doRequest(t, ts, http.MethodPost, "/api/v1/agent", map[string]any{
+		"name":    "sentinel",
+		"type":    "security",
+		"version": "2.0.0",
+	}, headers)
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
+	secondOrphanID := dataField(t, secondOrphanBody)["id"].(string)
+
+	resp, updateBody := doRequest(t, ts, http.MethodPut, "/api/v1/server/"+serverID, map[string]any{
+		"agent_ids": []string{secondOrphanID},
+	}, headers)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	updatedRelations, ok := dataField(t, updateBody)["relations"].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, float64(3), updatedRelations["agent_count"])
+
+	agentPath := "/api/v1/server/" + serverID + "/agent"
+	resp, getAgentBody := doRequest(t, ts, http.MethodGet, agentPath+"/"+orphanID, nil, headers)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.Equal(t, "compliance-host.example.com", dataField(t, getAgentBody)["server"])
+
+	resp, globalAgentBody := doRequest(t, ts, http.MethodGet, "/api/v1/agent/"+orphanID, nil, headers)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.Equal(t, "datadog", dataField(t, globalAgentBody)["name"])
+
+	resp, _ = doRequest(t, ts, http.MethodDelete, agentPath+"/"+orphanID, nil, headers)
+	require.Equal(t, http.StatusNoContent, resp.StatusCode)
+
+	resp, serverAfterDelete := doRequest(t, ts, http.MethodGet, "/api/v1/server/"+serverID, nil, headers)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	relationsAfter, ok := dataField(t, serverAfterDelete)["relations"].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, float64(2), relationsAfter["agent_count"])
+}

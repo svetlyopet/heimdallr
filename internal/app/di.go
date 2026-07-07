@@ -2,6 +2,7 @@ package app
 
 import (
 	"github.com/samber/do/v2"
+	"github.com/svetlyopet/heimdallr/internal/agent"
 	"github.com/svetlyopet/heimdallr/internal/analytics"
 	"github.com/svetlyopet/heimdallr/internal/application"
 	"github.com/svetlyopet/heimdallr/internal/auth"
@@ -11,6 +12,7 @@ import (
 	"github.com/svetlyopet/heimdallr/internal/provider"
 	"github.com/svetlyopet/heimdallr/internal/release"
 	"github.com/svetlyopet/heimdallr/internal/report"
+	"github.com/svetlyopet/heimdallr/internal/server"
 	"github.com/svetlyopet/heimdallr/internal/token"
 	"gorm.io/gorm"
 )
@@ -25,6 +27,8 @@ var Package = do.Package(
 	automation.Package,
 	job.Package,
 	analytics.Package,
+	agent.Package,
+	server.Package,
 	do.Lazy(provideApp),
 )
 
@@ -58,5 +62,11 @@ func provideApp(i do.Injector) (*App, error) {
 		authHandler:  do.MustInvoke[auth.Handler](i),
 		tokenService: do.MustInvoke[token.Service](i),
 		tokenHandler: do.MustInvoke[token.Handler](i),
+
+		serverService: do.MustInvoke[server.Service](i),
+		serverHandler: do.MustInvoke[server.Handler](i),
+
+		agentService: do.MustInvoke[agent.Service](i),
+		agentHandler: do.MustInvoke[agent.Handler](i),
 	}, nil
 }

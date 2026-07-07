@@ -8,10 +8,12 @@ import (
 	"github.com/svetlyopet/heimdallr/internal/application"
 	"github.com/svetlyopet/heimdallr/internal/auth"
 	"github.com/svetlyopet/heimdallr/internal/automation"
+	"github.com/svetlyopet/heimdallr/internal/agent"
 	"github.com/svetlyopet/heimdallr/internal/job"
 	"github.com/svetlyopet/heimdallr/internal/provider"
 	"github.com/svetlyopet/heimdallr/internal/release"
 	"github.com/svetlyopet/heimdallr/internal/report"
+	"github.com/svetlyopet/heimdallr/internal/server"
 	"github.com/svetlyopet/heimdallr/internal/token"
 	"gorm.io/driver/postgres"
 	"gorm.io/driver/sqlite"
@@ -100,6 +102,10 @@ func autoMigrateSQLite(db *gorm.DB) error {
 		&release.Release{},
 		&report.Report{},
 		&token.APIToken{},
+		&server.Server{},
+		&agent.Agent{},
+		&server.ServerJob{},
+		&server.ServerRelease{},
 	)
 }
 

@@ -1,4 +1,6 @@
 import { createRouter, createWebHistory } from "vue-router";
+import AgentDetailPage from "./pages/AgentDetailPage.vue";
+import AgentPage from "./pages/AgentPage.vue";
 import ApplicationDetailPage from "./pages/ApplicationDetailPage.vue";
 import ApplicationPage from "./pages/ApplicationPage.vue";
 import AutomationPage from "./pages/AutomationPage.vue";
@@ -11,6 +13,8 @@ import ReleaseDetailPage from "./pages/ReleaseDetailPage.vue";
 import ReleasePage from "./pages/ReleasePage.vue";
 import ReportDetailPage from "./pages/ReportDetailPage.vue";
 import ReportPage from "./pages/ReportPage.vue";
+import ServerDetailPage from "./pages/ServerDetailPage.vue";
+import ServerPage from "./pages/ServerPage.vue";
 import UsersPage from "./pages/UsersPage.vue";
 import { ensureSessionAccess, sessionState } from "./auth/session";
 
@@ -79,6 +83,38 @@ const routes = [
         path: "/reports",
         name: "reports",
         component: ReportPage,
+        meta: {
+            requiresAuth: true,
+        },
+    },
+    {
+        path: "/servers",
+        name: "servers",
+        component: ServerPage,
+        meta: {
+            requiresAuth: true,
+        },
+    },
+    {
+        path: "/servers/:serverId",
+        name: "server-detail",
+        component: ServerDetailPage,
+        meta: {
+            requiresAuth: true,
+        },
+    },
+    {
+        path: "/servers/:serverId/agents/:agentId",
+        name: "agent-detail",
+        component: AgentDetailPage,
+        meta: {
+            requiresAuth: true,
+        },
+    },
+    {
+        path: "/agents",
+        name: "agents",
+        component: AgentPage,
         meta: {
             requiresAuth: true,
         },
