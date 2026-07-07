@@ -6,27 +6,27 @@ import (
 )
 
 const (
-	ErrMsgAgentNotFound      = "agent not found"
-	ErrMsgInvalidAgentID     = "invalid agent id"
-	ErrMsgInvalidServerID    = "invalid server id"
-	ErrMsgCreateAgent        = "failed to create agent"
-	ErrMsgGetAgent           = "failed to get agent"
-	ErrMsgListAgents         = "failed to list agents"
-	ErrMsgDeleteAgent        = "failed to delete agent"
+	ErrMsgAgentNotFound        = "agent not found"
+	ErrMsgInvalidAgentID       = "invalid agent id"
+	ErrMsgInvalidServerID      = "invalid server id"
+	ErrMsgCreateAgent          = "failed to create agent"
+	ErrMsgGetAgent             = "failed to get agent"
+	ErrMsgListAgents           = "failed to list agents"
+	ErrMsgDeleteAgent          = "failed to delete agent"
 	ErrMsgAgentAlreadyAssigned = "agent is already assigned to a server"
 	ErrMsgAgentNotUnassigned   = "agent is not unassigned"
 )
 
 var (
-	ErrAgentNotFound         = errors.New(ErrMsgAgentNotFound)
-	ErrInvalidAgentID        = errors.New(ErrMsgInvalidAgentID)
-	ErrInvalidServerID       = errors.New(ErrMsgInvalidServerID)
-	ErrCreateAgent           = errors.New(ErrMsgCreateAgent)
-	ErrGetAgent              = errors.New(ErrMsgGetAgent)
-	ErrListAgents            = errors.New(ErrMsgListAgents)
-	ErrDeleteAgent           = errors.New(ErrMsgDeleteAgent)
-	ErrAgentAlreadyAssigned  = errors.New(ErrMsgAgentAlreadyAssigned)
-	ErrAgentNotUnassigned    = errors.New(ErrMsgAgentNotUnassigned)
+	ErrAgentNotFound        = errors.New(ErrMsgAgentNotFound)
+	ErrInvalidAgentID       = errors.New(ErrMsgInvalidAgentID)
+	ErrInvalidServerID      = errors.New(ErrMsgInvalidServerID)
+	ErrCreateAgent          = errors.New(ErrMsgCreateAgent)
+	ErrGetAgent             = errors.New(ErrMsgGetAgent)
+	ErrListAgents           = errors.New(ErrMsgListAgents)
+	ErrDeleteAgent          = errors.New(ErrMsgDeleteAgent)
+	ErrAgentAlreadyAssigned = errors.New(ErrMsgAgentAlreadyAssigned)
+	ErrAgentNotUnassigned   = errors.New(ErrMsgAgentNotUnassigned)
 )
 
 type AgentError struct {

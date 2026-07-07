@@ -3,11 +3,12 @@ package config_test
 import (
 	"testing"
 
+	"log/slog"
+
 	"github.com/stretchr/testify/require"
 	"github.com/svetlyopet/heimdallr/internal/config"
 	"github.com/svetlyopet/heimdallr/internal/constants"
 	"github.com/svetlyopet/heimdallr/internal/logger"
-	"log/slog"
 )
 
 func TestLoadFromFlagsDefaults(t *testing.T) {

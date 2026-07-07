@@ -14,8 +14,8 @@ import (
 )
 
 type stubServerLookup struct {
-	resp  server.GetResponse
-	err   error
+	resp server.GetResponse
+	err  error
 }
 
 func (s stubServerLookup) GetById(_ context.Context, _ string) (server.GetResponse, error) {

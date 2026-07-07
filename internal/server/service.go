@@ -32,9 +32,9 @@ type Service interface {
 }
 
 type service struct {
-	repository        Repository
-	agentAttachment   AgentAttachmentService
-	logger            *logger.Logger
+	repository      Repository
+	agentAttachment AgentAttachmentService
+	logger          *logger.Logger
 }
 
 func (s service) GetAll(ctx context.Context, page int, limit int) ([]ListItemResponse, int64, error) {
@@ -427,26 +427,11 @@ func mapEntityToResponse(server Server) GetResponse {
 }
 
 func mapJobAssociationRow(row JobAssociationRow) JobAssociationResponse {
-	return JobAssociationResponse{
-		JobID:        row.JobID,
-		AutomationID: row.AutomationID,
-		Automation:   row.Automation,
-		Provider:     row.Provider,
-		Status:       row.Status,
-		Location:     row.Location,
-		URL:          row.URL,
-	}
+	return JobAssociationResponse(row)
 }
 
 func mapReleaseAssociationRow(row ReleaseAssociationRow) ReleaseAssociationResponse {
-	return ReleaseAssociationResponse{
-		ReleaseID:     row.ReleaseID,
-		ApplicationID: row.ApplicationID,
-		Application:   row.Application,
-		Version:       row.Version,
-		CommitSHA:     row.CommitSHA,
-		Branch:        row.Branch,
-	}
+	return ReleaseAssociationResponse(row)
 }
 
 func normalizeMetadata(raw json.RawMessage) datatypes.JSON {
