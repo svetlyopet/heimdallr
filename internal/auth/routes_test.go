@@ -16,7 +16,7 @@ func newAuthRouter(t *testing.T) (*gin.Engine, Service, Repository) {
 
 	gin.SetMode(gin.TestMode)
 
-	svc, repo, _ := newTestService(t)
+	svc, repo, _ := newTestService(t, ServiceConfig{})
 	h, err := NewHandler(svc)
 	require.NoError(t, err)
 

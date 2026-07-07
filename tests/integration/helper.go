@@ -13,8 +13,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"github.com/svetlyopet/heimdallr/internal/database"
-	"github.com/svetlyopet/heimdallr/internal/http/server"
+	"github.com/svetlyopet/heimdallr/internal/config"
+	"github.com/svetlyopet/heimdallr/internal/ditest"
 )
 
 type testServer struct {
@@ -25,27 +25,20 @@ type testServer struct {
 func startTestServer(t *testing.T) testServer {
 	t.Helper()
 
-	t.Setenv("HEIMDALLR_BOOTSTRAP_ROOT_PASSWORD", "IntegrationTestPassword12!")
+	rootPassword := "IntegrationTestPassword12!"
+	cfg := config.DefaultTestConfig(bytes.NewBuffer(nil))
+	cfg.Database.DatabasePath = filepath.Join(t.TempDir(), "heimdallr.db")
+	cfg.Auth.BootstrapRootPassword = rootPassword
 
-	dbPath := filepath.Join(t.TempDir(), "heimdallr.db")
-	db, err := database.Open(database.Config{DatabasePath: dbPath})
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		sqlDB, closeErr := db.DB()
-		if closeErr == nil {
-			_ = sqlDB.Close()
-		}
-	})
-
-	srv, err := server.NewServer("localhost", "8080", db, nil)
-	require.NoError(t, err)
+	injector := ditest.NewServerInjector(t, ditest.WithConfig(cfg))
+	srv := ditest.MustInvokeServer(t, injector)
 
 	ts := httptest.NewServer(srv.HTTPHandler())
 	t.Cleanup(ts.Close)
 
 	return testServer{
 		Server:   ts,
-		RootPass: "IntegrationTestPassword12!",
+		RootPass: rootPassword,
 	}
 }
 

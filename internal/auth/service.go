@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"os"
 	"slices"
 	"strings"
 
@@ -36,10 +35,15 @@ type Service interface {
 	HasAnyRole(user GetResponse, requiredRoles ...string) bool
 }
 
+type ServiceConfig struct {
+	BootstrapRootPassword string
+}
+
 type service struct {
-	repository     Repository
-	logger         *logger.Logger
-	supportedRoles map[string]struct{}
+	repository        Repository
+	logger            *logger.Logger
+	bootstrapPassword string
+	supportedRoles    map[string]struct{}
 }
 
 func (s service) Authenticate(ctx context.Context, username string, password string) (GetResponse, error) {
@@ -230,7 +234,7 @@ func (s service) EnsureRootUser(ctx context.Context) (string, error) {
 		return "", ErrRootBootstrap
 	}
 
-	password := strings.TrimSpace(os.Getenv("HEIMDALLR_BOOTSTRAP_ROOT_PASSWORD"))
+	password := strings.TrimSpace(s.bootstrapPassword)
 	if password == "" {
 		var err error
 		password, err = generateSecurePassword(rootPasswordLength)
@@ -294,7 +298,7 @@ func (s service) validateRoles(roles []string, applyDefault bool) ([]string, err
 	return normalized, nil
 }
 
-func NewService(repository Repository, appLogger *logger.Logger) Service {
+func NewService(repository Repository, appLogger *logger.Logger, cfg ServiceConfig) Service {
 	if appLogger == nil {
 		appLogger = logger.Default()
 	}
@@ -304,7 +308,12 @@ func NewService(repository Repository, appLogger *logger.Logger) Service {
 		roles[role] = struct{}{}
 	}
 
-	return &service{repository: repository, logger: appLogger, supportedRoles: roles}
+	return &service{
+		repository:        repository,
+		logger:            appLogger,
+		bootstrapPassword: strings.TrimSpace(cfg.BootstrapRootPassword),
+		supportedRoles:    roles,
+	}
 }
 
 func hashPassword(value string) string {

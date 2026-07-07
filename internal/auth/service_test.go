@@ -9,7 +9,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func newTestService(t *testing.T) (Service, Repository, *gorm.DB) {
+func newTestService(t *testing.T, cfg ServiceConfig) (Service, Repository, *gorm.DB) {
 	t.Helper()
 
 	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name())
@@ -19,16 +19,13 @@ func newTestService(t *testing.T) (Service, Repository, *gorm.DB) {
 	require.NoError(t, db.AutoMigrate(&User{}))
 
 	repo := NewRepository(db)
-	svc := NewService(repo, nil)
+	svc := NewService(repo, nil, cfg)
 
 	return svc, repo, db
 }
 
-func TestServiceEnsureRootUserUsesBootstrapPasswordEnv(t *testing.T) {
-	t.Setenv("HEIMDALLR_BOOTSTRAP_ROOT_PASSWORD", "EnvBootstrapPassword12!")
-	t.Cleanup(func() { t.Setenv("HEIMDALLR_BOOTSTRAP_ROOT_PASSWORD", "") })
-
-	svc, _, _ := newTestService(t)
+func TestServiceEnsureRootUserUsesBootstrapPassword(t *testing.T) {
+	svc, _, _ := newTestService(t, ServiceConfig{BootstrapRootPassword: "EnvBootstrapPassword12!"})
 
 	password, err := svc.EnsureRootUser(t.Context())
 	require.NoError(t, err)
@@ -36,7 +33,7 @@ func TestServiceEnsureRootUserUsesBootstrapPasswordEnv(t *testing.T) {
 }
 
 func TestServiceEnsureRootUserCreatesOnce(t *testing.T) {
-	svc, repo, _ := newTestService(t)
+	svc, repo, _ := newTestService(t, ServiceConfig{})
 
 	password, err := svc.EnsureRootUser(t.Context())
 	require.NoError(t, err)
@@ -56,7 +53,7 @@ func TestServiceEnsureRootUserCreatesOnce(t *testing.T) {
 }
 
 func TestServiceCreateDefaultRoleAndValidation(t *testing.T) {
-	svc, _, _ := newTestService(t)
+	svc, _, _ := newTestService(t, ServiceConfig{})
 
 	created, err := svc.Create(t.Context(), CreateRequest{
 		Username: "reader-user",
@@ -90,7 +87,7 @@ func TestServiceCreateDefaultRoleAndValidation(t *testing.T) {
 }
 
 func TestServiceCreateDuplicateUsername(t *testing.T) {
-	svc, _, _ := newTestService(t)
+	svc, _, _ := newTestService(t, ServiceConfig{})
 
 	_, err := svc.Create(t.Context(), CreateRequest{
 		Username: "duplicate-user",
@@ -110,7 +107,7 @@ func TestServiceCreateDuplicateUsername(t *testing.T) {
 }
 
 func TestServiceDeleteErrors(t *testing.T) {
-	svc, _, _ := newTestService(t)
+	svc, _, _ := newTestService(t, ServiceConfig{})
 
 	err := svc.Delete(t.Context(), "   ")
 	require.ErrorIs(t, err, ErrInvalidUserID)
@@ -120,7 +117,7 @@ func TestServiceDeleteErrors(t *testing.T) {
 }
 
 func TestServiceDeleteRejectsRootUser(t *testing.T) {
-	svc, repo, _ := newTestService(t)
+	svc, repo, _ := newTestService(t, ServiceConfig{})
 
 	password, err := svc.EnsureRootUser(t.Context())
 	require.NoError(t, err)
@@ -137,7 +134,7 @@ func TestServiceDeleteRejectsRootUser(t *testing.T) {
 }
 
 func TestServiceListAndUpdate(t *testing.T) {
-	svc, _, _ := newTestService(t)
+	svc, _, _ := newTestService(t, ServiceConfig{})
 
 	created, err := svc.Create(t.Context(), CreateRequest{
 		Username: "managed-user",
@@ -166,7 +163,7 @@ func TestServiceListAndUpdate(t *testing.T) {
 }
 
 func TestServiceUpdateRejectsRootRoleChange(t *testing.T) {
-	svc, repo, _ := newTestService(t)
+	svc, repo, _ := newTestService(t, ServiceConfig{})
 
 	password, err := svc.EnsureRootUser(t.Context())
 	require.NoError(t, err)

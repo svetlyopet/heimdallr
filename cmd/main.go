@@ -2,73 +2,55 @@ package main
 
 import (
 	"context"
-	"flag"
 	"log/slog"
 	"os"
 
-	"github.com/svetlyopet/heimdallr/internal/constants"
-	"github.com/svetlyopet/heimdallr/internal/database"
+	"github.com/samber/do/v2"
+	"github.com/svetlyopet/heimdallr/internal/config"
 	"github.com/svetlyopet/heimdallr/internal/http/server"
 	"github.com/svetlyopet/heimdallr/internal/logger"
 )
 
-func main() {
-	logFormat := flag.String("log-format", "text", "log format: text or json")
-	logLevel := flag.String("log-level", "info", "log level: debug, info, warn, or error")
-	serverName := flag.String("server-name", constants.ApiDefaultHost, "server name")
-	serverPort := flag.String("server-port", constants.ApiDefaultPort, "server port")
-	databasePath := flag.String("database-path", constants.AppDefaultName+".db", "sqlite database path when DATABASE_URL is unset")
-	flag.Parse()
+func newInjector(cfg config.AppConfig) do.Injector {
+	return do.New(
+		config.ValuePackage(&cfg),
+		config.InfrastructurePackage,
+		server.Package,
+	)
+}
 
-	appLogger := logger.New(logger.Config{
-		Format: logger.Format(*logFormat),
-		Level:  parseLogLevel(*logLevel),
-		Output: os.Stdout,
-	})
+func run(ctx context.Context, cfg config.AppConfig) error {
+	injector := newInjector(cfg)
+	defer func() {
+		_ = injector.Shutdown()
+	}()
 
-	ctx := context.Background()
-
-	db, err := database.Open(database.Config{
-		DatabaseURL:  os.Getenv("DATABASE_URL"),
-		DatabasePath: *databasePath,
-	})
-	if err != nil {
-		appLogger.ErrorWithStack(ctx, "failed to initialize database", err)
-		os.Exit(1)
-	}
-
-	srv, err := server.NewServer(*serverName, *serverPort, db, appLogger)
-	if err != nil {
-		appLogger.ErrorWithStack(ctx, "failed to initialize server", err)
-		os.Exit(1)
-	}
+	srv := do.MustInvoke[*server.Server](injector)
+	appLogger := do.MustInvoke[*logger.Logger](injector)
 
 	appLogger.Info(
 		ctx,
 		"starting server",
-		slog.String("host", "localhost"),
-		slog.String("addr", ":"+*serverPort),
-		slog.String("log_format", *logFormat),
-		slog.String("log_level", *logLevel),
+		slog.String("host", cfg.Server.Host),
+		slog.String("addr", ":"+cfg.Server.Port),
+		slog.String("log_format", string(cfg.Logger.Format)),
+		slog.String("log_level", cfg.Logger.Level.String()),
 	)
 
-	if err = srv.Run(); err != nil {
-		appLogger.ErrorWithStack(ctx, "server stopped with error", err)
-		os.Exit(1)
-	}
+	return srv.Run()
 }
 
-func parseLogLevel(level string) slog.Level {
-	switch level {
-	case "debug":
-		return slog.LevelDebug
-	case "info":
-		return slog.LevelInfo
-	case "warn":
-		return slog.LevelWarn
-	case "error":
-		return slog.LevelError
-	default:
-		return slog.LevelInfo
+func main() {
+	cfg, err := config.LoadFromFlags(os.Args[1:], os.Getenv)
+	if err != nil {
+		_, _ = os.Stderr.WriteString("failed to load config: " + err.Error() + "\n")
+		os.Exit(1)
+	}
+
+	ctx := context.Background()
+	if err = run(ctx, cfg); err != nil {
+		appLogger := logger.New(cfg.Logger)
+		appLogger.ErrorWithStack(ctx, "server stopped with error", err)
+		os.Exit(1)
 	}
 }

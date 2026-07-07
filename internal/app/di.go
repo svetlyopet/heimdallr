@@ -1,0 +1,62 @@
+package app
+
+import (
+	"github.com/samber/do/v2"
+	"github.com/svetlyopet/heimdallr/internal/analytics"
+	"github.com/svetlyopet/heimdallr/internal/application"
+	"github.com/svetlyopet/heimdallr/internal/auth"
+	"github.com/svetlyopet/heimdallr/internal/automation"
+	"github.com/svetlyopet/heimdallr/internal/job"
+	"github.com/svetlyopet/heimdallr/internal/logger"
+	"github.com/svetlyopet/heimdallr/internal/provider"
+	"github.com/svetlyopet/heimdallr/internal/release"
+	"github.com/svetlyopet/heimdallr/internal/report"
+	"github.com/svetlyopet/heimdallr/internal/token"
+	"gorm.io/gorm"
+)
+
+var Package = do.Package(
+	provider.Package,
+	auth.Package,
+	token.Package,
+	application.Package,
+	release.Package,
+	report.Package,
+	automation.Package,
+	job.Package,
+	analytics.Package,
+	do.Lazy(provideApp),
+)
+
+func provideApp(i do.Injector) (*App, error) {
+	return &App{
+		db:     do.MustInvoke[*gorm.DB](i),
+		logger: do.MustInvoke[*logger.Logger](i),
+
+		providerService: do.MustInvoke[provider.Service](i),
+		providerHandler: do.MustInvoke[provider.Handler](i),
+
+		automationService: do.MustInvoke[automation.Service](i),
+		automationHandler: do.MustInvoke[automation.Handler](i),
+
+		jobService: do.MustInvoke[job.Service](i),
+		jobHandler: do.MustInvoke[job.Handler](i),
+
+		applicationService: do.MustInvoke[application.Service](i),
+		applicationHandler: do.MustInvoke[application.Handler](i),
+
+		releaseService: do.MustInvoke[release.Service](i),
+		releaseHandler: do.MustInvoke[release.Handler](i),
+
+		reportService: do.MustInvoke[report.Service](i),
+		reportHandler: do.MustInvoke[report.Handler](i),
+
+		analyticsService: do.MustInvoke[analytics.Service](i),
+		analyticsHandler: do.MustInvoke[analytics.Handler](i),
+
+		authService:  do.MustInvoke[auth.Service](i),
+		authHandler:  do.MustInvoke[auth.Handler](i),
+		tokenService: do.MustInvoke[token.Service](i),
+		tokenHandler: do.MustInvoke[token.Handler](i),
+	}, nil
+}

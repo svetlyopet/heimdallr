@@ -1,6 +1,7 @@
 package database
 
 import (
+	"database/sql"
 	"fmt"
 	"strings"
 
@@ -22,9 +23,32 @@ type Config struct {
 	DatabasePath string
 }
 
-func Open(cfg Config) (*gorm.DB, error) {
+type Migrator interface {
+	MigratePostgres(sqlDB *sql.DB) error
+	MigrateSQLite(db *gorm.DB) error
+}
+
+type defaultMigrator struct{}
+
+func (defaultMigrator) MigratePostgres(sqlDB *sql.DB) error {
+	return RunMigrations(sqlDB, "postgres")
+}
+
+func (defaultMigrator) MigrateSQLite(db *gorm.DB) error {
+	return autoMigrateSQLite(db)
+}
+
+func DefaultMigrator() Migrator {
+	return defaultMigrator{}
+}
+
+func Open(cfg Config, migrator Migrator) (*gorm.DB, error) {
+	if migrator == nil {
+		migrator = DefaultMigrator()
+	}
+
 	if strings.TrimSpace(cfg.DatabaseURL) != "" {
-		return openPostgres(cfg.DatabaseURL)
+		return openPostgres(cfg.DatabaseURL, migrator)
 	}
 
 	path := strings.TrimSpace(cfg.DatabasePath)
@@ -32,10 +56,10 @@ func Open(cfg Config) (*gorm.DB, error) {
 		path = "heimdallr.db"
 	}
 
-	return openSQLite(path)
+	return openSQLite(path, migrator)
 }
 
-func openPostgres(databaseURL string) (*gorm.DB, error) {
+func openPostgres(databaseURL string, migrator Migrator) (*gorm.DB, error) {
 	db, err := gorm.Open(postgres.Open(databaseURL), &gorm.Config{})
 	if err != nil {
 		return nil, fmt.Errorf("open postgres database: %w", err)
@@ -46,20 +70,20 @@ func openPostgres(databaseURL string) (*gorm.DB, error) {
 		return nil, fmt.Errorf("get postgres sql db: %w", err)
 	}
 
-	if err = RunMigrations(sqlDB, "postgres"); err != nil {
+	if err = migrator.MigratePostgres(sqlDB); err != nil {
 		return nil, err
 	}
 
 	return db, nil
 }
 
-func openSQLite(databasePath string) (*gorm.DB, error) {
+func openSQLite(databasePath string, migrator Migrator) (*gorm.DB, error) {
 	db, err := gorm.Open(sqlite.Open(databasePath), &gorm.Config{})
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite database: %w", err)
 	}
 
-	if err = autoMigrateSQLite(db); err != nil {
+	if err = migrator.MigrateSQLite(db); err != nil {
 		return nil, err
 	}
 
@@ -81,5 +105,5 @@ func autoMigrateSQLite(db *gorm.DB) error {
 
 // NewSQLiteDatabase keeps backward compatibility for tests.
 func NewSQLiteDatabase(databasePath string) (*gorm.DB, error) {
-	return Open(Config{DatabasePath: databasePath})
+	return Open(Config{DatabasePath: databasePath}, nil)
 }

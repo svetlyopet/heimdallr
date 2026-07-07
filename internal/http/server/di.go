@@ -6,28 +6,25 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/samber/do/v2"
 	"github.com/svetlyopet/heimdallr/internal/app"
+	"github.com/svetlyopet/heimdallr/internal/config"
 	"github.com/svetlyopet/heimdallr/internal/http/middleware"
 	"github.com/svetlyopet/heimdallr/internal/logger"
 	"github.com/svetlyopet/heimdallr/web"
-	"gorm.io/gorm"
 )
 
-type Server struct {
-	host    string
-	addr    string
-	db      *gorm.DB
-	logger  *logger.Logger
-	handler *gin.Engine
-}
+var Package = do.Package(
+	app.Package,
+	do.Lazy(provideServer),
+)
 
-func NewServer(host string, port string, db *gorm.DB, appLogger *logger.Logger) (*Server, error) {
-	handler, err := NewHandler(host, appLogger)
-	if err != nil {
-		return nil, err
-	}
+func provideServer(i do.Injector) (*Server, error) {
+	cfg := do.MustInvoke[*config.AppConfig](i)
+	appLogger := do.MustInvoke[*logger.Logger](i)
+	application := do.MustInvoke[*app.App](i)
 
-	application, err := app.New(db, appLogger)
+	handler, err := NewHandler(cfg.Server.Host, appLogger)
 	if err != nil {
 		return nil, err
 	}
@@ -44,15 +41,21 @@ func NewServer(host string, port string, db *gorm.DB, appLogger *logger.Logger) 
 		return nil, err
 	}
 
-	addr := fmt.Sprintf(":%s", port)
+	addr := fmt.Sprintf(":%s", cfg.Server.Port)
 
 	return &Server{
-		host:    host,
+		host:    cfg.Server.Host,
 		addr:    addr,
-		db:      db,
 		logger:  appLogger,
 		handler: handler,
 	}, nil
+}
+
+type Server struct {
+	host    string
+	addr    string
+	logger  *logger.Logger
+	handler *gin.Engine
 }
 
 func (s *Server) Run() error {
