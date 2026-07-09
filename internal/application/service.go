@@ -6,20 +6,21 @@ import (
 	"log/slog"
 
 	"github.com/google/uuid"
+	"github.com/svetlyopet/heimdallr/internal/application/api"
 	"github.com/svetlyopet/heimdallr/internal/logger"
 	"gorm.io/gorm"
 )
 
 type LookupService interface {
-	GetById(ctx context.Context, applicationID string) (GetResponse, error)
-	GetByName(ctx context.Context, name string) (GetResponse, error)
+	GetById(ctx context.Context, applicationID string) (api.Application, error)
+	GetByName(ctx context.Context, name string) (api.Application, error)
 }
 
 type Service interface {
-	GetAll(ctx context.Context, page int, limit int) ([]GetResponse, int64, error)
-	GetById(ctx context.Context, applicationID string) (GetResponse, error)
-	GetByName(ctx context.Context, name string) (GetResponse, error)
-	Create(ctx context.Context, req CreateRequest) (GetResponse, error)
+	GetAll(ctx context.Context, page int, limit int) ([]api.Application, int64, error)
+	GetById(ctx context.Context, applicationID string) (api.Application, error)
+	GetByName(ctx context.Context, name string) (api.Application, error)
+	Create(ctx context.Context, req api.ApplicationCreateRequest) (api.Application, error)
 }
 
 type service struct {
@@ -27,7 +28,7 @@ type service struct {
 	logger     *logger.Logger
 }
 
-func (s service) GetAll(ctx context.Context, page int, limit int) ([]GetResponse, int64, error) {
+func (s service) GetAll(ctx context.Context, page int, limit int) ([]api.Application, int64, error) {
 	offset := (page - 1) * limit
 
 	applications, total, err := s.repository.FindAll(ctx, limit, offset)
@@ -39,7 +40,7 @@ func (s service) GetAll(ctx context.Context, page int, limit int) ([]GetResponse
 		return nil, 0, ErrListApplications
 	}
 
-	responses := make([]GetResponse, 0, len(applications))
+	responses := make([]api.Application, 0, len(applications))
 	for _, application := range applications {
 		responses = append(responses, mapEntityToResponse(application))
 	}
@@ -47,56 +48,66 @@ func (s service) GetAll(ctx context.Context, page int, limit int) ([]GetResponse
 	return responses, total, nil
 }
 
-func (s service) GetById(ctx context.Context, applicationID string) (GetResponse, error) {
+func (s service) GetById(ctx context.Context, applicationID string) (api.Application, error) {
 	application, err := s.repository.FindById(ctx, applicationID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return GetResponse{}, ErrApplicationNotFound
+			return api.Application{}, ErrApplicationNotFound
 		}
 
 		s.logger.ErrorWithStack(ctx, "failed to find application by id", err,
 			slog.String("application_id", applicationID),
 		)
-		return GetResponse{}, ErrGetApplication
+		return api.Application{}, ErrGetApplication
 	}
 
 	return mapEntityToResponse(application), nil
 }
 
-func (s service) GetByName(ctx context.Context, name string) (GetResponse, error) {
+func (s service) GetByName(ctx context.Context, name string) (api.Application, error) {
 	application, err := s.repository.FindByName(ctx, name)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return GetResponse{}, ErrApplicationNotFound
+			return api.Application{}, ErrApplicationNotFound
 		}
 
 		s.logger.ErrorWithStack(ctx, "failed to find application by name", err,
 			slog.String("application_name", name),
 		)
-		return GetResponse{}, ErrGetApplication
+		return api.Application{}, ErrGetApplication
 	}
 
 	return mapEntityToResponse(application), nil
 }
 
-func (s service) Create(ctx context.Context, req CreateRequest) (GetResponse, error) {
+func (s service) Create(ctx context.Context, req api.ApplicationCreateRequest) (api.Application, error) {
 	_, err := s.repository.FindByName(ctx, req.Name)
 	if err == nil {
-		return GetResponse{}, ErrApplicationAlreadyExists
+		return api.Application{}, ErrApplicationAlreadyExists
 	}
 
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
 		s.logger.ErrorWithStack(ctx, "failed to check application existence before create", err,
 			slog.String("application_name", req.Name),
 		)
-		return GetResponse{}, ErrCreateApplication
+		return api.Application{}, ErrCreateApplication
+	}
+
+	description := ""
+	if req.Description != nil {
+		description = *req.Description
+	}
+
+	repositoryURL := ""
+	if req.RepositoryUrl != nil {
+		repositoryURL = string(*req.RepositoryUrl)
 	}
 
 	application := Application{
 		ID:            uuid.New(),
 		Name:          req.Name,
-		Description:   req.Description,
-		RepositoryURL: req.RepositoryURL,
+		Description:   description,
+		RepositoryURL: repositoryURL,
 	}
 
 	created, err := s.repository.Create(ctx, application)
@@ -104,7 +115,7 @@ func (s service) Create(ctx context.Context, req CreateRequest) (GetResponse, er
 		s.logger.ErrorWithStack(ctx, "failed to create application", err,
 			slog.String("application_name", req.Name),
 		)
-		return GetResponse{}, ErrCreateApplication
+		return api.Application{}, ErrCreateApplication
 	}
 
 	return mapEntityToResponse(created), nil
@@ -121,11 +132,11 @@ func NewService(repository Repository, appLogger *logger.Logger) Service {
 	}
 }
 
-func mapEntityToResponse(application Application) GetResponse {
-	return GetResponse{
-		ID:            application.ID,
+func mapEntityToResponse(application Application) api.Application {
+	return api.Application{
+		Id:            application.ID,
 		Name:          application.Name,
 		Description:   application.Description,
-		RepositoryURL: application.RepositoryURL,
+		RepositoryUrl: api.URL(application.RepositoryURL),
 	}
 }

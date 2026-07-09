@@ -1,166 +1,118 @@
 package automation
 
 import (
+	"context"
 	"errors"
-	"net/http"
-	"strconv"
 
-	"github.com/gin-gonic/gin"
+	"github.com/svetlyopet/heimdallr/internal/automation/api"
 )
 
 type Handler interface {
-	List(ctx *gin.Context)
-	Get(ctx *gin.Context)
-	Create(ctx *gin.Context)
-	Update(ctx *gin.Context)
-	Delete(ctx *gin.Context)
+	api.StrictServerInterface
 }
 
 type handler struct {
 	service Service
 }
 
-func (h handler) List(ctx *gin.Context) {
-	page, err := strconv.Atoi(ctx.DefaultQuery("page", "1"))
-	if err != nil || page < 1 {
-		automationErr := NewAutomationError("invalid query param value", errors.New("page must be a positive integer"))
-		returnErrorResponse(ctx, http.StatusBadRequest, automationErr)
-		return
+func (h handler) ListAutomations(ctx context.Context, request api.ListAutomationsRequestObject) (api.ListAutomationsResponseObject, error) {
+	page, limit, ok := paginationParams(request.Params.Page, request.Params.Limit)
+	if !ok {
+		return api.ListAutomations400JSONResponse{
+			BadRequestJSONResponse: api.BadRequestJSONResponse{Error: "page and limit must be positive integers"},
+		}, nil
 	}
 
-	limit, err := strconv.Atoi(ctx.DefaultQuery("limit", "10"))
-	if err != nil || limit < 1 {
-		automationErr := NewAutomationError("invalid query param value", errors.New("limit must be a positive integer"))
-		returnErrorResponse(ctx, http.StatusBadRequest, automationErr)
-		return
-	}
-
-	automations, total, err := h.service.GetAll(ctx.Request.Context(), page, limit)
+	automations, total, err := h.service.GetAll(ctx, page, limit)
 	if err != nil {
-		automationErr := NewGetAutomationsError(err)
-		returnErrorResponse(ctx, http.StatusInternalServerError, automationErr)
-		return
+		return api.ListAutomations500JSONResponse{
+			InternalServerErrorJSONResponse: api.InternalServerErrorJSONResponse{Error: automationErrorMessage(err, "failed to list automations")},
+		}, nil
 	}
 
-	totalPages := int64(0)
-	if total > 0 {
-		totalPages = (total + int64(limit) - 1) / int64(limit)
-	}
-
-	ctx.JSON(http.StatusOK, gin.H{
-		"data": automations,
-		"pagination": gin.H{
-			"page":        page,
-			"limit":       limit,
-			"total":       total,
-			"total_pages": totalPages,
-		},
-	})
+	return api.ListAutomations200JSONResponse{
+		Data:       automations,
+		Pagination: buildPagination(page, limit, total),
+	}, nil
 }
 
-func (h handler) Get(ctx *gin.Context) {
-	automationID := ctx.Param("automation_id")
-	if automationID == "" {
-		automationErr := NewInvalidAutomationIDError(ErrInvalidAutomationID)
-		returnErrorResponse(ctx, http.StatusBadRequest, automationErr)
-		return
+func (h handler) CreateAutomation(ctx context.Context, request api.CreateAutomationRequestObject) (api.CreateAutomationResponseObject, error) {
+	if request.Body == nil {
+		return api.CreateAutomation400JSONResponse{
+			BadRequestJSONResponse: api.BadRequestJSONResponse{Error: "invalid request body"},
+		}, nil
 	}
 
-	automation, err := h.service.GetById(ctx.Request.Context(), automationID)
+	automation, err := h.service.Create(ctx, *request.Body)
 	if err != nil {
-		if errors.Is(err, ErrAutomationNotFound) {
-			automationErr := NewAutomationNotFoundError(err)
-			returnErrorResponse(ctx, http.StatusNotFound, automationErr)
-			return
-		}
-
-		automationErr := NewGetAutomationError(err)
-		returnErrorResponse(ctx, http.StatusInternalServerError, automationErr)
-		return
-	}
-
-	ctx.JSON(http.StatusOK, gin.H{
-		"data": automation,
-	})
-}
-
-func (h handler) Create(ctx *gin.Context) {
-	var req CreateRequest
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		automationErr := NewAutomationError("invalid request body", err)
-		returnErrorResponse(ctx, http.StatusBadRequest, automationErr)
-		return
-	}
-
-	automation, err := h.service.Create(ctx.Request.Context(), req)
-	if err != nil {
-		statusCode := http.StatusInternalServerError
 		if errors.Is(err, ErrAutomationAlreadyExists) {
-			statusCode = http.StatusConflict
+			return api.CreateAutomation409JSONResponse{
+				ConflictJSONResponse: api.ConflictJSONResponse{Error: automationErrorMessage(err, "automation already exists")},
+			}, nil
 		}
 
-		automationErr := NewCreateAutomationError(err)
-		returnErrorResponse(ctx, statusCode, automationErr)
-		return
+		return api.CreateAutomation500JSONResponse{
+			InternalServerErrorJSONResponse: api.InternalServerErrorJSONResponse{Error: automationErrorMessage(err, "failed to create automation")},
+		}, nil
 	}
 
-	ctx.JSON(http.StatusCreated, gin.H{
-		"data": automation,
-	})
+	return api.CreateAutomation201JSONResponse{Data: automation}, nil
 }
 
-func (h handler) Update(ctx *gin.Context) {
-	automationID := ctx.Param("automation_id")
-	if automationID == "" {
-		automationErr := NewInvalidAutomationIDError(ErrInvalidAutomationID)
-		returnErrorResponse(ctx, http.StatusBadRequest, automationErr)
-		return
-	}
-
-	var req UpdateRequest
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		automationErr := NewAutomationError("invalid request body", err)
-		returnErrorResponse(ctx, http.StatusBadRequest, automationErr)
-		return
-	}
-
-	automation, err := h.service.Update(ctx.Request.Context(), req, automationID)
+func (h handler) GetAutomation(ctx context.Context, request api.GetAutomationRequestObject) (api.GetAutomationResponseObject, error) {
+	automation, err := h.service.GetById(ctx, request.AutomationId.String())
 	if err != nil {
-		statusCode := http.StatusInternalServerError
 		if errors.Is(err, ErrAutomationNotFound) {
-			statusCode = http.StatusNotFound
+			return api.GetAutomation404JSONResponse{
+				NotFoundJSONResponse: api.NotFoundJSONResponse{Error: automationErrorMessage(err, "automation not found")},
+			}, nil
 		}
 
-		automationErr := NewUpdateAutomationError(err)
-		returnErrorResponse(ctx, statusCode, automationErr)
-		return
+		return api.GetAutomation500JSONResponse{
+			InternalServerErrorJSONResponse: api.InternalServerErrorJSONResponse{Error: automationErrorMessage(err, "failed to get automation")},
+		}, nil
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"data": automation,
-	})
+	return api.GetAutomation200JSONResponse{Data: automation}, nil
 }
 
-func (h handler) Delete(ctx *gin.Context) {
-	automationID := ctx.Param("automation_id")
-	if automationID == "" {
-		automationErr := NewInvalidAutomationIDError(ErrInvalidAutomationID)
-		returnErrorResponse(ctx, http.StatusBadRequest, automationErr)
-		return
+func (h handler) UpdateAutomation(ctx context.Context, request api.UpdateAutomationRequestObject) (api.UpdateAutomationResponseObject, error) {
+	if request.Body == nil {
+		return api.UpdateAutomation400JSONResponse{
+			BadRequestJSONResponse: api.BadRequestJSONResponse{Error: "invalid request body"},
+		}, nil
 	}
 
-	if err := h.service.Delete(ctx.Request.Context(), automationID); err != nil {
-		statusCode := http.StatusInternalServerError
+	automation, err := h.service.Update(ctx, *request.Body, request.AutomationId.String())
+	if err != nil {
 		if errors.Is(err, ErrAutomationNotFound) {
-			statusCode = http.StatusNotFound
+			return api.UpdateAutomation404JSONResponse{
+				NotFoundJSONResponse: api.NotFoundJSONResponse{Error: automationErrorMessage(err, "automation not found")},
+			}, nil
 		}
 
-		automationErr := NewDeleteAutomationError(err)
-		returnErrorResponse(ctx, statusCode, automationErr)
-		return
+		return api.UpdateAutomation500JSONResponse{
+			InternalServerErrorJSONResponse: api.InternalServerErrorJSONResponse{Error: automationErrorMessage(err, "failed to update automation")},
+		}, nil
 	}
 
-	ctx.Status(http.StatusNoContent)
+	return api.UpdateAutomation200JSONResponse{Data: automation}, nil
+}
+
+func (h handler) DeleteAutomation(ctx context.Context, request api.DeleteAutomationRequestObject) (api.DeleteAutomationResponseObject, error) {
+	if err := h.service.Delete(ctx, request.AutomationId.String()); err != nil {
+		if errors.Is(err, ErrAutomationNotFound) {
+			return api.DeleteAutomation404JSONResponse{
+				NotFoundJSONResponse: api.NotFoundJSONResponse{Error: automationErrorMessage(err, "automation not found")},
+			}, nil
+		}
+
+		return api.DeleteAutomation500JSONResponse{
+			InternalServerErrorJSONResponse: api.InternalServerErrorJSONResponse{Error: automationErrorMessage(err, "failed to delete automation")},
+		}, nil
+	}
+
+	return api.DeleteAutomation204Response{}, nil
 }
 
 func NewHandler(service Service) (Handler, error) {
@@ -169,15 +121,38 @@ func NewHandler(service Service) (Handler, error) {
 	}, nil
 }
 
-func returnErrorResponse(ctx *gin.Context, statusCode int, err error) {
-	if automationErr, ok := errors.AsType[AutomationError](err); ok {
-		ctx.JSON(statusCode, gin.H{
-			"error": automationErr.Message,
-		})
-		return
+func paginationParams(pagePtr, limitPtr *api.Page) (page int, limit int, ok bool) {
+	page = 1
+	limit = 10
+
+	if pagePtr != nil {
+		page = int(*pagePtr)
+	}
+	if limitPtr != nil {
+		limit = int(*limitPtr)
 	}
 
-	ctx.JSON(http.StatusInternalServerError, gin.H{
-		"error": http.StatusText(http.StatusInternalServerError),
-	})
+	return page, limit, page >= 1 && limit >= 1
+}
+
+func buildPagination(page, limit int, total int64) api.Pagination {
+	totalPages := int64(0)
+	if total > 0 {
+		totalPages = (total + int64(limit) - 1) / int64(limit)
+	}
+
+	return api.Pagination{
+		Page:       page,
+		Limit:      limit,
+		Total:      int(total),
+		TotalPages: int(totalPages),
+	}
+}
+
+func automationErrorMessage(err error, fallback string) string {
+	if automationErr, ok := errors.AsType[AutomationError](err); ok {
+		return automationErr.Message
+	}
+
+	return fallback
 }

@@ -5,13 +5,27 @@
     heimdallr_url: "{{ lookup('env', 'HEIMDALLR_URL') | default('http://localhost:8080', true) }}"
     heimdallr_user: "{{ lookup('env', 'HEIMDALLR_USER') | default('root', true) }}"
     heimdallr_password: "{{ lookup('env', 'HEIMDALLR_PASSWORD') | default('e2e-test-password', true) }}"
-    auth_headers:
-      X-Auth-Username: "{{ heimdallr_user }}"
-      X-Auth-Password: "{{ heimdallr_password }}"
     job_id: "{{ lookup('env', 'JOB_ID') | default('1000', true) }}"
     job_status: success
     automation_id: "{{ lookup('file', playbook_dir + '/.automation_id') }}"
   tasks:
+    - name: Login and obtain bearer token
+      ansible.builtin.uri:
+        url: "{{ heimdallr_url }}/api/v1/auth/login"
+        method: POST
+        body_format: json
+        body:
+          username: "{{ heimdallr_user }}"
+          password: "{{ heimdallr_password }}"
+        status_code: 200
+      register: login_response
+
+    - name: Set auth headers
+      ansible.builtin.set_fact:
+        auth_headers:
+          Authorization: "Bearer {{ login_response.json.data.token }}"
+          Content-Type: application/json
+
     - name: Register job
       ansible.builtin.uri:
         url: "{{ heimdallr_url }}/api/v1/automation/{{ automation_id }}/job"

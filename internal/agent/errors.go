@@ -6,27 +6,27 @@ import (
 )
 
 const (
-	ErrMsgAgentNotFound        = "agent not found"
-	ErrMsgInvalidAgentID       = "invalid agent id"
-	ErrMsgInvalidServerID      = "invalid server id"
-	ErrMsgCreateAgent          = "failed to create agent"
-	ErrMsgGetAgent             = "failed to get agent"
-	ErrMsgListAgents           = "failed to list agents"
-	ErrMsgDeleteAgent          = "failed to delete agent"
-	ErrMsgAgentAlreadyAssigned = "agent is already assigned to a server"
-	ErrMsgAgentNotUnassigned   = "agent is not unassigned"
+	ErrMsgAgentNotFound      = "agent not found"
+	ErrMsgInvalidAgentID     = "invalid agent id"
+	ErrMsgInvalidServerID    = "invalid server id"
+	ErrMsgCreateAgent        = "failed to create agent"
+	ErrMsgGetAgent           = "failed to get agent"
+	ErrMsgListAgents         = "failed to list agents"
+	ErrMsgDeleteAgent        = "failed to delete agent"
+	ErrMsgAgentAlreadyLinked = "agent is already linked to this server"
+	ErrMsgAgentAlreadyExists = "agent already exists"
 )
 
 var (
-	ErrAgentNotFound        = errors.New(ErrMsgAgentNotFound)
-	ErrInvalidAgentID       = errors.New(ErrMsgInvalidAgentID)
-	ErrInvalidServerID      = errors.New(ErrMsgInvalidServerID)
-	ErrCreateAgent          = errors.New(ErrMsgCreateAgent)
-	ErrGetAgent             = errors.New(ErrMsgGetAgent)
-	ErrListAgents           = errors.New(ErrMsgListAgents)
-	ErrDeleteAgent          = errors.New(ErrMsgDeleteAgent)
-	ErrAgentAlreadyAssigned = errors.New(ErrMsgAgentAlreadyAssigned)
-	ErrAgentNotUnassigned   = errors.New(ErrMsgAgentNotUnassigned)
+	ErrAgentNotFound      = errors.New(ErrMsgAgentNotFound)
+	ErrInvalidAgentID     = errors.New(ErrMsgInvalidAgentID)
+	ErrInvalidServerID    = errors.New(ErrMsgInvalidServerID)
+	ErrCreateAgent        = errors.New(ErrMsgCreateAgent)
+	ErrGetAgent           = errors.New(ErrMsgGetAgent)
+	ErrListAgents         = errors.New(ErrMsgListAgents)
+	ErrDeleteAgent        = errors.New(ErrMsgDeleteAgent)
+	ErrAgentAlreadyLinked = errors.New(ErrMsgAgentAlreadyLinked)
+	ErrAgentAlreadyExists = errors.New(ErrMsgAgentAlreadyExists)
 )
 
 type AgentError struct {
@@ -83,4 +83,8 @@ func NewListAgentsError(err error) error {
 
 func NewDeleteAgentError(err error) error {
 	return NewAgentError(ErrDeleteAgent.Error(), err)
+}
+
+func NewAgentAlreadyExistsError(err error) error {
+	return NewAgentError(ErrAgentAlreadyExists.Error(), err)
 }

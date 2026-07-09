@@ -8,6 +8,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/svetlyopet/heimdallr/internal/application"
+	appapi "github.com/svetlyopet/heimdallr/internal/application/api"
+	"github.com/svetlyopet/heimdallr/internal/release/api"
 	"github.com/svetlyopet/heimdallr/internal/testutil"
 	"gorm.io/gorm"
 )
@@ -27,69 +29,78 @@ func newReleaseService(t *testing.T) (Service, application.Service, *gorm.DB) {
 func TestServiceCreateUpsertsRelease(t *testing.T) {
 	releaseSvc, appSvc, _ := newReleaseService(t)
 
-	app, err := appSvc.Create(context.Background(), application.CreateRequest{
+	repoURL := appapi.URL("https://example.com/upsert")
+	app, err := appSvc.Create(context.Background(), appapi.ApplicationCreateRequest{
 		Name:          "upsert-app",
-		Description:   "desc",
-		RepositoryURL: "https://example.com/upsert",
+		Description:   ptr("desc"),
+		RepositoryUrl: &repoURL,
 	})
 	require.NoError(t, err)
 
-	req := CreateRequest{
+	pipelineURL := api.URL("https://example.com/pipeline/1")
+	req := api.ReleaseCreateRequest{
 		Version:     "v1.0.0",
-		CommitSHA:   "abc123",
-		PipelineURL: "https://example.com/pipeline/1",
-		Branch:      "main",
+		CommitSha:   ptr("abc123"),
+		PipelineUrl: &pipelineURL,
+		Branch:      ptr("main"),
 	}
 
-	created, err := releaseSvc.Create(context.Background(), app.ID.String(), req, true)
+	created, err := releaseSvc.Create(context.Background(), app.Id.String(), req, true)
 	require.NoError(t, err)
 	require.Equal(t, "v1.0.0", created.Version)
 
-	req.CommitSHA = "def456"
-	updated, err := releaseSvc.Create(context.Background(), app.ID.String(), req, true)
+	commitSHA := "def456"
+	req.CommitSha = &commitSHA
+	updated, err := releaseSvc.Create(context.Background(), app.Id.String(), req, true)
 	require.NoError(t, err)
-	require.Equal(t, "def456", updated.CommitSHA)
-	require.Equal(t, created.ID, updated.ID)
+	require.Equal(t, "def456", updated.CommitSha)
+	require.Equal(t, created.Id, updated.Id)
 }
 
 func TestServiceCreateReturnsConflictWithoutUpsert(t *testing.T) {
 	releaseSvc, appSvc, _ := newReleaseService(t)
 
-	app, err := appSvc.Create(context.Background(), application.CreateRequest{Name: "conflict-app"})
+	app, err := appSvc.Create(context.Background(), appapi.ApplicationCreateRequest{Name: "conflict-app"})
 	require.NoError(t, err)
 
-	req := CreateRequest{Version: "v1.0.0", CommitSHA: "abc", PipelineURL: "https://example.com", Branch: "main"}
-	_, err = releaseSvc.Create(context.Background(), app.ID.String(), req, false)
+	pipelineURL := api.URL("https://example.com")
+	req := api.ReleaseCreateRequest{
+		Version:     "v1.0.0",
+		CommitSha:   ptr("abc"),
+		PipelineUrl: &pipelineURL,
+		Branch:      ptr("main"),
+	}
+	_, err = releaseSvc.Create(context.Background(), app.Id.String(), req, false)
 	require.NoError(t, err)
 
-	_, err = releaseSvc.Create(context.Background(), app.ID.String(), req, false)
+	_, err = releaseSvc.Create(context.Background(), app.Id.String(), req, false)
 	require.ErrorIs(t, err, ErrReleaseAlreadyExists)
 }
 
 func TestServiceCreateReturnsApplicationNotFound(t *testing.T) {
 	releaseSvc, _, _ := newReleaseService(t)
 
-	_, err := releaseSvc.Create(context.Background(), uuid.New().String(), CreateRequest{
+	_, err := releaseSvc.Create(context.Background(), uuid.New().String(), api.ReleaseCreateRequest{
 		Version: "v1.0.0",
 	}, false)
 	require.ErrorIs(t, err, application.ErrApplicationNotFound)
 }
 
 type stubApplicationLookup struct {
-	getByIdResp  application.GetResponse
+	getByIdResp  appapi.Application
 	getByIdError error
 }
 
-func (s stubApplicationLookup) GetById(_ context.Context, _ string) (application.GetResponse, error) {
+func (s stubApplicationLookup) GetById(_ context.Context, _ string) (appapi.Application, error) {
 	if s.getByIdError != nil {
-		return application.GetResponse{}, s.getByIdError
+		return appapi.Application{}, s.getByIdError
 	}
 
 	return s.getByIdResp, nil
 }
 
-func (s stubApplicationLookup) GetByName(_ context.Context, _ string) (application.GetResponse, error) {
-	return application.GetResponse{}, nil
+func (s stubApplicationLookup) GetByName(_ context.Context, _ string) (appapi.Application, error) {
+	return appapi.Application{}, nil
 }
 
 type stubReleaseRepository struct {
@@ -116,12 +127,12 @@ func (s stubReleaseRepository) Upsert(context.Context, Release) (Release, error)
 	return Release{}, nil
 }
 
-func (s stubReleaseRepository) GetComplianceSummary(context.Context, uuid.UUID) (ComplianceSummary, error) {
-	return ComplianceSummary{}, nil
+func (s stubReleaseRepository) GetComplianceSummary(context.Context, uuid.UUID) (api.ComplianceSummary, error) {
+	return api.ComplianceSummary{}, nil
 }
 
-func (s stubReleaseRepository) GetComplianceSummariesForReleases(context.Context, []uuid.UUID) (map[uuid.UUID]ComplianceSummary, error) {
-	return map[uuid.UUID]ComplianceSummary{}, nil
+func (s stubReleaseRepository) GetComplianceSummariesForReleases(context.Context, []uuid.UUID) (map[uuid.UUID]api.ComplianceSummary, error) {
+	return map[uuid.UUID]api.ComplianceSummary{}, nil
 }
 
 func TestServiceGetAllReturnsApplicationNotFound(t *testing.T) {
@@ -135,7 +146,7 @@ func TestServiceGetAllReturnsApplicationNotFound(t *testing.T) {
 
 func TestServiceGetAllReturnsListError(t *testing.T) {
 	svc := NewService(stubReleaseRepository{findAllErr: errors.New("boom")}, stubApplicationLookup{
-		getByIdResp: application.GetResponse{ID: uuid.New()},
+		getByIdResp: appapi.Application{Id: uuid.New()},
 	}, nil)
 
 	_, _, err := svc.GetAll(context.Background(), uuid.New().String(), 1, 10)

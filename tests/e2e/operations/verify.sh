@@ -8,10 +8,9 @@ AUTOMATION_ID="${AUTOMATION_ID:?AUTOMATION_ID is required}"
 JOB_ID_SUCCESS="${JOB_ID_SUCCESS:-1000}"
 JOB_ID_FAILURE="${JOB_ID_FAILURE:-1001}"
 
-auth_headers=(
-  -H "X-Auth-Username: ${HEIMDALLR_USER}"
-  -H "X-Auth-Password: ${HEIMDALLR_PASSWORD}"
-)
+# shellcheck source=../lib/auth.sh
+source "$(dirname "${BASH_SOURCE[0]}")/../lib/auth.sh"
+setup_auth_headers
 
 success_json="$(curl -sf "${auth_headers[@]}" "${HEIMDALLR_URL}/api/v1/automation/${AUTOMATION_ID}/job/${JOB_ID_SUCCESS}")"
 failure_json="$(curl -sf "${auth_headers[@]}" "${HEIMDALLR_URL}/api/v1/automation/${AUTOMATION_ID}/job/${JOB_ID_FAILURE}")"

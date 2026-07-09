@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/svetlyopet/heimdallr/internal/release/api"
 	"gorm.io/gorm"
 )
 
@@ -15,8 +16,8 @@ type Repository interface {
 	FindByApplicationAndVersion(ctx context.Context, applicationID uuid.UUID, version string) (Release, error)
 	Create(ctx context.Context, release Release) (Release, error)
 	Upsert(ctx context.Context, release Release) (Release, error)
-	GetComplianceSummary(ctx context.Context, releaseID uuid.UUID) (ComplianceSummary, error)
-	GetComplianceSummariesForReleases(ctx context.Context, releaseIDs []uuid.UUID) (map[uuid.UUID]ComplianceSummary, error)
+	GetComplianceSummary(ctx context.Context, releaseID uuid.UUID) (api.ComplianceSummary, error)
+	GetComplianceSummariesForReleases(ctx context.Context, releaseIDs []uuid.UUID) (map[uuid.UUID]api.ComplianceSummary, error)
 }
 
 type repository struct {
@@ -161,7 +162,7 @@ func (r repository) Upsert(ctx context.Context, release Release) (Release, error
 	return release, nil
 }
 
-func (r repository) GetComplianceSummary(ctx context.Context, releaseID uuid.UUID) (ComplianceSummary, error) {
+func (r repository) GetComplianceSummary(ctx context.Context, releaseID uuid.UUID) (api.ComplianceSummary, error) {
 	type row struct {
 		Type   string
 		Status string
@@ -175,26 +176,28 @@ func (r repository) GetComplianceSummary(ctx context.Context, releaseID uuid.UUI
 		Where("release_id = ?", releaseID).
 		Group("type, status").
 		Scan(&rows).Error; err != nil {
-		return ComplianceSummary{}, err
+		return api.ComplianceSummary{}, err
 	}
 
-	summary := ComplianceSummary{}
-	typeTotals := map[string]int64{}
+	summary := api.ComplianceSummary{}
 
 	for _, row := range rows {
-		summary.TotalReports += row.Count
-		typeTotals[row.Type] += row.Count
+		summary.TotalReports += int(row.Count)
 
 		switch row.Status {
 		case "success":
-			summary.SuccessfulReports += row.Count
+			summary.SuccessfulReports += int(row.Count)
 		case "failed":
-			summary.FailedReports += row.Count
+			summary.FailedReports += int(row.Count)
 		case "started":
-			summary.StartedReports += row.Count
+			summary.StartedReports += int(row.Count)
 		}
 
-		summary.ByType = append(summary.ByType, ReportSummary(row))
+		summary.ByType = append(summary.ByType, api.ReportSummary{
+			Type:   row.Type,
+			Status: row.Status,
+			Count:  int(row.Count),
+		})
 	}
 
 	if summary.TotalReports > 0 {
@@ -204,8 +207,8 @@ func (r repository) GetComplianceSummary(ctx context.Context, releaseID uuid.UUI
 	return summary, nil
 }
 
-func (r repository) GetComplianceSummariesForReleases(ctx context.Context, releaseIDs []uuid.UUID) (map[uuid.UUID]ComplianceSummary, error) {
-	summaries := make(map[uuid.UUID]ComplianceSummary, len(releaseIDs))
+func (r repository) GetComplianceSummariesForReleases(ctx context.Context, releaseIDs []uuid.UUID) (map[uuid.UUID]api.ComplianceSummary, error) {
+	summaries := make(map[uuid.UUID]api.ComplianceSummary, len(releaseIDs))
 	if len(releaseIDs) == 0 {
 		return summaries, nil
 	}
@@ -229,21 +232,21 @@ func (r repository) GetComplianceSummariesForReleases(ctx context.Context, relea
 
 	for _, row := range rows {
 		summary := summaries[row.ReleaseID]
-		summary.TotalReports += row.Count
+		summary.TotalReports += int(row.Count)
 
 		switch row.Status {
 		case "success":
-			summary.SuccessfulReports += row.Count
+			summary.SuccessfulReports += int(row.Count)
 		case "failed":
-			summary.FailedReports += row.Count
+			summary.FailedReports += int(row.Count)
 		case "started":
-			summary.StartedReports += row.Count
+			summary.StartedReports += int(row.Count)
 		}
 
-		summary.ByType = append(summary.ByType, ReportSummary{
+		summary.ByType = append(summary.ByType, api.ReportSummary{
 			Type:   row.Type,
 			Status: row.Status,
-			Count:  row.Count,
+			Count:  int(row.Count),
 		})
 
 		summaries[row.ReleaseID] = summary

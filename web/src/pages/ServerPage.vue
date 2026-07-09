@@ -2,7 +2,7 @@
   <section>
     <header class="topbar">
       <div>
-        <p class="eyebrow">Compliance</p>
+        <p class="eyebrow">Fleet</p>
         <h2>Servers</h2>
       </div>
 
@@ -70,6 +70,27 @@
             <p class="eyebrow">Inventory</p>
             <h3>Server list</h3>
           </div>
+
+          <div class="page-size">
+            <label>
+              Agent
+              <select v-model="selectedAgentId" @change="onFilterChange">
+                <option value="">All agents</option>
+                <option v-for="agent in agentOptions" :key="agent.id" :value="agent.id">
+                  {{ agent.name }}
+                </option>
+              </select>
+            </label>
+
+            <label>
+              Limit
+              <select v-model.number="pagination.limit" @change="changeLimit">
+                <option :value="5">5</option>
+                <option :value="10">10</option>
+                <option :value="20">20</option>
+              </select>
+            </label>
+          </div>
         </div>
 
         <div v-if="loading" class="empty-state">Loading servers...</div>
@@ -109,13 +130,21 @@
                 <td>{{ server.relations?.agent_count ?? 0 }}</td>
                 <td>{{ server.relations?.job_count ?? 0 }}</td>
                 <td>{{ server.relations?.release_count ?? 0 }}</td>
-                <td>
-                  <RouterLink
-                    class="button button-secondary"
-                    :to="{ name: 'server-detail', params: { serverId: server.id } }"
-                  >
-                    View agents
-                  </RouterLink>
+                <td data-label="Actions">
+                  <div class="row-actions">
+                    <RouterLink
+                      class="button button-small button-secondary"
+                      :to="{ name: 'server-detail', params: { serverId: server.id } }"
+                    >
+                      View server
+                    </RouterLink>
+                    <RouterLink
+                      class="button button-small button-secondary"
+                      :to="{ name: 'server-jobs', params: { serverId: server.id } }"
+                    >
+                      View jobs
+                    </RouterLink>
+                  </div>
                 </td>
               </tr>
             </tbody>
@@ -136,8 +165,10 @@
 
 <script setup>
 import { onMounted, reactive, ref } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import "../stylesheets/dialog.css";
 import { RouterLink } from "vue-router";
+import { listAgents } from "../api/agents";
 import { createServer, listServers } from "../api/servers";
 import AppAlert from "../components/AppAlert.vue";
 import FormDialog from "../components/FormDialog.vue";
@@ -145,7 +176,12 @@ import PaginationControls from "../components/PaginationControls.vue";
 import StatsGrid from "../components/StatsGrid.vue";
 import { getInitial } from "../utils/format";
 
+const route = useRoute();
+const router = useRouter();
+
 const servers = ref([]);
+const agentOptions = ref([]);
+const selectedAgentId = ref("");
 const loading = ref(false);
 const submitting = ref(false);
 const errorMessage = ref("");
@@ -167,7 +203,20 @@ const pagination = reactive({
   total_pages: 0,
 });
 
-onMounted(loadServers);
+onMounted(async () => {
+  selectedAgentId.value = route.query.agentId || "";
+  await loadAgentOptions();
+  await loadServers();
+});
+
+async function loadAgentOptions() {
+  try {
+    const response = await listAgents({ page: 1, limit: 100 });
+    agentOptions.value = response.data || [];
+  } catch (error) {
+    errorMessage.value = error.message;
+  }
+}
 
 async function loadServers() {
   loading.value = true;
@@ -177,6 +226,7 @@ async function loadServers() {
     const response = await listServers({
       page: pagination.page,
       limit: pagination.limit,
+      agentId: selectedAgentId.value || undefined,
     });
 
     servers.value = response.data || [];
@@ -186,6 +236,21 @@ async function loadServers() {
   } finally {
     loading.value = false;
   }
+}
+
+async function onFilterChange() {
+  pagination.page = 1;
+  await router.replace({
+    query: {
+      agentId: selectedAgentId.value || undefined,
+    },
+  });
+  await loadServers();
+}
+
+async function changeLimit() {
+  pagination.page = 1;
+  await loadServers();
 }
 
 async function submitServer() {

@@ -3,13 +3,18 @@ const API_BASE_URL = "/api";
 import { getAuthHeaders } from "../auth/headers";
 
 export async function apiRequest(path, options = {}) {
+    const headers = {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        ...options.headers,
+    };
+
+    if (!options.skipAuth) {
+        Object.assign(headers, getAuthHeaders());
+    }
+
     const response = await fetch(`${API_BASE_URL}${path}`, {
-        headers: {
-            Accept: "application/json",
-            "Content-Type": "application/json",
-            ...getAuthHeaders(),
-            ...options.headers,
-        },
+        headers,
         ...options,
     });
 

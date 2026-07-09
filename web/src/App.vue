@@ -12,59 +12,30 @@
       </div>
 
       <nav class="nav">
-        <RouterLink class="nav-item" to="/dashboard">
-          <span>📊</span>
+        <RouterLink class="nav-item nav-item-top" to="/dashboard">
           Dashboard
         </RouterLink>
 
-        <p class="nav-section">Compliance</p>
-
-        <RouterLink class="nav-item" to="/applications">
-          <span>📦</span>
-          Applications
-        </RouterLink>
-
-        <RouterLink class="nav-item" to="/releases">
-          <span>🚀</span>
-          Releases
-        </RouterLink>
-
-        <RouterLink class="nav-item" to="/reports">
-          <span>📋</span>
-          Reports
-        </RouterLink>
-
-        <RouterLink class="nav-item" to="/servers">
-          <span>🖥️</span>
-          Servers
-        </RouterLink>
-
-        <RouterLink class="nav-item" to="/agents">
-          <span>🤖</span>
-          Agents
-        </RouterLink>
-
-        <p class="nav-section">Operations</p>
-
-        <RouterLink class="nav-item" to="/providers">
-          <span>🏢</span>
-          Providers
-        </RouterLink>
-
-        <RouterLink class="nav-item" to="/automations">
-          <span>⚙️</span>
-          Automations
-        </RouterLink>
-
-        <RouterLink class="nav-item" to="/jobs">
-          <span>🧾</span>
-          Jobs
-        </RouterLink>
-
-        <RouterLink v-if="isAdmin" class="nav-item" to="/users">
-          <span>👥</span>
-          Users
-        </RouterLink>
+        <div class="nav-scroll">
+          <SidebarNavGroup
+            v-for="group in visibleNavGroups"
+            :key="group.id"
+            :title="group.title"
+            :group-id="`nav-group-${group.id}`"
+            :expanded="expandedGroups[group.id]"
+            @toggle="toggleGroup(group.id)"
+          >
+            <RouterLink
+              v-for="item in group.items"
+              :key="item.to"
+              class="nav-item"
+              :to="item.to"
+            >
+              <span>{{ item.icon }}</span>
+              {{ item.label }}
+            </RouterLink>
+          </SidebarNavGroup>
+        </div>
       </nav>
 
       <div class="sidebar-footer">
@@ -96,21 +67,96 @@
 </template>
 
 <script setup>
-import { computed, onMounted } from "vue";
+import { computed, onMounted, reactive, watch } from "vue";
 import "./stylesheets/app-shell.css";
 import { RouterLink, RouterView, useRoute, useRouter } from "vue-router";
+import SidebarNavGroup from "./components/SidebarNavGroup.vue";
 import { clearSession, ensureSessionAccess, sessionState } from "./auth/session";
 
 const route = useRoute();
 const router = useRouter();
 
+const navGroups = [
+  {
+    id: "fleet",
+    title: "Fleet",
+    routes: ["/servers", "/agents"],
+    items: [
+      { to: "/servers", label: "Servers", icon: "🖥️" },
+      { to: "/agents", label: "Agents", icon: "🤖" },
+    ],
+  },
+  {
+    id: "compliance",
+    title: "Compliance",
+    routes: ["/applications", "/releases", "/reports"],
+    items: [
+      { to: "/applications", label: "Applications", icon: "📦" },
+      { to: "/releases", label: "Releases", icon: "🚀" },
+      { to: "/reports", label: "Reports", icon: "📋" },
+    ],
+  },
+  {
+    id: "operations",
+    title: "Operations",
+    routes: ["/providers", "/automations", "/jobs"],
+    items: [
+      { to: "/providers", label: "Providers", icon: "🏢" },
+      { to: "/automations", label: "Automations", icon: "⚙️" },
+      { to: "/jobs", label: "Jobs", icon: "🧾" },
+    ],
+  },
+  {
+    id: "administration",
+    title: "Administration",
+    adminOnly: true,
+    routes: ["/users"],
+    items: [{ to: "/users", label: "Users", icon: "👥" }],
+  },
+];
+
 const isAdmin = computed(() => sessionState.roles.includes("admin"));
 const showShell = computed(() => route.name !== "login");
+
+const visibleNavGroups = computed(() =>
+  navGroups.filter((group) => !group.adminOnly || isAdmin.value),
+);
+
+const expandedGroups = reactive(
+  Object.fromEntries(navGroups.map((group) => [group.id, false])),
+);
+
+function matchesGroupRoute(path, group) {
+  return group.routes.some(
+    (groupRoute) => path === groupRoute || path.startsWith(`${groupRoute}/`),
+  );
+}
+
+function expandGroupForRoute(path) {
+  for (const group of navGroups) {
+    if (matchesGroupRoute(path, group)) {
+      expandedGroups[group.id] = true;
+      return;
+    }
+  }
+}
+
+function toggleGroup(groupId) {
+  expandedGroups[groupId] = !expandedGroups[groupId];
+}
 
 function logout() {
   clearSession();
   router.push({ name: "login" });
 }
+
+watch(
+  () => route.path,
+  (path) => {
+    expandGroupForRoute(path);
+  },
+  { immediate: true },
+);
 
 onMounted(async () => {
   await ensureSessionAccess();

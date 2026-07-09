@@ -1,12 +1,11 @@
 package analytics
 
-import "github.com/gin-gonic/gin"
+import (
+	"github.com/gin-gonic/gin"
+	"github.com/svetlyopet/heimdallr/internal/analytics/api"
+)
 
 func RegisterRoutes(rg *gin.RouterGroup, handler Handler) {
-	analyticsRoutesV1 := rg.Group("/v1/analytics")
-	{
-		analyticsRoutesV1.GET("/automation", handler.GetAutomationOverview)
-		analyticsRoutesV1.GET("/automation/:id", handler.GetAutomationOverviewByID)
-		analyticsRoutesV1.GET("/compliance", handler.GetComplianceOverview)
-	}
+	strictHandler := api.NewStrictHandler(handler, nil)
+	api.RegisterHandlersWithOptions(rg, strictHandler, api.GinServerOptions{})
 }

@@ -1,187 +1,144 @@
 package job
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"net/http"
-	"strconv"
-	"strings"
 
-	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
+	"github.com/svetlyopet/heimdallr/internal/job/api"
 )
 
 type Handler interface {
-	List(ctx *gin.Context)
-	Get(ctx *gin.Context)
-	Create(ctx *gin.Context)
-	Update(ctx *gin.Context)
+	api.StrictServerInterface
 }
 
 type handler struct {
 	service Service
 }
 
-func (h handler) List(ctx *gin.Context) {
-	automationID, ok := getValidAutomationID(ctx)
+func (h handler) ListAutomationJobs(ctx context.Context, request api.ListAutomationJobsRequestObject) (api.ListAutomationJobsResponseObject, error) {
+	page, limit, ok := paginationParams(request.Params.Page, request.Params.Limit)
 	if !ok {
-		return
+		return api.ListAutomationJobs400JSONResponse{
+			BadRequestJSONResponse: api.BadRequestJSONResponse{Error: "page and limit must be positive integers"},
+		}, nil
 	}
 
-	page, err := strconv.Atoi(ctx.DefaultQuery("page", "1"))
-	if err != nil || page < 1 {
-		jobErr := NewJobError("invalid query param value", errors.New("page must be a positive integer"))
-		returnErrorResponse(ctx, http.StatusBadRequest, jobErr)
-		return
-	}
-
-	limit, err := strconv.Atoi(ctx.DefaultQuery("limit", "10"))
-	if err != nil || limit < 1 {
-		jobErr := NewJobError("invalid query param value", errors.New("limit must be a positive integer"))
-		returnErrorResponse(ctx, http.StatusBadRequest, jobErr)
-		return
-	}
-
-	jobs, total, err := h.service.GetAll(ctx.Request.Context(), automationID, page, limit)
+	jobs, total, err := h.service.GetAll(ctx, request.AutomationId.String(), page, limit)
 	if err != nil {
-		jobErr := NewGetJobsError(err)
-		returnErrorResponse(ctx, http.StatusInternalServerError, jobErr)
-		return
+		return api.ListAutomationJobs500JSONResponse{
+			InternalServerErrorJSONResponse: api.InternalServerErrorJSONResponse{Error: jobErrorMessage(err, "failed to list jobs")},
+		}, nil
 	}
 
-	totalPages := int64(0)
-	if total > 0 {
-		totalPages = (total + int64(limit) - 1) / int64(limit)
-	}
-
-	ctx.JSON(http.StatusOK, gin.H{
-		"data": jobs,
-		"pagination": gin.H{
-			"page":        page,
-			"limit":       limit,
-			"total":       total,
-			"total_pages": totalPages,
-		},
-	})
+	return api.ListAutomationJobs200JSONResponse{
+		Data:       jobs,
+		Pagination: buildPagination(page, limit, total),
+	}, nil
 }
 
-func (h handler) Get(ctx *gin.Context) {
-	automationID, ok := getValidAutomationID(ctx)
-	if !ok {
-		return
+func (h handler) CreateAutomationJob(ctx context.Context, request api.CreateAutomationJobRequestObject) (api.CreateAutomationJobResponseObject, error) {
+	if request.Body == nil {
+		return api.CreateAutomationJob400JSONResponse{
+			BadRequestJSONResponse: api.BadRequestJSONResponse{Error: "invalid request body"},
+		}, nil
 	}
 
-	jobID, ok := getValidJobID(ctx)
-	if !ok {
-		return
+	if request.Body.Metadata != nil {
+		if _, err := json.Marshal(request.Body.Metadata); err != nil {
+			return api.CreateAutomationJob400JSONResponse{
+				BadRequestJSONResponse: api.BadRequestJSONResponse{Error: "invalid metadata"},
+			}, nil
+		}
 	}
 
-	job, err := h.service.GetById(ctx.Request.Context(), jobID, automationID)
+	if request.Body.Output != nil && !isValidBase64(*request.Body.Output) {
+		return api.CreateAutomationJob400JSONResponse{
+			BadRequestJSONResponse: api.BadRequestJSONResponse{Error: "invalid output"},
+		}, nil
+	}
+
+	job, err := h.service.Create(ctx, request.AutomationId.String(), *request.Body)
 	if err != nil {
 		if errors.Is(err, ErrJobNotFound) {
-			jobErr := NewJobNotFoundError(err)
-			returnErrorResponse(ctx, http.StatusNotFound, jobErr)
-			return
+			return api.CreateAutomationJob404JSONResponse{
+				NotFoundJSONResponse: api.NotFoundJSONResponse{Error: jobErrorMessage(err, "automation not found")},
+			}, nil
 		}
 
-		jobErr := NewGetJobError(err)
-		returnErrorResponse(ctx, http.StatusInternalServerError, jobErr)
-		return
+		if _, ok := errors.AsType[JobError](err); ok {
+			return api.CreateAutomationJob400JSONResponse{
+				BadRequestJSONResponse: api.BadRequestJSONResponse{Error: jobErrorMessage(err, "invalid request")},
+			}, nil
+		}
+
+		return api.CreateAutomationJob500JSONResponse{
+			InternalServerErrorJSONResponse: api.InternalServerErrorJSONResponse{Error: jobErrorMessage(err, "failed to create job")},
+		}, nil
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"data": job,
-	})
+	return api.CreateAutomationJob201JSONResponse{Data: job}, nil
 }
 
-func (h handler) Create(ctx *gin.Context) {
-	automationID, ok := getValidAutomationID(ctx)
-	if !ok {
-		return
-	}
-
-	var req CreateRequest
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		jobErr := NewJobError("invalid request body", err)
-		returnErrorResponse(ctx, http.StatusBadRequest, jobErr)
-		return
-	}
-
-	if req.Metadata != nil && !json.Valid(req.Metadata) {
-		jobErr := NewInvalidMetadataError(errors.New("not valid json"))
-		returnErrorResponse(ctx, http.StatusBadRequest, jobErr)
-		return
-	}
-
-	if req.Output != "" && !isValidBase64(req.Output) {
-		jobErr := NewInvalidOutputError(errors.New("not valid encoding"))
-		returnErrorResponse(ctx, http.StatusBadRequest, jobErr)
-		return
-	}
-
-	job, err := h.service.Create(ctx.Request.Context(), automationID, req)
+func (h handler) GetAutomationJob(ctx context.Context, request api.GetAutomationJobRequestObject) (api.GetAutomationJobResponseObject, error) {
+	job, err := h.service.GetById(ctx, request.JobId, request.AutomationId.String())
 	if err != nil {
-		statusCode := http.StatusInternalServerError
 		if errors.Is(err, ErrJobNotFound) {
-			statusCode = http.StatusNotFound
+			return api.GetAutomationJob404JSONResponse{
+				NotFoundJSONResponse: api.NotFoundJSONResponse{Error: jobErrorMessage(err, "job not found")},
+			}, nil
 		}
 
-		jobErr := NewCreateJobError(err)
-		returnErrorResponse(ctx, statusCode, jobErr)
-		return
+		return api.GetAutomationJob500JSONResponse{
+			InternalServerErrorJSONResponse: api.InternalServerErrorJSONResponse{Error: jobErrorMessage(err, "failed to get job")},
+		}, nil
 	}
 
-	ctx.JSON(http.StatusCreated, gin.H{
-		"data": job,
-	})
+	return api.GetAutomationJob200JSONResponse{Data: job}, nil
 }
 
-func (h handler) Update(ctx *gin.Context) {
-	automationID, ok := getValidAutomationID(ctx)
-	if !ok {
-		return
+func (h handler) UpdateAutomationJob(ctx context.Context, request api.UpdateAutomationJobRequestObject) (api.UpdateAutomationJobResponseObject, error) {
+	if request.Body == nil {
+		return api.UpdateAutomationJob400JSONResponse{
+			BadRequestJSONResponse: api.BadRequestJSONResponse{Error: "invalid request body"},
+		}, nil
 	}
 
-	jobID, ok := getValidJobID(ctx)
-	if !ok {
-		return
+	if request.Body.Metadata != nil {
+		if _, err := json.Marshal(request.Body.Metadata); err != nil {
+			return api.UpdateAutomationJob400JSONResponse{
+				BadRequestJSONResponse: api.BadRequestJSONResponse{Error: "invalid metadata"},
+			}, nil
+		}
 	}
 
-	var req UpdateRequest
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		jobErr := NewJobError("invalid request body", err)
-		returnErrorResponse(ctx, http.StatusBadRequest, jobErr)
-		return
+	if request.Body.Output != nil && !isValidBase64(*request.Body.Output) {
+		return api.UpdateAutomationJob400JSONResponse{
+			BadRequestJSONResponse: api.BadRequestJSONResponse{Error: "invalid output"},
+		}, nil
 	}
 
-	if req.Metadata != nil && !json.Valid(req.Metadata) {
-		jobErr := NewInvalidMetadataError(errors.New("not valid json"))
-		returnErrorResponse(ctx, http.StatusBadRequest, jobErr)
-		return
-	}
-
-	if req.Output != "" && !isValidBase64(req.Output) {
-		jobErr := NewInvalidOutputError(errors.New("not valid encoding"))
-		returnErrorResponse(ctx, http.StatusBadRequest, jobErr)
-		return
-	}
-
-	job, err := h.service.Update(ctx.Request.Context(), automationID, jobID, req)
+	job, err := h.service.Update(ctx, request.AutomationId.String(), request.JobId, *request.Body)
 	if err != nil {
-		statusCode := http.StatusInternalServerError
 		if errors.Is(err, ErrJobNotFound) {
-			statusCode = http.StatusNotFound
+			return api.UpdateAutomationJob404JSONResponse{
+				NotFoundJSONResponse: api.NotFoundJSONResponse{Error: jobErrorMessage(err, "job not found")},
+			}, nil
 		}
 
-		jobErr := NewUpdateJobError(err)
-		returnErrorResponse(ctx, statusCode, jobErr)
-		return
+		if _, ok := errors.AsType[JobError](err); ok {
+			return api.UpdateAutomationJob400JSONResponse{
+				BadRequestJSONResponse: api.BadRequestJSONResponse{Error: jobErrorMessage(err, "invalid request")},
+			}, nil
+		}
+
+		return api.UpdateAutomationJob500JSONResponse{
+			InternalServerErrorJSONResponse: api.InternalServerErrorJSONResponse{Error: jobErrorMessage(err, "failed to update job")},
+		}, nil
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"data": job,
-	})
+	return api.UpdateAutomationJob200JSONResponse{Data: job}, nil
 }
 
 func NewHandler(service Service) (Handler, error) {
@@ -190,45 +147,40 @@ func NewHandler(service Service) (Handler, error) {
 	}, nil
 }
 
-func getValidAutomationID(ctx *gin.Context) (string, bool) {
-	automationID := strings.TrimSpace(ctx.Param("automation_id"))
-	if automationID == "" {
-		jobErr := NewInvalidAutomationIDError(ErrInvalidAutomationID)
-		returnErrorResponse(ctx, http.StatusBadRequest, jobErr)
-		return "", false
+func paginationParams(pagePtr, limitPtr *api.Page) (page int, limit int, ok bool) {
+	page = 1
+	limit = 10
+
+	if pagePtr != nil {
+		page = int(*pagePtr)
+	}
+	if limitPtr != nil {
+		limit = int(*limitPtr)
 	}
 
-	if _, err := uuid.Parse(automationID); err != nil {
-		jobErr := NewInvalidAutomationIDError(err)
-		returnErrorResponse(ctx, http.StatusBadRequest, jobErr)
-		return "", false
-	}
-
-	return automationID, true
+	return page, limit, page >= 1 && limit >= 1
 }
 
-func getValidJobID(ctx *gin.Context) (string, bool) {
-	jobID := strings.TrimSpace(ctx.Param("job_id"))
-	if jobID == "" {
-		jobErr := NewInvalidJobIDError(ErrInvalidJobID)
-		returnErrorResponse(ctx, http.StatusBadRequest, jobErr)
-		return "", false
+func buildPagination(page, limit int, total int64) api.Pagination {
+	totalPages := int64(0)
+	if total > 0 {
+		totalPages = (total + int64(limit) - 1) / int64(limit)
 	}
 
-	return jobID, true
+	return api.Pagination{
+		Page:       page,
+		Limit:      limit,
+		Total:      int(total),
+		TotalPages: int(totalPages),
+	}
 }
 
-func returnErrorResponse(ctx *gin.Context, statusCode int, err error) {
+func jobErrorMessage(err error, fallback string) string {
 	if jobErr, ok := errors.AsType[JobError](err); ok {
-		ctx.JSON(statusCode, gin.H{
-			"error": jobErr.Message,
-		})
-		return
+		return jobErr.Message
 	}
 
-	ctx.JSON(http.StatusInternalServerError, gin.H{
-		"error": http.StatusText(http.StatusInternalServerError),
-	})
+	return fallback
 }
 
 func isValidBase64(value string) bool {

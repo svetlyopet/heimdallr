@@ -104,6 +104,7 @@ func autoMigrateSQLite(db *gorm.DB) error {
 		&token.APIToken{},
 		&server.Server{},
 		&agent.Agent{},
+		&agent.ServerAgent{},
 		&server.ServerJob{},
 		&server.ServerRelease{},
 	)

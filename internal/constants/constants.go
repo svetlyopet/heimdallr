@@ -5,8 +5,6 @@ const (
 
 	ApiDefaultPort = "8080"
 	ApiDefaultHost = "localhost"
-
-	WebPublicPath = "./public"
 )
 
 var (

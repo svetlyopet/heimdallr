@@ -1,127 +1,117 @@
 package provider
 
 import (
+	"context"
 	"errors"
-	"net/http"
-	"strconv"
 
-	"github.com/gin-gonic/gin"
+	"github.com/svetlyopet/heimdallr/internal/provider/api"
 )
 
 type Handler interface {
-	List(ctx *gin.Context)
-	Get(ctx *gin.Context)
-	Create(ctx *gin.Context)
+	api.StrictServerInterface
 }
 
 type handler struct {
 	service Service
 }
 
-func (h handler) List(ctx *gin.Context) {
-	page, err := strconv.Atoi(ctx.DefaultQuery("page", "1"))
-	if err != nil || page < 1 {
-		providerErr := NewProviderError("invalid query param value", errors.New("page must be a positive integer"))
-		returnErrorResponse(ctx, http.StatusBadRequest, providerErr)
-		return
+func (h handler) ListProviders(ctx context.Context, request api.ListProvidersRequestObject) (api.ListProvidersResponseObject, error) {
+	page, limit, ok := paginationParams(request.Params.Page, request.Params.Limit)
+	if !ok {
+		return api.ListProviders400JSONResponse{
+			BadRequestJSONResponse: api.BadRequestJSONResponse{Error: "page and limit must be positive integers"},
+		}, nil
 	}
 
-	limit, err := strconv.Atoi(ctx.DefaultQuery("limit", "10"))
-	if err != nil || limit < 1 {
-		providerErr := NewProviderError("invalid query param value", errors.New("limit must be a positive integer"))
-		returnErrorResponse(ctx, http.StatusBadRequest, providerErr)
-		return
-	}
-
-	providers, total, err := h.service.GetAll(ctx.Request.Context(), page, limit)
+	providers, total, err := h.service.GetAll(ctx, page, limit)
 	if err != nil {
-		providerErr := NewGetProvidersError(err)
-		returnErrorResponse(ctx, http.StatusInternalServerError, providerErr)
-		return
+		return api.ListProviders500JSONResponse{
+			InternalServerErrorJSONResponse: api.InternalServerErrorJSONResponse{Error: providerErrorMessage(err, "failed to list providers")},
+		}, nil
 	}
 
+	return api.ListProviders200JSONResponse{
+		Data:       providers,
+		Pagination: buildPagination(page, limit, total),
+	}, nil
+}
+
+func (h handler) CreateProvider(ctx context.Context, request api.CreateProviderRequestObject) (api.CreateProviderResponseObject, error) {
+	if request.Body == nil {
+		return api.CreateProvider400JSONResponse{
+			BadRequestJSONResponse: api.BadRequestJSONResponse{Error: "invalid request body"},
+		}, nil
+	}
+
+	provider, err := h.service.Create(ctx, *request.Body)
+	if err != nil {
+		if errors.Is(err, ErrProviderAlreadyExists) {
+			return api.CreateProvider409JSONResponse{
+				ConflictJSONResponse: api.ConflictJSONResponse{Error: providerErrorMessage(err, "provider already exists")},
+			}, nil
+		}
+
+		return api.CreateProvider500JSONResponse{
+			InternalServerErrorJSONResponse: api.InternalServerErrorJSONResponse{Error: providerErrorMessage(err, "failed to create provider")},
+		}, nil
+	}
+
+	return api.CreateProvider201JSONResponse{Data: provider}, nil
+}
+
+func (h handler) GetProvider(ctx context.Context, request api.GetProviderRequestObject) (api.GetProviderResponseObject, error) {
+	provider, err := h.service.GetById(ctx, request.ProviderId.String())
+	if err != nil {
+		if errors.Is(err, ErrProviderNotFound) {
+			return api.GetProvider404JSONResponse{
+				NotFoundJSONResponse: api.NotFoundJSONResponse{Error: providerErrorMessage(err, "provider not found")},
+			}, nil
+		}
+
+		return api.GetProvider500JSONResponse{
+			InternalServerErrorJSONResponse: api.InternalServerErrorJSONResponse{Error: providerErrorMessage(err, "failed to get provider")},
+		}, nil
+	}
+
+	return api.GetProvider200JSONResponse{Data: provider}, nil
+}
+
+func NewHandler(service Service) (Handler, error) {
+	return &handler{service: service}, nil
+}
+
+func paginationParams(pagePtr, limitPtr *api.Page) (page int, limit int, ok bool) {
+	page = 1
+	limit = 10
+
+	if pagePtr != nil {
+		page = int(*pagePtr)
+	}
+	if limitPtr != nil {
+		limit = int(*limitPtr)
+	}
+
+	return page, limit, page >= 1 && limit >= 1
+}
+
+func buildPagination(page, limit int, total int64) api.Pagination {
 	totalPages := int64(0)
 	if total > 0 {
 		totalPages = (total + int64(limit) - 1) / int64(limit)
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"data": providers,
-		"pagination": gin.H{
-			"page":        page,
-			"limit":       limit,
-			"total":       total,
-			"total_pages": totalPages,
-		},
-	})
+	return api.Pagination{
+		Page:       page,
+		Limit:      limit,
+		Total:      int(total),
+		TotalPages: int(totalPages),
+	}
 }
 
-func (h handler) Get(ctx *gin.Context) {
-	providerID := ctx.Param("provider_id")
-	if providerID == "" {
-		providerErr := NewInvalidProviderIDError(ErrInvalidProviderID)
-		returnErrorResponse(ctx, http.StatusBadRequest, providerErr)
-		return
-	}
-
-	provider, err := h.service.GetById(ctx.Request.Context(), providerID)
-	if err != nil {
-		if errors.Is(err, ErrProviderNotFound) {
-			providerErr := NewProviderNotFoundError(err)
-			returnErrorResponse(ctx, http.StatusNotFound, providerErr)
-			return
-		}
-
-		providerErr := NewGetProviderError(err)
-		returnErrorResponse(ctx, http.StatusInternalServerError, providerErr)
-		return
-	}
-
-	ctx.JSON(http.StatusOK, gin.H{
-		"data": provider,
-	})
-}
-
-func (h handler) Create(ctx *gin.Context) {
-	var req CreateRequest
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		providerErr := NewProviderError("invalid request body", err)
-		returnErrorResponse(ctx, http.StatusBadRequest, providerErr)
-		return
-	}
-
-	provider, err := h.service.Create(ctx.Request.Context(), req)
-	if err != nil {
-		statusCode := http.StatusInternalServerError
-		if errors.Is(err, ErrProviderAlreadyExists) {
-			statusCode = http.StatusConflict
-		}
-
-		providerErr := NewCreateProviderError(err)
-		returnErrorResponse(ctx, statusCode, providerErr)
-		return
-	}
-
-	ctx.JSON(http.StatusCreated, gin.H{
-		"data": provider,
-	})
-}
-
-func NewHandler(service Service) (Handler, error) {
-	return &handler{
-		service: service,
-	}, nil
-}
-
-func returnErrorResponse(ctx *gin.Context, statusCode int, err error) {
+func providerErrorMessage(err error, fallback string) string {
 	if providerErr, ok := errors.AsType[ProviderError](err); ok {
-		ctx.JSON(statusCode, gin.H{
-			"error": providerErr.Message,
-		})
-		return
+		return providerErr.Message
 	}
 
-	ctx.JSON(http.StatusInternalServerError, gin.H{
-		"error": http.StatusText(http.StatusInternalServerError),
-	})
+	return fallback
 }

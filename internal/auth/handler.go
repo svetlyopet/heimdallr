@@ -1,126 +1,254 @@
 package auth
 
 import (
+	"context"
 	"errors"
-	"net/http"
 
-	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
+	"github.com/svetlyopet/heimdallr/internal/auth/api"
 )
 
 type Handler interface {
-	List(ctx *gin.Context)
-	Create(ctx *gin.Context)
-	Update(ctx *gin.Context)
-	Delete(ctx *gin.Context)
+	api.StrictServerInterface
 }
 
 type handler struct {
-	service Service
+	service      Service
+	tokenService APITokenService
 }
 
-func (h handler) List(ctx *gin.Context) {
-	users, err := h.service.List(ctx.Request.Context())
-	if err != nil {
-		returnErrorResponse(ctx, http.StatusInternalServerError, NewListUsersError(err))
-		return
+func (h handler) Login(ctx context.Context, request api.LoginRequestObject) (api.LoginResponseObject, error) {
+	if request.Body == nil {
+		return api.Login400JSONResponse{
+			BadRequestJSONResponse: api.BadRequestJSONResponse{Error: "invalid request body"},
+		}, nil
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{"data": users})
+	user, err := h.service.Authenticate(ctx, request.Body.Username, request.Body.Password)
+	if err != nil {
+		return api.Login401JSONResponse{
+			UnauthorizedJSONResponse: api.UnauthorizedJSONResponse{Error: "invalid credentials"},
+		}, nil
+	}
+
+	userID, err := uuid.Parse(user.Id)
+	if err != nil {
+		return api.Login500JSONResponse{
+			InternalServerErrorJSONResponse: api.InternalServerErrorJSONResponse{Error: "invalid user id"},
+		}, nil
+	}
+
+	created, err := h.tokenService.Create(ctx, SessionTokenCreateRequest{
+		Name:   "session-" + user.Username,
+		Scopes: loginScopesForRoles(rolesFromSlice(user.Roles)),
+	}, &userID)
+	if err != nil {
+		return api.Login500JSONResponse{
+			InternalServerErrorJSONResponse: api.InternalServerErrorJSONResponse{Error: "failed to create session token"},
+		}, nil
+	}
+
+	return api.Login200JSONResponse{
+		Data: api.LoginResponse{Token: created.Token},
+	}, nil
 }
 
-func (h handler) Create(ctx *gin.Context) {
-	var req CreateRequest
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		authErr := NewAuthError("invalid request body", err)
-		returnErrorResponse(ctx, http.StatusBadRequest, authErr)
-		return
+func (h handler) ListUsers(ctx context.Context, _ api.ListUsersRequestObject) (api.ListUsersResponseObject, error) {
+	if _, err := h.requireAdmin(ctx); err != nil {
+		return adminListUsersError(err)
 	}
 
-	user, err := h.service.Create(ctx.Request.Context(), req)
+	users, err := h.service.List(ctx)
 	if err != nil {
-		statusCode := http.StatusInternalServerError
+		return api.ListUsers500JSONResponse{
+			InternalServerErrorJSONResponse: api.InternalServerErrorJSONResponse{Error: authErrorMessage(err, "failed to list users")},
+		}, nil
+	}
+
+	return api.ListUsers200JSONResponse{Data: users}, nil
+}
+
+func (h handler) CreateUser(ctx context.Context, request api.CreateUserRequestObject) (api.CreateUserResponseObject, error) {
+	if _, err := h.requireAdmin(ctx); err != nil {
+		return adminCreateUserError(err)
+	}
+
+	if request.Body == nil {
+		return api.CreateUser400JSONResponse{
+			BadRequestJSONResponse: api.BadRequestJSONResponse{Error: "invalid request body"},
+		}, nil
+	}
+
+	user, err := h.service.Create(ctx, *request.Body)
+	if err != nil {
 		switch {
 		case errors.Is(err, ErrUserAlreadyExists):
-			statusCode = http.StatusConflict
+			return api.CreateUser409JSONResponse{
+				ConflictJSONResponse: api.ConflictJSONResponse{Error: authErrorMessage(err, "user already exists")},
+			}, nil
 		case errors.Is(err, ErrInvalidRole), errors.Is(err, ErrInvalidPasswordValue), errors.Is(err, ErrInvalidCredentials):
-			statusCode = http.StatusBadRequest
+			return api.CreateUser400JSONResponse{
+				BadRequestJSONResponse: api.BadRequestJSONResponse{Error: authErrorMessage(err, err.Error())},
+			}, nil
 		}
 
-		authErr := NewCreateUserError(err)
-		returnErrorResponse(ctx, statusCode, authErr)
-		return
+		return api.CreateUser500JSONResponse{
+			InternalServerErrorJSONResponse: api.InternalServerErrorJSONResponse{Error: authErrorMessage(err, "failed to create user")},
+		}, nil
 	}
 
-	ctx.JSON(http.StatusCreated, gin.H{"data": user})
+	return api.CreateUser201JSONResponse{Data: user}, nil
 }
 
-func (h handler) Update(ctx *gin.Context) {
-	userID := ctx.Param("user_id")
-	if userID == "" {
-		authErr := NewInvalidUserIDError(ErrInvalidUserID)
-		returnErrorResponse(ctx, http.StatusBadRequest, authErr)
-		return
+func (h handler) UpdateUser(ctx context.Context, request api.UpdateUserRequestObject) (api.UpdateUserResponseObject, error) {
+	if _, err := h.requireAdmin(ctx); err != nil {
+		return adminUpdateUserError(err)
 	}
 
-	var req UpdateRequest
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		authErr := NewAuthError("invalid request body", err)
-		returnErrorResponse(ctx, http.StatusBadRequest, authErr)
-		return
+	if request.Body == nil {
+		return api.UpdateUser400JSONResponse{
+			BadRequestJSONResponse: api.BadRequestJSONResponse{Error: "invalid request body"},
+		}, nil
 	}
 
-	user, err := h.service.Update(ctx.Request.Context(), userID, req)
+	user, err := h.service.Update(ctx, request.UserId.String(), *request.Body)
 	if err != nil {
-		statusCode := http.StatusInternalServerError
 		switch {
 		case errors.Is(err, ErrUserNotFound):
-			statusCode = http.StatusNotFound
+			return api.UpdateUser404JSONResponse{
+				NotFoundJSONResponse: api.NotFoundJSONResponse{Error: authErrorMessage(err, "user not found")},
+			}, nil
 		case errors.Is(err, ErrInvalidRole), errors.Is(err, ErrInvalidPasswordValue), errors.Is(err, ErrInvalidCredentials), errors.Is(err, ErrInvalidUserID), errors.Is(err, ErrRootRoleForbidden):
-			statusCode = http.StatusBadRequest
+			return api.UpdateUser400JSONResponse{
+				BadRequestJSONResponse: api.BadRequestJSONResponse{Error: authErrorMessage(err, err.Error())},
+			}, nil
 		}
 
-		authErr := NewUpdateUserError(err)
-		returnErrorResponse(ctx, statusCode, authErr)
-		return
+		return api.UpdateUser500JSONResponse{
+			InternalServerErrorJSONResponse: api.InternalServerErrorJSONResponse{Error: authErrorMessage(err, "failed to update user")},
+		}, nil
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{"data": user})
+	return api.UpdateUser200JSONResponse{Data: user}, nil
 }
 
-func (h handler) Delete(ctx *gin.Context) {
-	userID := ctx.Param("user_id")
-	if userID == "" {
-		authErr := NewInvalidUserIDError(ErrInvalidUserID)
-		returnErrorResponse(ctx, http.StatusBadRequest, authErr)
-		return
+func (h handler) DeleteUser(ctx context.Context, request api.DeleteUserRequestObject) (api.DeleteUserResponseObject, error) {
+	if _, err := h.requireAdmin(ctx); err != nil {
+		return adminDeleteUserError(err)
 	}
 
-	if err := h.service.Delete(ctx.Request.Context(), userID); err != nil {
-		statusCode := http.StatusInternalServerError
+	if err := h.service.Delete(ctx, request.UserId.String()); err != nil {
 		switch {
 		case errors.Is(err, ErrUserNotFound):
-			statusCode = http.StatusNotFound
+			return api.DeleteUser404JSONResponse{
+				NotFoundJSONResponse: api.NotFoundJSONResponse{Error: authErrorMessage(err, "user not found")},
+			}, nil
 		case errors.Is(err, ErrInvalidUserID), errors.Is(err, ErrRootDeleteForbidden):
-			statusCode = http.StatusBadRequest
+			return api.DeleteUser400JSONResponse{
+				BadRequestJSONResponse: api.BadRequestJSONResponse{Error: authErrorMessage(err, err.Error())},
+			}, nil
 		}
 
-		authErr := NewDeleteUserError(err)
-		returnErrorResponse(ctx, statusCode, authErr)
-		return
+		return api.DeleteUser500JSONResponse{
+			InternalServerErrorJSONResponse: api.InternalServerErrorJSONResponse{Error: authErrorMessage(err, "failed to delete user")},
+		}, nil
 	}
 
-	ctx.Status(http.StatusNoContent)
+	return api.DeleteUser204Response{}, nil
 }
 
-func NewHandler(service Service) (Handler, error) {
-	return &handler{service: service}, nil
+func NewHandler(service Service, tokenService APITokenService) (Handler, error) {
+	return &handler{
+		service:      service,
+		tokenService: tokenService,
+	}, nil
 }
 
-func returnErrorResponse(ctx *gin.Context, statusCode int, err error) {
+func (h handler) requireAdmin(ctx context.Context) (api.AuthUser, error) {
+	gctx, ok := GinContextFrom(ctx)
+	if !ok {
+		return api.AuthUser{}, ErrInvalidCredentials
+	}
+
+	bearerToken := ExtractBearerToken(gctx.GetHeader("Authorization"))
+	if bearerToken == "" {
+		return api.AuthUser{}, ErrInvalidCredentials
+	}
+
+	user, err := h.tokenService.Authenticate(ctx, bearerToken)
+	if err != nil {
+		return api.AuthUser{}, ErrInvalidCredentials
+	}
+
+	if !h.service.HasAnyRole(user, RoleAdmin) {
+		return api.AuthUser{}, ErrInsufficientRole
+	}
+
+	return user, nil
+}
+
+func loginScopesForRoles(roles []string) []string {
+	for _, role := range roles {
+		if role == RoleAdmin {
+			return []string{"admin"}
+		}
+	}
+
+	return []string{"read"}
+}
+
+func authErrorMessage(err error, fallback string) string {
 	if authErr, ok := errors.AsType[AuthError](err); ok {
-		ctx.JSON(statusCode, gin.H{"error": authErr.Message})
-		return
+		return authErr.Message
 	}
 
-	ctx.JSON(http.StatusInternalServerError, gin.H{"error": http.StatusText(http.StatusInternalServerError)})
+	return fallback
+}
+
+func adminListUsersError(err error) (api.ListUsersResponseObject, error) {
+	if errors.Is(err, ErrInsufficientRole) {
+		return api.ListUsers403JSONResponse{
+			ForbiddenJSONResponse: api.ForbiddenJSONResponse{Error: ErrInsufficientRole.Error()},
+		}, nil
+	}
+
+	return api.ListUsers401JSONResponse{
+		UnauthorizedJSONResponse: api.UnauthorizedJSONResponse{Error: ErrInvalidCredentials.Error()},
+	}, nil
+}
+
+func adminCreateUserError(err error) (api.CreateUserResponseObject, error) {
+	if errors.Is(err, ErrInsufficientRole) {
+		return api.CreateUser403JSONResponse{
+			ForbiddenJSONResponse: api.ForbiddenJSONResponse{Error: ErrInsufficientRole.Error()},
+		}, nil
+	}
+
+	return api.CreateUser401JSONResponse{
+		UnauthorizedJSONResponse: api.UnauthorizedJSONResponse{Error: ErrInvalidCredentials.Error()},
+	}, nil
+}
+
+func adminUpdateUserError(err error) (api.UpdateUserResponseObject, error) {
+	if errors.Is(err, ErrInsufficientRole) {
+		return api.UpdateUser403JSONResponse{
+			ForbiddenJSONResponse: api.ForbiddenJSONResponse{Error: ErrInsufficientRole.Error()},
+		}, nil
+	}
+
+	return api.UpdateUser401JSONResponse{
+		UnauthorizedJSONResponse: api.UnauthorizedJSONResponse{Error: ErrInvalidCredentials.Error()},
+	}, nil
+}
+
+func adminDeleteUserError(err error) (api.DeleteUserResponseObject, error) {
+	if errors.Is(err, ErrInsufficientRole) {
+		return api.DeleteUser403JSONResponse{
+			ForbiddenJSONResponse: api.ForbiddenJSONResponse{Error: ErrInsufficientRole.Error()},
+		}, nil
+	}
+
+	return api.DeleteUser401JSONResponse{
+		UnauthorizedJSONResponse: api.UnauthorizedJSONResponse{Error: ErrInvalidCredentials.Error()},
+	}, nil
 }

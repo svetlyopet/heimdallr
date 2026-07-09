@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"github.com/svetlyopet/heimdallr/internal/provider/api"
 	"github.com/svetlyopet/heimdallr/internal/testutil"
 	"gorm.io/gorm"
 )
@@ -21,9 +22,9 @@ func newProviderService(t *testing.T) Service {
 func TestServiceCreateReturnsProvider(t *testing.T) {
 	svc := newProviderService(t)
 
-	created, err := svc.Create(context.Background(), CreateRequest{
+	created, err := svc.Create(context.Background(), api.ProviderCreateRequest{
 		Name: "awx",
-		URL:  "https://awx.example.com",
+		Url:  api.URL("https://awx.example.com"),
 	})
 	require.NoError(t, err)
 	require.Equal(t, "awx", created.Name)
@@ -32,7 +33,7 @@ func TestServiceCreateReturnsProvider(t *testing.T) {
 func TestServiceCreateReturnsConflictForDuplicateName(t *testing.T) {
 	svc := newProviderService(t)
 
-	req := CreateRequest{Name: "dup-provider", URL: "https://awx.example.com"}
+	req := api.ProviderCreateRequest{Name: "dup-provider", Url: api.URL("https://awx.example.com")}
 	_, err := svc.Create(context.Background(), req)
 	require.NoError(t, err)
 

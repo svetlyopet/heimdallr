@@ -5,13 +5,14 @@ import (
 	"errors"
 	"log/slog"
 
+	"github.com/svetlyopet/heimdallr/internal/analytics/api"
 	"github.com/svetlyopet/heimdallr/internal/logger"
 )
 
 type Service interface {
-	GetAutomationOverview(ctx context.Context) (AutomationAnalyticsResponse, error)
-	GetAutomationOverviewByID(ctx context.Context, automationID string) (AutomationAnalyticsResponse, error)
-	GetComplianceOverview(ctx context.Context) (ComplianceAnalyticsResponse, error)
+	GetAutomationOverview(ctx context.Context) (api.AutomationAnalytics, error)
+	GetAutomationOverviewByID(ctx context.Context, automationID string) (api.AutomationAnalytics, error)
+	GetComplianceOverview(ctx context.Context) (api.ComplianceAnalytics, error)
 }
 
 type service struct {
@@ -19,7 +20,7 @@ type service struct {
 	logger     *logger.Logger
 }
 
-func (s service) GetAutomationOverview(ctx context.Context) (AutomationAnalyticsResponse, error) {
+func (s service) GetAutomationOverview(ctx context.Context) (api.AutomationAnalytics, error) {
 	response, err := s.repository.GetAutomationOverview(ctx)
 	if err != nil {
 		s.logger.ErrorWithStack(
@@ -27,17 +28,17 @@ func (s service) GetAutomationOverview(ctx context.Context) (AutomationAnalytics
 			"failed to get automation analytics",
 			err,
 		)
-		return AutomationAnalyticsResponse{}, ErrGetAutomationAnalytics
+		return api.AutomationAnalytics{}, ErrGetAutomationAnalytics
 	}
 
 	return response, nil
 }
 
-func (s service) GetAutomationOverviewByID(ctx context.Context, automationID string) (AutomationAnalyticsResponse, error) {
+func (s service) GetAutomationOverviewByID(ctx context.Context, automationID string) (api.AutomationAnalytics, error) {
 	response, err := s.repository.GetAutomationOverviewByID(ctx, automationID)
 	if err != nil {
 		if errors.Is(err, ErrAutomationNotFound) {
-			return AutomationAnalyticsResponse{}, ErrAutomationNotFound
+			return api.AutomationAnalytics{}, ErrAutomationNotFound
 		}
 
 		s.logger.ErrorWithStack(
@@ -46,17 +47,17 @@ func (s service) GetAutomationOverviewByID(ctx context.Context, automationID str
 			err,
 			slog.String("automation_id", automationID),
 		)
-		return AutomationAnalyticsResponse{}, ErrGetAutomationAnalytics
+		return api.AutomationAnalytics{}, ErrGetAutomationAnalytics
 	}
 
 	return response, nil
 }
 
-func (s service) GetComplianceOverview(ctx context.Context) (ComplianceAnalyticsResponse, error) {
+func (s service) GetComplianceOverview(ctx context.Context) (api.ComplianceAnalytics, error) {
 	response, err := s.repository.GetComplianceOverview(ctx)
 	if err != nil {
 		s.logger.ErrorWithStack(ctx, "failed to get compliance analytics", err)
-		return ComplianceAnalyticsResponse{}, ErrGetComplianceAnalytics
+		return api.ComplianceAnalytics{}, ErrGetComplianceAnalytics
 	}
 
 	return response, nil

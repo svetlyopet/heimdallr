@@ -7,21 +7,25 @@ import (
 	"log/slog"
 
 	"github.com/google/uuid"
+	"github.com/svetlyopet/heimdallr/internal/agent/api"
 	"github.com/svetlyopet/heimdallr/internal/logger"
 	"github.com/svetlyopet/heimdallr/internal/server"
+	serverapi "github.com/svetlyopet/heimdallr/internal/server/api"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
 type Service interface {
-	GetAll(ctx context.Context, serverID string, page int, limit int) ([]GetResponse, int64, error)
-	GetById(ctx context.Context, agentID string, serverID string) (GetResponse, error)
-	Create(ctx context.Context, serverID string, req CreateRequest) (GetResponse, error)
-	Delete(ctx context.Context, serverID string, agentID string) error
+	GetAll(ctx context.Context, serverID string, page int, limit int) ([]api.Agent, int64, error)
+	GetById(ctx context.Context, agentID string, serverID string) (api.Agent, error)
+	CreateOnServer(ctx context.Context, serverID string, req api.ServerAgentRequest) (api.Agent, error)
+	Detach(ctx context.Context, serverID string, agentID string) error
 
-	ListGlobal(ctx context.Context, unassignedOnly bool, page int, limit int) ([]GetResponse, int64, error)
-	GetByIdGlobal(ctx context.Context, agentID string) (GetResponse, error)
-	CreateUnassigned(ctx context.Context, req CreateRequest) (GetResponse, error)
+	ListGlobal(ctx context.Context, filter ListFilters, page int, limit int) ([]api.Agent, int64, error)
+	GetByIdGlobal(ctx context.Context, agentID string) (api.AgentDetail, error)
+	ListServers(ctx context.Context, agentID string, page int, limit int) ([]api.AgentServer, int64, error)
+	CreateUnassigned(ctx context.Context, req api.AgentCreateRequest) (api.Agent, error)
+	DeleteGlobal(ctx context.Context, agentID string) error
 }
 
 type service struct {
@@ -30,7 +34,7 @@ type service struct {
 	logger              *logger.Logger
 }
 
-func (s service) GetAll(ctx context.Context, serverID string, page int, limit int) ([]GetResponse, int64, error) {
+func (s service) GetAll(ctx context.Context, serverID string, page int, limit int) ([]api.Agent, int64, error) {
 	if _, err := uuid.Parse(serverID); err != nil {
 		return nil, 0, ErrInvalidServerID
 	}
@@ -58,63 +62,95 @@ func (s service) GetAll(ctx context.Context, serverID string, page int, limit in
 	return mapEntitiesToResponses(agents), total, nil
 }
 
-func (s service) GetById(ctx context.Context, agentID string, serverID string) (GetResponse, error) {
+func (s service) GetById(ctx context.Context, agentID string, serverID string) (api.Agent, error) {
 	agent, err := s.repository.FindById(ctx, agentID, serverID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return GetResponse{}, ErrAgentNotFound
+			return api.Agent{}, ErrAgentNotFound
 		}
 
 		s.logger.ErrorWithStack(ctx, "failed to find agent by id", err,
 			slog.String("agent_id", agentID),
 			slog.String("server_id", serverID),
 		)
-		return GetResponse{}, ErrGetAgent
+		return api.Agent{}, ErrGetAgent
 	}
 
-	return mapEntityToResponse(agent), nil
+	return mapEntityToResponse(agent, 1), nil
 }
 
-func (s service) Create(ctx context.Context, serverID string, req CreateRequest) (GetResponse, error) {
+func (s service) CreateOnServer(ctx context.Context, serverID string, req api.ServerAgentRequest) (api.Agent, error) {
 	parsedServerID, err := uuid.Parse(serverID)
 	if err != nil {
-		return GetResponse{}, ErrInvalidServerID
+		return api.Agent{}, ErrInvalidServerID
 	}
 
 	if _, err := s.serverLookupService.GetById(ctx, serverID); err != nil {
 		if errors.Is(err, server.ErrServerNotFound) {
-			return GetResponse{}, server.ErrServerNotFound
+			return api.Agent{}, server.ErrServerNotFound
 		}
 
 		s.logger.ErrorWithStack(ctx, "failed to find server before creating agent", err,
 			slog.String("server_id", serverID),
 		)
-		return GetResponse{}, ErrCreateAgent
+		return api.Agent{}, ErrCreateAgent
 	}
 
-	serverIDCopy := parsedServerID
+	if req.AgentId != nil {
+		if err := s.repository.AttachToServer(ctx, parsedServerID, []uuid.UUID{*req.AgentId}); err != nil {
+			if errors.Is(err, ErrAgentAlreadyLinked) {
+				return api.Agent{}, ErrAgentAlreadyLinked
+			}
+
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return api.Agent{}, ErrAgentNotFound
+			}
+
+			return api.Agent{}, ErrCreateAgent
+		}
+
+		agent, err := s.repository.FindById(ctx, req.AgentId.String(), serverID)
+		if err != nil {
+			return api.Agent{}, ErrGetAgent
+		}
+
+		return mapEntityToResponse(agent, 1), nil
+	}
+
+	name := stringValue(req.Name)
+	if name == "" {
+		return api.Agent{}, ErrCreateAgent
+	}
+
+	if err := s.ensureAgentNameAvailable(ctx, name); err != nil {
+		return api.Agent{}, err
+	}
+
 	agent := Agent{
 		ID:       uuid.New(),
-		ServerID: &serverIDCopy,
-		Name:     req.Name,
-		Type:     req.Type,
-		Version:  req.Version,
-		Metadata: normalizeMetadata(req.Metadata),
+		Name:     name,
+		Type:     stringValue(req.Type),
+		Version:  stringValue(req.Version),
+		Metadata: metadataToEntity(req.Metadata),
 	}
 
-	created, err := s.repository.CreateOnServer(ctx, agent)
+	created, err := s.repository.CreateOnServer(ctx, parsedServerID, agent)
 	if err != nil {
-		s.logger.ErrorWithStack(ctx, "failed to create agent", err,
+		if isUniqueViolation(err) {
+			return api.Agent{}, ErrAgentAlreadyExists
+		}
+
+		s.logger.ErrorWithStack(ctx, "failed to create agent on server", err,
 			slog.String("server_id", serverID),
-			slog.String("agent_name", req.Name),
+			slog.String("agent_name", name),
 		)
-		return GetResponse{}, ErrCreateAgent
+		return api.Agent{}, ErrCreateAgent
 	}
 
-	return mapEntityToResponse(created), nil
+	return mapEntityToResponse(created, 1), nil
 }
 
-func (s service) Delete(ctx context.Context, serverID string, agentID string) error {
+func (s service) Detach(ctx context.Context, serverID string, agentID string) error {
 	if _, err := s.serverLookupService.GetById(ctx, serverID); err != nil {
 		if errors.Is(err, server.ErrServerNotFound) {
 			return server.ErrServerNotFound
@@ -123,12 +159,12 @@ func (s service) Delete(ctx context.Context, serverID string, agentID string) er
 		return ErrDeleteAgent
 	}
 
-	if err := s.repository.Delete(ctx, serverID, agentID); err != nil {
+	if err := s.repository.DetachFromServer(ctx, serverID, agentID); err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return ErrAgentNotFound
 		}
 
-		s.logger.ErrorWithStack(ctx, "failed to delete agent", err,
+		s.logger.ErrorWithStack(ctx, "failed to detach agent", err,
 			slog.String("server_id", serverID),
 			slog.String("agent_id", agentID),
 		)
@@ -138,60 +174,142 @@ func (s service) Delete(ctx context.Context, serverID string, agentID string) er
 	return nil
 }
 
-func (s service) ListGlobal(ctx context.Context, unassignedOnly bool, page int, limit int) ([]GetResponse, int64, error) {
+func (s service) ListGlobal(ctx context.Context, filter ListFilters, page int, limit int) ([]api.Agent, int64, error) {
 	offset := (page - 1) * limit
 
-	agents, total, err := s.repository.FindAllGlobal(ctx, unassignedOnly, limit, offset)
+	agents, total, err := s.repository.FindAllGlobal(ctx, filter, limit, offset)
 	if err != nil {
 		s.logger.ErrorWithStack(ctx, "failed to list global agents", err,
-			slog.Bool("unassigned_only", unassignedOnly),
+			slog.Bool("unassigned_only", filter.UnassignedOnly),
+			slog.String("server_id", filter.ServerID),
+			slog.String("agent_id", filter.AgentID),
 			slog.Int("page", page),
 			slog.Int("limit", limit),
 		)
 		return nil, 0, ErrListAgents
 	}
 
-	return mapEntitiesToResponses(agents), total, nil
+	return mapAgentsWithCountToResponses(agents), total, nil
 }
 
-func (s service) GetByIdGlobal(ctx context.Context, agentID string) (GetResponse, error) {
+func (s service) GetByIdGlobal(ctx context.Context, agentID string) (api.AgentDetail, error) {
 	if _, err := uuid.Parse(agentID); err != nil {
-		return GetResponse{}, ErrInvalidAgentID
+		return api.AgentDetail{}, ErrInvalidAgentID
 	}
 
 	agent, err := s.repository.FindByIdGlobal(ctx, agentID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return GetResponse{}, ErrAgentNotFound
+			return api.AgentDetail{}, ErrAgentNotFound
 		}
 
 		s.logger.ErrorWithStack(ctx, "failed to find agent by id", err,
 			slog.String("agent_id", agentID),
 		)
-		return GetResponse{}, ErrGetAgent
+		return api.AgentDetail{}, ErrGetAgent
 	}
 
-	return mapEntityToResponse(agent), nil
+	servers, _, err := s.repository.FindServersByAgent(ctx, agentID, 0, 0)
+	if err != nil {
+		return api.AgentDetail{}, ErrGetAgent
+	}
+
+	base := mapAgentWithCountToResponse(agent)
+	return api.AgentDetail{
+		Id:          base.Id,
+		Name:        base.Name,
+		Type:        base.Type,
+		Version:     base.Version,
+		Metadata:    base.Metadata,
+		ServerCount: base.ServerCount,
+		Servers:     mapLinkedServersToResponses(servers),
+	}, nil
 }
 
-func (s service) CreateUnassigned(ctx context.Context, req CreateRequest) (GetResponse, error) {
+func (s service) ListServers(ctx context.Context, agentID string, page int, limit int) ([]api.AgentServer, int64, error) {
+	if _, err := uuid.Parse(agentID); err != nil {
+		return nil, 0, ErrInvalidAgentID
+	}
+
+	if _, err := s.repository.FindByIdGlobal(ctx, agentID); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, 0, ErrAgentNotFound
+		}
+
+		return nil, 0, ErrGetAgent
+	}
+
+	offset := (page - 1) * limit
+
+	servers, total, err := s.repository.FindServersByAgent(ctx, agentID, limit, offset)
+	if err != nil {
+		return nil, 0, ErrGetAgent
+	}
+
+	return mapLinkedServersToResponses(servers), total, nil
+}
+
+func (s service) CreateUnassigned(ctx context.Context, req api.AgentCreateRequest) (api.Agent, error) {
+	if err := s.ensureAgentNameAvailable(ctx, req.Name); err != nil {
+		return api.Agent{}, err
+	}
+
 	agent := Agent{
 		ID:       uuid.New(),
 		Name:     req.Name,
-		Type:     req.Type,
-		Version:  req.Version,
-		Metadata: normalizeMetadata(req.Metadata),
+		Type:     stringValue(req.Type),
+		Version:  stringValue(req.Version),
+		Metadata: metadataToEntity(req.Metadata),
 	}
 
 	created, err := s.repository.CreateUnassigned(ctx, agent)
 	if err != nil {
+		if isUniqueViolation(err) {
+			return api.Agent{}, ErrAgentAlreadyExists
+		}
+
 		s.logger.ErrorWithStack(ctx, "failed to create unassigned agent", err,
 			slog.String("agent_name", req.Name),
 		)
-		return GetResponse{}, ErrCreateAgent
+		return api.Agent{}, ErrCreateAgent
 	}
 
-	return mapEntityToResponse(created), nil
+	return mapEntityToResponse(created, 0), nil
+}
+
+func (s service) DeleteGlobal(ctx context.Context, agentID string) error {
+	if _, err := uuid.Parse(agentID); err != nil {
+		return ErrInvalidAgentID
+	}
+
+	if err := s.repository.DeleteGlobal(ctx, agentID); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrAgentNotFound
+		}
+
+		s.logger.ErrorWithStack(ctx, "failed to delete agent", err,
+			slog.String("agent_id", agentID),
+		)
+		return ErrDeleteAgent
+	}
+
+	return nil
+}
+
+func (s service) ensureAgentNameAvailable(ctx context.Context, name string) error {
+	_, err := s.repository.FindByName(ctx, name)
+	if err == nil {
+		return ErrAgentAlreadyExists
+	}
+
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		s.logger.ErrorWithStack(ctx, "failed to check agent existence before create", err,
+			slog.String("agent_name", name),
+		)
+		return ErrCreateAgent
+	}
+
+	return nil
 }
 
 func NewService(repository Repository, serverLookupService server.LookupService, appLogger *logger.Logger) Service {
@@ -206,36 +324,90 @@ func NewService(repository Repository, serverLookupService server.LookupService,
 	}
 }
 
-func mapEntitiesToResponses(agents []Agent) []GetResponse {
-	responses := make([]GetResponse, 0, len(agents))
+func mapEntitiesToResponses(agents []Agent) []api.Agent {
+	responses := make([]api.Agent, 0, len(agents))
 	for _, agent := range agents {
-		responses = append(responses, mapEntityToResponse(agent))
+		responses = append(responses, mapEntityToResponse(agent, 1))
 	}
 
 	return responses
 }
 
-func mapEntityToResponse(agent Agent) GetResponse {
-	metadata := json.RawMessage(agent.Metadata)
-	if len(metadata) == 0 {
-		metadata = json.RawMessage(`{}`)
+func mapAgentsWithCountToResponses(agents []AgentWithCount) []api.Agent {
+	responses := make([]api.Agent, 0, len(agents))
+	for _, agent := range agents {
+		responses = append(responses, mapAgentWithCountToResponse(agent))
 	}
 
-	return GetResponse{
-		ID:       agent.ID,
-		Server:   agent.Server,
-		ServerID: agent.ServerID,
-		Name:     agent.Name,
-		Type:     agent.Type,
-		Version:  agent.Version,
-		Metadata: metadata,
+	return responses
+}
+
+func mapAgentWithCountToResponse(agent AgentWithCount) api.Agent {
+	return mapEntityToResponse(agent.Agent, int(agent.ServerCount))
+}
+
+func mapEntityToResponse(agent Agent, serverCount int) api.Agent {
+	return api.Agent{
+		Id:          agent.ID,
+		Name:        agent.Name,
+		Type:        agent.Type,
+		Version:     agent.Version,
+		Metadata:    metadataFromEntity(agent.Metadata),
+		ServerCount: serverCount,
 	}
 }
 
-func normalizeMetadata(raw json.RawMessage) datatypes.JSON {
+func mapLinkedServersToResponses(servers []LinkedServer) []api.AgentServer {
+	responses := make([]api.AgentServer, 0, len(servers))
+	for _, serverEntity := range servers {
+		responses = append(responses, api.AgentServer{
+			Id:       serverEntity.ID,
+			Hostname: serverEntity.Hostname,
+		})
+	}
+
+	return responses
+}
+
+func metadataFromEntity(raw datatypes.JSON) api.ServerMetadata {
 	if len(raw) == 0 {
+		return api.ServerMetadata{}
+	}
+
+	var metadata api.ServerMetadata
+	if err := json.Unmarshal(raw, &metadata); err != nil {
+		return api.ServerMetadata{}
+	}
+
+	return metadata
+}
+
+func metadataToEntity(metadata *api.ServerMetadata) datatypes.JSON {
+	if metadata == nil || len(*metadata) == 0 {
+		return datatypes.JSON([]byte(`{}`))
+	}
+
+	raw, err := json.Marshal(metadata)
+	if err != nil {
 		return datatypes.JSON([]byte(`{}`))
 	}
 
 	return datatypes.JSON(raw)
+}
+
+func stringValue(value *string) string {
+	if value == nil {
+		return ""
+	}
+
+	return *value
+}
+
+func convertServerMetadata(metadata *serverapi.ServerMetadata) *api.ServerMetadata {
+	if metadata == nil {
+		return nil
+	}
+
+	converted := api.ServerMetadata(*metadata)
+	return &converted
 }

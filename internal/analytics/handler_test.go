@@ -9,36 +9,37 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
+	"github.com/svetlyopet/heimdallr/internal/analytics/api"
 )
 
 type stubService struct {
-	getOverviewResponse     AutomationAnalyticsResponse
+	getOverviewResponse     api.AutomationAnalytics
 	getOverviewError        error
-	getOverviewByIDResponse AutomationAnalyticsResponse
+	getOverviewByIDResponse api.AutomationAnalytics
 	getOverviewByIDError    error
-	getComplianceResponse   ComplianceAnalyticsResponse
+	getComplianceResponse   api.ComplianceAnalytics
 	getComplianceError      error
 }
 
-func (s stubService) GetAutomationOverview(_ context.Context) (AutomationAnalyticsResponse, error) {
+func (s stubService) GetAutomationOverview(_ context.Context) (api.AutomationAnalytics, error) {
 	if s.getOverviewError != nil {
-		return AutomationAnalyticsResponse{}, s.getOverviewError
+		return api.AutomationAnalytics{}, s.getOverviewError
 	}
 
 	return s.getOverviewResponse, nil
 }
 
-func (s stubService) GetAutomationOverviewByID(_ context.Context, _ string) (AutomationAnalyticsResponse, error) {
+func (s stubService) GetAutomationOverviewByID(_ context.Context, _ string) (api.AutomationAnalytics, error) {
 	if s.getOverviewByIDError != nil {
-		return AutomationAnalyticsResponse{}, s.getOverviewByIDError
+		return api.AutomationAnalytics{}, s.getOverviewByIDError
 	}
 
 	return s.getOverviewByIDResponse, nil
 }
 
-func (s stubService) GetComplianceOverview(_ context.Context) (ComplianceAnalyticsResponse, error) {
+func (s stubService) GetComplianceOverview(_ context.Context) (api.ComplianceAnalytics, error) {
 	if s.getComplianceError != nil {
-		return ComplianceAnalyticsResponse{}, s.getComplianceError
+		return api.ComplianceAnalytics{}, s.getComplianceError
 	}
 
 	return s.getComplianceResponse, nil
@@ -53,8 +54,8 @@ func newAnalyticsRouter(t *testing.T, svc Service) *gin.Engine {
 	require.NoError(t, err)
 
 	r := gin.New()
-	api := r.Group("/api")
-	RegisterRoutes(api, h)
+	apiGroup := r.Group("/api")
+	RegisterRoutes(apiGroup, h)
 
 	return r
 }
@@ -97,7 +98,7 @@ func TestGetAutomationOverviewReturnsInternalServerError(t *testing.T) {
 
 func TestGetComplianceOverviewReturnsOverview(t *testing.T) {
 	r := newAnalyticsRouter(t, stubService{
-		getComplianceResponse: ComplianceAnalyticsResponse{
+		getComplianceResponse: api.ComplianceAnalytics{
 			TotalApplications: 2,
 			TotalReleases:     5,
 		},

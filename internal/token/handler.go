@@ -1,105 +1,89 @@
 package token
 
 import (
+	"context"
 	"errors"
-	"net/http"
 
-	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/svetlyopet/heimdallr/internal/auth"
+	"github.com/svetlyopet/heimdallr/internal/token/api"
 )
 
 type Handler interface {
-	List(ctx *gin.Context)
-	Create(ctx *gin.Context)
-	Delete(ctx *gin.Context)
+	api.StrictServerInterface
 }
 
 type handler struct {
 	service Service
 }
 
-func (h handler) List(ctx *gin.Context) {
-	tokens, err := h.service.List(ctx.Request.Context())
+func (h handler) ListTokens(ctx context.Context, _ api.ListTokensRequestObject) (api.ListTokensResponseObject, error) {
+	tokens, err := h.service.List(ctx)
 	if err != nil {
-		returnErrorResponse(ctx, http.StatusInternalServerError, NewTokenError(ErrListTokens.Error(), err))
-		return
+		return api.ListTokens500JSONResponse{
+			InternalServerErrorJSONResponse: api.InternalServerErrorJSONResponse{Error: tokenErrorMessage(err, "failed to list tokens")},
+		}, nil
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{"data": tokens})
+	return api.ListTokens200JSONResponse{Data: tokens}, nil
 }
 
-func (h handler) Create(ctx *gin.Context) {
-	var req CreateRequest
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		returnErrorResponse(ctx, http.StatusBadRequest, NewTokenError("invalid request body", err))
-		return
+func (h handler) CreateToken(ctx context.Context, request api.CreateTokenRequestObject) (api.CreateTokenResponseObject, error) {
+	if request.Body == nil {
+		return api.CreateToken400JSONResponse{
+			BadRequestJSONResponse: api.BadRequestJSONResponse{Error: "invalid request body"},
+		}, nil
 	}
 
 	var createdBy *uuid.UUID
-	if user, err := userFromContext(ctx); err == nil {
-		if parsed, parseErr := uuid.Parse(user.ID); parseErr == nil {
-			createdBy = &parsed
+	if gctx, ok := auth.GinContextFrom(ctx); ok {
+		if user, err := auth.UserFromGinContext(gctx); err == nil {
+			if parsed, parseErr := uuid.Parse(user.Id); parseErr == nil {
+				createdBy = &parsed
+			}
 		}
 	}
 
-	token, err := h.service.Create(ctx.Request.Context(), req, createdBy)
+	token, err := h.service.Create(ctx, *request.Body, createdBy)
 	if err != nil {
-		statusCode := http.StatusInternalServerError
 		if errors.Is(err, ErrInvalidScopes) {
-			statusCode = http.StatusBadRequest
+			return api.CreateToken400JSONResponse{
+				BadRequestJSONResponse: api.BadRequestJSONResponse{Error: tokenErrorMessage(err, "invalid scopes")},
+			}, nil
 		}
 
-		returnErrorResponse(ctx, statusCode, NewTokenError(ErrCreateToken.Error(), err))
-		return
+		return api.CreateToken500JSONResponse{
+			InternalServerErrorJSONResponse: api.InternalServerErrorJSONResponse{Error: tokenErrorMessage(err, "failed to create token")},
+		}, nil
 	}
 
-	ctx.JSON(http.StatusCreated, gin.H{"data": token})
+	return api.CreateToken201JSONResponse{Data: token}, nil
 }
 
-func (h handler) Delete(ctx *gin.Context) {
-	tokenID := ctx.Param("token_id")
-	if tokenID == "" {
-		returnErrorResponse(ctx, http.StatusBadRequest, NewTokenError("invalid token id", ErrTokenNotFound))
-		return
-	}
-
-	if err := h.service.Delete(ctx.Request.Context(), tokenID); err != nil {
-		statusCode := http.StatusInternalServerError
+func (h handler) DeleteToken(ctx context.Context, request api.DeleteTokenRequestObject) (api.DeleteTokenResponseObject, error) {
+	if err := h.service.Delete(ctx, request.TokenId.String()); err != nil {
 		if errors.Is(err, ErrTokenNotFound) {
-			statusCode = http.StatusNotFound
+			return api.DeleteToken404JSONResponse{
+				NotFoundJSONResponse: api.NotFoundJSONResponse{Error: tokenErrorMessage(err, "token not found")},
+			}, nil
 		}
 
-		returnErrorResponse(ctx, statusCode, NewTokenError(ErrDeleteToken.Error(), err))
-		return
+		return api.DeleteToken500JSONResponse{
+			InternalServerErrorJSONResponse: api.InternalServerErrorJSONResponse{Error: tokenErrorMessage(err, "failed to delete token")},
+		}, nil
 	}
 
-	ctx.Status(http.StatusNoContent)
+	return api.DeleteToken204Response{}, nil
 }
 
 func NewHandler(service Service) (Handler, error) {
 	return &handler{service: service}, nil
 }
 
-func userFromContext(ctx *gin.Context) (auth.GetResponse, error) {
-	value, exists := ctx.Get("auth.user")
-	if !exists {
-		return auth.GetResponse{}, auth.ErrInvalidCredentials
-	}
-
-	user, ok := value.(auth.GetResponse)
-	if !ok {
-		return auth.GetResponse{}, auth.ErrInvalidCredentials
-	}
-
-	return user, nil
-}
-
-func returnErrorResponse(ctx *gin.Context, statusCode int, err error) {
+func tokenErrorMessage(err error, fallback string) string {
 	if tokenErr, ok := errors.AsType[TokenError](err); ok {
-		ctx.JSON(statusCode, gin.H{"error": tokenErr.Message})
-		return
+		return tokenErr.Message
 	}
 
-	ctx.JSON(http.StatusInternalServerError, gin.H{"error": http.StatusText(http.StatusInternalServerError)})
+	return fallback
 }

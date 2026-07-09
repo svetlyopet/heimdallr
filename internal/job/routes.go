@@ -1,13 +1,11 @@
 package job
 
-import "github.com/gin-gonic/gin"
+import (
+	"github.com/gin-gonic/gin"
+	"github.com/svetlyopet/heimdallr/internal/job/api"
+)
 
 func RegisterRoutes(rg *gin.RouterGroup, handler Handler) {
-	jobRoutesV1 := rg.Group("/v1/automation/:automation_id/job")
-	{
-		jobRoutesV1.GET("", handler.List)
-		jobRoutesV1.POST("", handler.Create)
-		jobRoutesV1.GET("/:job_id", handler.Get)
-		jobRoutesV1.PATCH("/:job_id", handler.Update)
-	}
+	strictHandler := api.NewStrictHandler(handler, nil)
+	api.RegisterHandlersWithOptions(rg, strictHandler, api.GinServerOptions{})
 }

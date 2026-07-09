@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/samber/do/v2"
+	"github.com/svetlyopet/heimdallr/internal/server/api"
 	"gorm.io/gorm"
 )
 
@@ -12,14 +13,14 @@ type lookupService struct {
 	repository Repository
 }
 
-func (l lookupService) GetById(ctx context.Context, serverID string) (GetResponse, error) {
+func (l lookupService) GetById(ctx context.Context, serverID string) (api.Server, error) {
 	server, err := l.repository.FindById(ctx, serverID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return GetResponse{}, ErrServerNotFound
+			return api.Server{}, ErrServerNotFound
 		}
 
-		return GetResponse{}, ErrGetServer
+		return api.Server{}, ErrGetServer
 	}
 
 	return mapEntityToResponse(server), nil

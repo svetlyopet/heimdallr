@@ -1,18 +1,11 @@
 package report
 
-import "github.com/gin-gonic/gin"
+import (
+	"github.com/gin-gonic/gin"
+	"github.com/svetlyopet/heimdallr/internal/report/api"
+)
 
 func RegisterRoutes(rg *gin.RouterGroup, handler Handler) {
-	reportRoutesV1 := rg.Group("/v1/report")
-	{
-		reportRoutesV1.GET("", handler.ListAll)
-	}
-
-	applicationReportRoutesV1 := rg.Group("/v1/application/:application_id/release/:release_id/report")
-	{
-		applicationReportRoutesV1.GET("", handler.List)
-		applicationReportRoutesV1.POST("", handler.Create)
-		applicationReportRoutesV1.GET("/:report_id", handler.Get)
-		applicationReportRoutesV1.PATCH("/:report_id", handler.Update)
-	}
+	strictHandler := api.NewStrictHandler(handler, nil)
+	api.RegisterHandlersWithOptions(rg, strictHandler, api.GinServerOptions{})
 }

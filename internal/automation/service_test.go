@@ -7,7 +7,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"github.com/svetlyopet/heimdallr/internal/automation/api"
 	"github.com/svetlyopet/heimdallr/internal/provider"
+	providerapi "github.com/svetlyopet/heimdallr/internal/provider/api"
 	"github.com/svetlyopet/heimdallr/internal/testutil"
 )
 
@@ -26,16 +28,16 @@ func newAutomationService(t *testing.T) (Service, provider.Service) {
 func TestServiceCreateReturnsAutomation(t *testing.T) {
 	automationSvc, providerSvc := newAutomationService(t)
 
-	prov, err := providerSvc.Create(context.Background(), provider.CreateRequest{
+	prov, err := providerSvc.Create(context.Background(), providerapi.ProviderCreateRequest{
 		Name: "awx",
-		URL:  "https://awx.example.com",
+		Url:  providerapi.URL("https://awx.example.com"),
 	})
 	require.NoError(t, err)
 
-	created, err := automationSvc.Create(context.Background(), CreateRequest{
+	created, err := automationSvc.Create(context.Background(), api.AutomationCreateRequest{
 		Name:       "deploy",
-		URL:        "https://awx.example.com/#/templates/job_template/1",
-		ProviderID: prov.ID,
+		Url:        ptr("https://awx.example.com/#/templates/job_template/1"),
+		ProviderId: prov.Id,
 	})
 	require.NoError(t, err)
 	require.Equal(t, "deploy", created.Name)
@@ -45,29 +47,29 @@ func TestServiceCreateReturnsAutomation(t *testing.T) {
 func TestServiceCreateReturnsProviderNotFound(t *testing.T) {
 	automationSvc, _ := newAutomationService(t)
 
-	_, err := automationSvc.Create(context.Background(), CreateRequest{
+	_, err := automationSvc.Create(context.Background(), api.AutomationCreateRequest{
 		Name:       "deploy",
-		URL:        "https://awx.example.com/#/templates/job_template/1",
-		ProviderID: uuid.New(),
+		Url:        ptr("https://awx.example.com/#/templates/job_template/1"),
+		ProviderId: uuid.New(),
 	})
 	require.ErrorIs(t, err, ErrCreateAutomation)
 }
 
 type stubProviderLookup struct {
-	getByIdResp  provider.GetResponse
+	getByIdResp  providerapi.Provider
 	getByIdError error
 }
 
-func (s stubProviderLookup) GetById(_ context.Context, _ string) (provider.GetResponse, error) {
+func (s stubProviderLookup) GetById(_ context.Context, _ string) (providerapi.Provider, error) {
 	if s.getByIdError != nil {
-		return provider.GetResponse{}, s.getByIdError
+		return providerapi.Provider{}, s.getByIdError
 	}
 
 	return s.getByIdResp, nil
 }
 
-func (s stubProviderLookup) GetByName(_ context.Context, _ string) (provider.GetResponse, error) {
-	return provider.GetResponse{}, nil
+func (s stubProviderLookup) GetByName(_ context.Context, _ string) (providerapi.Provider, error) {
+	return providerapi.Provider{}, nil
 }
 
 type stubAutomationRepository struct {
@@ -107,4 +109,8 @@ func TestServiceGetAllReturnsListError(t *testing.T) {
 
 	_, _, err := svc.GetAll(context.Background(), 1, 10)
 	require.ErrorIs(t, err, ErrListAutomations)
+}
+
+func ptr[T any](value T) *T {
+	return &value
 }

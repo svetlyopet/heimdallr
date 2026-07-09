@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/svetlyopet/heimdallr/internal/server"
+	serverapi "github.com/svetlyopet/heimdallr/internal/server/api"
 	"gorm.io/datatypes"
 )
 
@@ -29,14 +30,14 @@ func TestAttachmentServiceAttachAgentIDs(t *testing.T) {
 	require.NoError(t, err)
 
 	attachment := NewAttachmentService(repo, stubServerLookup{
-		resp: server.GetResponse{ID: serverID, Hostname: "attach-host.example.com"},
+		resp: serverapi.Server{Id: serverID, Hostname: "attach-host.example.com"},
 	}, nil)
 
 	require.NoError(t, attachment.AttachAgentIDs(context.Background(), serverID, []uuid.UUID{orphan.ID}))
 
 	found, err := repo.FindById(context.Background(), orphan.ID.String(), serverID.String())
 	require.NoError(t, err)
-	require.Equal(t, "attach-host.example.com", found.Server)
+	require.Equal(t, "orphan", found.Name)
 }
 
 func TestAttachmentServiceCreateAgentsOnServer(t *testing.T) {
@@ -51,13 +52,15 @@ func TestAttachmentServiceCreateAgentsOnServer(t *testing.T) {
 	}).Error)
 
 	attachment := NewAttachmentService(repo, stubServerLookup{
-		resp: server.GetResponse{ID: serverID, Hostname: "inline-host.example.com"},
+		resp: serverapi.Server{Id: serverID, Hostname: "inline-host.example.com"},
 	}, nil)
 
-	require.NoError(t, attachment.CreateAgentsOnServer(context.Background(), serverID, []server.AgentRegistrationInput{{
+	agentType := "security"
+	agentVersion := "1.0.0"
+	require.NoError(t, attachment.CreateAgentsOnServer(context.Background(), serverID, []serverapi.AgentCreateRequest{{
 		Name:    "crowdstrike",
-		Type:    "security",
-		Version: "1.0.0",
+		Type:    &agentType,
+		Version: &agentVersion,
 	}}))
 
 	agents, total, err := repo.FindAll(context.Background(), serverID.String(), 10, 0)

@@ -34,7 +34,7 @@ import { onMounted, reactive, ref } from "vue";
 import "../stylesheets/auth.css";
 import { useRouter } from "vue-router";
 import AppAlert from "../components/AppAlert.vue";
-import { clearSession, ensureSessionAccess, sessionState, setSessionCredentials } from "../auth/session";
+import { clearSession, ensureSessionAccess, loginWithCredentials, sessionState } from "../auth/session";
 
 const router = useRouter();
 
@@ -47,13 +47,22 @@ const errorMessage = ref("");
 
 async function submitLogin() {
   errorMessage.value = "";
+  sessionState.checking = true;
 
-  setSessionCredentials(form.username, form.password);
-  await ensureSessionAccess();
+  try {
+    await loginWithCredentials(form.username, form.password);
+    await ensureSessionAccess();
 
-  if (sessionState.authenticated) {
-    await router.push({ name: "dashboard" });
+    if (sessionState.authenticated) {
+      await router.push({ name: "dashboard" });
+      return;
+    }
+  } catch {
+    clearSession();
+    errorMessage.value = "Invalid username or password";
     return;
+  } finally {
+    sessionState.checking = false;
   }
 
   clearSession();

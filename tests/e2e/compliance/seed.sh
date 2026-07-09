@@ -9,10 +9,9 @@ E2E_RUN_ID="${E2E_RUN_ID:-$(date +%s)-$$}"
 APPLICATION_NAME="e2e-compliance-app-${E2E_RUN_ID}"
 TOKEN_NAME="e2e-compliance-token-${E2E_RUN_ID}"
 
-auth_headers=(
-  -H "X-Auth-Username: ${HEIMDALLR_USER}"
-  -H "X-Auth-Password: ${HEIMDALLR_PASSWORD}"
-)
+# shellcheck source=../lib/auth.sh
+source "$(dirname "${BASH_SOURCE[0]}")/../lib/auth.sh"
+setup_auth_headers
 
 app_json="$(curl -sf "${auth_headers[@]}" -X POST \
   -H "Content-Type: application/json" \

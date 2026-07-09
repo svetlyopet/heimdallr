@@ -9,19 +9,20 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"github.com/svetlyopet/heimdallr/internal/provider/api"
 	"github.com/svetlyopet/heimdallr/internal/testutil"
 )
 
 type stubProviderService struct {
-	listResponse []GetResponse
+	listResponse []api.Provider
 	listTotal    int64
 	listError    error
 	getError     error
-	createResp   GetResponse
+	createResp   api.Provider
 	createError  error
 }
 
-func (s stubProviderService) GetAll(_ context.Context, _ int, _ int) ([]GetResponse, int64, error) {
+func (s stubProviderService) GetAll(_ context.Context, _ int, _ int) ([]api.Provider, int64, error) {
 	if s.listError != nil {
 		return nil, 0, s.listError
 	}
@@ -29,21 +30,21 @@ func (s stubProviderService) GetAll(_ context.Context, _ int, _ int) ([]GetRespo
 	return s.listResponse, s.listTotal, nil
 }
 
-func (s stubProviderService) GetById(_ context.Context, _ string) (GetResponse, error) {
+func (s stubProviderService) GetById(_ context.Context, _ string) (api.Provider, error) {
 	if s.getError != nil {
-		return GetResponse{}, s.getError
+		return api.Provider{}, s.getError
 	}
 
-	return GetResponse{}, nil
+	return api.Provider{}, nil
 }
 
-func (s stubProviderService) GetByName(_ context.Context, _ string) (GetResponse, error) {
-	return GetResponse{}, nil
+func (s stubProviderService) GetByName(_ context.Context, _ string) (api.Provider, error) {
+	return api.Provider{}, nil
 }
 
-func (s stubProviderService) Create(_ context.Context, _ CreateRequest) (GetResponse, error) {
+func (s stubProviderService) Create(_ context.Context, _ api.ProviderCreateRequest) (api.Provider, error) {
 	if s.createError != nil {
-		return GetResponse{}, s.createError
+		return api.Provider{}, s.createError
 	}
 
 	return s.createResp, nil
@@ -58,8 +59,8 @@ func newProviderRouter(t *testing.T, svc Service) *gin.Engine {
 	require.NoError(t, err)
 
 	r := gin.New()
-	api := r.Group("/api")
-	RegisterRoutes(api, h)
+	apiGroup := r.Group("/api")
+	RegisterRoutes(apiGroup, h)
 
 	return r
 }
@@ -73,12 +74,12 @@ func TestHandlerListReturnsBadRequestForInvalidPage(t *testing.T) {
 
 func TestHandlerCreateReturnsCreated(t *testing.T) {
 	r := newProviderRouter(t, stubProviderService{
-		createResp: GetResponse{ID: uuid.New(), Name: "awx", URL: "https://awx.example.com"},
+		createResp: api.Provider{Id: uuid.New(), Name: "awx", Url: api.URL("https://awx.example.com")},
 	})
 
-	rr := testutil.DoGinJSONRequest(t, r, http.MethodPost, "/api/v1/provider", CreateRequest{
+	rr := testutil.DoGinJSONRequest(t, r, http.MethodPost, "/api/v1/provider", api.ProviderCreateRequest{
 		Name: "awx",
-		URL:  "https://awx.example.com",
+		Url:  api.URL("https://awx.example.com"),
 	}, nil)
 	response := testutil.AssertJSONStatus(t, rr, http.StatusCreated)
 	data, ok := response["data"].(map[string]any)

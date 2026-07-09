@@ -72,32 +72,50 @@ Migrations apply automatically on startup when using Postgres (`make migrate` do
 
 ## Authentication
 
-### Username / password (UI & Ansible)
+All API routes (except `/api/health` and `POST /api/v1/auth/login`) require a Bearer token.
+
+### Login (UI, scripts, Ansible)
+
+Exchange username and password for a session token:
 
 ```http
-X-Auth-Username: root
-X-Auth-Password: <password>
+POST /api/v1/auth/login
+Content-Type: application/json
+
+{
+  "username": "root",
+  "password": "<password>"
+}
+```
+
+Response:
+
+```json
+{
+  "data": {
+    "token": "<bearer-token>"
+  }
+}
+```
+
+Use the token on subsequent requests:
+
+```http
+Authorization: Bearer <token>
 ```
 
 ### API tokens (CI runners)
 
-Create a token as admin:
+Create a long-lived token as admin (using a Bearer token from login):
 
 ```http
 POST /api/v1/auth/tokens
-X-Auth-Username: root
-X-Auth-Password: <password>
+Authorization: Bearer <admin-token>
 
 {
   "name": "ci-github-actions",
   "scopes": ["application:write", "read"]
 }
-```
-
-Use the returned token:
-
-```http
-Authorization: Bearer <token>
 ```
 
 **Scopes**: `application:write`, `automation:write`, `read`, `admin`
@@ -142,9 +160,16 @@ Vue 3 SPA served with the API. Main areas:
 
 OpenAPI spec: [`api/docs/openapi.yaml`](api/docs/openapi.yaml)
 
+Automation, job, application, release, report, provider, and analytics HTTP handlers are generated from the spec with [oapi-codegen](https://github.com/oapi-codegen/oapi-codegen) (strict Gin server). Regenerate after spec changes:
+
+```bash
+make generate-api
+```
+
 ## Development
 
 ```bash
+make generate-api         # Regenerate OpenAPI handlers (automation, job, application, release, report, provider, analytics)
 make test                 # Go unit tests
 make test-integration     # In-process API integration tests
 make lint-api             # fmt + golangci-lint
@@ -169,7 +194,7 @@ GitHub Actions (push/PR to `main`/`master`) runs unit tests, `lint-api` + `govul
 cmd/           API entrypoint
 internal/      Domain packages (application, server, agent, job, …)
 web/           Vue 3 + Vite frontend
-api/docs/      OpenAPI spec
+api/docs/      OpenAPI spec and oapi-codegen configs
 tests/         Integration tests, E2E scripts, CI/Ansible examples
 ```
 

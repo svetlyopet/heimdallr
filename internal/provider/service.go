@@ -7,19 +7,20 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/svetlyopet/heimdallr/internal/logger"
+	"github.com/svetlyopet/heimdallr/internal/provider/api"
 	"gorm.io/gorm"
 )
 
 type LookupService interface {
-	GetByName(ctx context.Context, providerName string) (GetResponse, error)
-	GetById(ctx context.Context, providerId string) (GetResponse, error)
+	GetByName(ctx context.Context, providerName string) (api.Provider, error)
+	GetById(ctx context.Context, providerId string) (api.Provider, error)
 }
 
 type Service interface {
-	GetAll(ctx context.Context, page int, limit int) ([]GetResponse, int64, error)
-	GetById(ctx context.Context, providerId string) (GetResponse, error)
-	GetByName(ctx context.Context, providerName string) (GetResponse, error)
-	Create(ctx context.Context, req CreateRequest) (GetResponse, error)
+	GetAll(ctx context.Context, page int, limit int) ([]api.Provider, int64, error)
+	GetById(ctx context.Context, providerId string) (api.Provider, error)
+	GetByName(ctx context.Context, providerName string) (api.Provider, error)
+	Create(ctx context.Context, req api.ProviderCreateRequest) (api.Provider, error)
 }
 
 type service struct {
@@ -27,7 +28,7 @@ type service struct {
 	logger     *logger.Logger
 }
 
-func (s service) GetAll(ctx context.Context, page int, limit int) ([]GetResponse, int64, error) {
+func (s service) GetAll(ctx context.Context, page int, limit int) ([]api.Provider, int64, error) {
 	offset := (page - 1) * limit
 
 	providers, total, err := s.repository.FindAll(ctx, limit, offset)
@@ -43,7 +44,7 @@ func (s service) GetAll(ctx context.Context, page int, limit int) ([]GetResponse
 		return nil, 0, ErrListProviders
 	}
 
-	responses := make([]GetResponse, 0, len(providers))
+	responses := make([]api.Provider, 0, len(providers))
 	for _, provider := range providers {
 		responses = append(responses, mapEntityToResponse(provider))
 	}
@@ -51,11 +52,11 @@ func (s service) GetAll(ctx context.Context, page int, limit int) ([]GetResponse
 	return responses, total, nil
 }
 
-func (s service) GetById(ctx context.Context, providerId string) (GetResponse, error) {
+func (s service) GetById(ctx context.Context, providerId string) (api.Provider, error) {
 	provider, err := s.repository.FindById(ctx, providerId)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return GetResponse{}, ErrProviderNotFound
+			return api.Provider{}, ErrProviderNotFound
 		}
 
 		s.logger.ErrorWithStack(
@@ -64,27 +65,27 @@ func (s service) GetById(ctx context.Context, providerId string) (GetResponse, e
 			err,
 			slog.String("provider_id", providerId),
 		)
-		return GetResponse{}, ErrGetProvider
+		return api.Provider{}, ErrGetProvider
 	}
 
 	return mapEntityToResponse(provider), nil
 }
 
-func (s service) GetByName(ctx context.Context, providerName string) (GetResponse, error) {
+func (s service) GetByName(ctx context.Context, providerName string) (api.Provider, error) {
 	provider, err := s.repository.FindByName(ctx, providerName)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return GetResponse{}, ErrProviderNotFound
+			return api.Provider{}, ErrProviderNotFound
 		}
 	}
 
 	return mapEntityToResponse(provider), nil
 }
 
-func (s service) Create(ctx context.Context, req CreateRequest) (GetResponse, error) {
+func (s service) Create(ctx context.Context, req api.ProviderCreateRequest) (api.Provider, error) {
 	_, err := s.repository.FindByName(ctx, req.Name)
 	if err == nil {
-		return GetResponse{}, ErrProviderAlreadyExists
+		return api.Provider{}, ErrProviderAlreadyExists
 	}
 
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
@@ -94,13 +95,13 @@ func (s service) Create(ctx context.Context, req CreateRequest) (GetResponse, er
 			err,
 			slog.String("provider_name", req.Name),
 		)
-		return GetResponse{}, ErrCreateProvider
+		return api.Provider{}, ErrCreateProvider
 	}
 
 	provider := Provider{
 		ID:   uuid.New(),
 		Name: req.Name,
-		Url:  req.URL,
+		Url:  string(req.Url),
 	}
 
 	createdProvider, err := s.repository.Create(ctx, provider)
@@ -112,7 +113,7 @@ func (s service) Create(ctx context.Context, req CreateRequest) (GetResponse, er
 			slog.String("provider_id", provider.ID.String()),
 			slog.String("provider_name", provider.Name),
 		)
-		return GetResponse{}, ErrCreateProvider
+		return api.Provider{}, ErrCreateProvider
 	}
 
 	return mapEntityToResponse(createdProvider), nil
@@ -129,10 +130,10 @@ func NewService(repository Repository, appLogger *logger.Logger) Service {
 	}
 }
 
-func mapEntityToResponse(provider Provider) GetResponse {
-	return GetResponse{
-		ID:   provider.ID,
+func mapEntityToResponse(provider Provider) api.Provider {
+	return api.Provider{
+		Id:   provider.ID,
 		Name: provider.Name,
-		URL:  provider.Url,
+		Url:  api.URL(provider.Url),
 	}
 }

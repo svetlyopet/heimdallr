@@ -5,22 +5,23 @@ import (
 	"errors"
 	"log/slog"
 
+	"github.com/svetlyopet/heimdallr/internal/automation/api"
 	"github.com/svetlyopet/heimdallr/internal/logger"
 	"github.com/svetlyopet/heimdallr/internal/provider"
 	"gorm.io/gorm"
 )
 
 type LookupService interface {
-	GetByName(ctx context.Context, automationName string) (GetResponse, error)
-	GetById(ctx context.Context, automationId string) (GetResponse, error)
+	GetByName(ctx context.Context, automationName string) (api.Automation, error)
+	GetById(ctx context.Context, automationId string) (api.Automation, error)
 }
 
 type Service interface {
-	GetAll(ctx context.Context, page int, limit int) ([]GetResponse, int64, error)
-	GetByName(ctx context.Context, automationName string) (GetResponse, error)
-	GetById(ctx context.Context, automationId string) (GetResponse, error)
-	Create(ctx context.Context, req CreateRequest) (GetResponse, error)
-	Update(ctx context.Context, req UpdateRequest, automationId string) (GetResponse, error)
+	GetAll(ctx context.Context, page int, limit int) ([]api.Automation, int64, error)
+	GetByName(ctx context.Context, automationName string) (api.Automation, error)
+	GetById(ctx context.Context, automationId string) (api.Automation, error)
+	Create(ctx context.Context, req api.AutomationCreateRequest) (api.Automation, error)
+	Update(ctx context.Context, req api.AutomationUpdateRequest, automationId string) (api.Automation, error)
 	Delete(ctx context.Context, automationId string) error
 }
 
@@ -30,7 +31,7 @@ type service struct {
 	logger                *logger.Logger
 }
 
-func (s service) GetAll(ctx context.Context, page int, limit int) ([]GetResponse, int64, error) {
+func (s service) GetAll(ctx context.Context, page int, limit int) ([]api.Automation, int64, error) {
 	offset := (page - 1) * limit
 
 	automations, total, err := s.repository.FindAll(ctx, limit, offset)
@@ -46,7 +47,7 @@ func (s service) GetAll(ctx context.Context, page int, limit int) ([]GetResponse
 		return nil, 0, ErrListAutomations
 	}
 
-	responses := make([]GetResponse, 0, len(automations))
+	responses := make([]api.Automation, 0, len(automations))
 	for _, automation := range automations {
 		responses = append(responses, mapEntityToResponse(automation))
 	}
@@ -54,11 +55,11 @@ func (s service) GetAll(ctx context.Context, page int, limit int) ([]GetResponse
 	return responses, total, nil
 }
 
-func (s service) GetByName(ctx context.Context, automationName string) (GetResponse, error) {
+func (s service) GetByName(ctx context.Context, automationName string) (api.Automation, error) {
 	automation, err := s.repository.FindByName(ctx, automationName)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return GetResponse{}, ErrAutomationNotFound
+			return api.Automation{}, ErrAutomationNotFound
 		}
 
 		s.logger.ErrorWithStack(
@@ -67,17 +68,17 @@ func (s service) GetByName(ctx context.Context, automationName string) (GetRespo
 			err,
 			slog.String("automation_name", automationName),
 		)
-		return GetResponse{}, ErrGetAutomation
+		return api.Automation{}, ErrGetAutomation
 	}
 
 	return mapEntityToResponse(automation), nil
 }
 
-func (s service) GetById(ctx context.Context, automationId string) (GetResponse, error) {
+func (s service) GetById(ctx context.Context, automationId string) (api.Automation, error) {
 	automation, err := s.repository.FindById(ctx, automationId)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return GetResponse{}, ErrAutomationNotFound
+			return api.Automation{}, ErrAutomationNotFound
 		}
 
 		s.logger.ErrorWithStack(
@@ -86,13 +87,13 @@ func (s service) GetById(ctx context.Context, automationId string) (GetResponse,
 			err,
 			slog.String("automation_id", automationId),
 		)
-		return GetResponse{}, ErrGetAutomation
+		return api.Automation{}, ErrGetAutomation
 	}
 
 	return mapEntityToResponse(automation), nil
 }
 
-func (s service) Create(ctx context.Context, req CreateRequest) (GetResponse, error) {
+func (s service) Create(ctx context.Context, req api.AutomationCreateRequest) (api.Automation, error) {
 	exists, err := s.repository.ExistsByName(ctx, req.Name)
 	if err != nil {
 		s.logger.ErrorWithStack(
@@ -101,31 +102,41 @@ func (s service) Create(ctx context.Context, req CreateRequest) (GetResponse, er
 			err,
 			slog.String("automation_name", req.Name),
 		)
-		return GetResponse{}, ErrCreateAutomation
+		return api.Automation{}, ErrCreateAutomation
 	}
 
 	if exists {
-		return GetResponse{}, ErrAutomationAlreadyExists
+		return api.Automation{}, ErrAutomationAlreadyExists
 	}
 
-	automationProvider, err := s.providerLookupService.GetById(ctx, req.ProviderID.String())
+	automationProvider, err := s.providerLookupService.GetById(ctx, req.ProviderId.String())
 	if err != nil {
 		s.logger.ErrorWithStack(
 			ctx,
 			"failed to find provider before creating automation",
 			err,
 			slog.String("automation_name", req.Name),
-			slog.String("provider_id", req.ProviderID.String()),
+			slog.String("provider_id", req.ProviderId.String()),
 		)
-		return GetResponse{}, ErrCreateAutomation
+		return api.Automation{}, ErrCreateAutomation
+	}
+
+	costSavings := float64(0)
+	if req.CostSavings != nil {
+		costSavings = *req.CostSavings
+	}
+
+	url := ""
+	if req.Url != nil {
+		url = *req.Url
 	}
 
 	automation := Automation{
 		Name:        req.Name,
-		Url:         req.URL,
+		Url:         url,
 		Provider:    automationProvider.Name,
-		ProviderID:  automationProvider.ID,
-		CostSavings: req.CostSavings,
+		ProviderID:  automationProvider.Id,
+		CostSavings: costSavings,
 	}
 
 	createdAutomation, err := s.repository.Create(ctx, automation)
@@ -135,9 +146,9 @@ func (s service) Create(ctx context.Context, req CreateRequest) (GetResponse, er
 			"failed to create automation",
 			err,
 			slog.String("automation_name", req.Name),
-			slog.String("provider_id", req.ProviderID.String()),
+			slog.String("provider_id", req.ProviderId.String()),
 		)
-		return GetResponse{}, ErrCreateAutomation
+		return api.Automation{}, ErrCreateAutomation
 	}
 
 	automationWithProvider, err := s.repository.FindById(ctx, createdAutomation.ID.String())
@@ -148,17 +159,17 @@ func (s service) Create(ctx context.Context, req CreateRequest) (GetResponse, er
 			err,
 			slog.String("automation_id", createdAutomation.ID.String()),
 		)
-		return GetResponse{}, ErrCreateAutomation
+		return api.Automation{}, ErrCreateAutomation
 	}
 
 	return mapEntityToResponse(automationWithProvider), nil
 }
 
-func (s service) Update(ctx context.Context, req UpdateRequest, automationId string) (GetResponse, error) {
+func (s service) Update(ctx context.Context, req api.AutomationUpdateRequest, automationId string) (api.Automation, error) {
 	automationWithProvider, err := s.repository.FindById(ctx, automationId)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return GetResponse{}, ErrAutomationNotFound
+			return api.Automation{}, ErrAutomationNotFound
 		}
 
 		s.logger.ErrorWithStack(
@@ -167,15 +178,25 @@ func (s service) Update(ctx context.Context, req UpdateRequest, automationId str
 			err,
 			slog.String("automation_id", automationId),
 		)
-		return GetResponse{}, ErrUpdateAutomation
+		return api.Automation{}, ErrUpdateAutomation
+	}
+
+	url := automationWithProvider.Url
+	if req.Url != nil {
+		url = *req.Url
+	}
+
+	costSavings := automationWithProvider.CostSavings
+	if req.CostSavings != nil {
+		costSavings = *req.CostSavings
 	}
 
 	automation := Automation{
 		ID:          automationWithProvider.ID,
 		Name:        automationWithProvider.Name,
-		Url:         req.URL,
+		Url:         url,
 		ProviderID:  automationWithProvider.ProviderID,
-		CostSavings: req.CostSavings,
+		CostSavings: costSavings,
 	}
 
 	updatedAutomation, err := s.repository.Update(ctx, automation)
@@ -186,7 +207,7 @@ func (s service) Update(ctx context.Context, req UpdateRequest, automationId str
 			err,
 			slog.String("automation_id", automationId),
 		)
-		return GetResponse{}, ErrUpdateAutomation
+		return api.Automation{}, ErrUpdateAutomation
 	}
 
 	updatedAutomationWithProvider, err := s.repository.FindById(ctx, updatedAutomation.ID.String())
@@ -197,7 +218,7 @@ func (s service) Update(ctx context.Context, req UpdateRequest, automationId str
 			err,
 			slog.String("automation_id", updatedAutomation.ID.String()),
 		)
-		return GetResponse{}, ErrUpdateAutomation
+		return api.Automation{}, ErrUpdateAutomation
 	}
 
 	return mapEntityToResponse(updatedAutomationWithProvider), nil
@@ -235,13 +256,13 @@ func NewService(repository Repository,
 	}
 }
 
-func mapEntityToResponse(automation Automation) GetResponse {
-	return GetResponse{
-		ID:          automation.ID,
+func mapEntityToResponse(automation Automation) api.Automation {
+	return api.Automation{
+		Id:          automation.ID,
 		Name:        automation.Name,
 		Provider:    automation.Provider,
-		ProviderID:  automation.ProviderID,
-		URL:         automation.Url,
+		ProviderId:  automation.ProviderID,
+		Url:         automation.Url,
 		CostSavings: automation.CostSavings,
 	}
 }

@@ -10,24 +10,25 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"github.com/svetlyopet/heimdallr/internal/report/api"
 	"github.com/svetlyopet/heimdallr/internal/testutil"
 )
 
 type stubService struct {
-	getAllGlobalResponse []GetResponse
+	getAllGlobalResponse []api.Report
 	getAllGlobalTotal    int64
 	getAllGlobalError    error
-	createResponse       GetResponse
+	createResponse       api.Report
 	createError          error
-	updateResponse       GetResponse
+	updateResponse       api.Report
 	updateError          error
 }
 
-func (s stubService) GetAll(_ context.Context, _ string, _ string, _ int, _ int) ([]GetResponse, int64, error) {
+func (s stubService) GetAll(_ context.Context, _ string, _ string, _ int, _ int) ([]api.Report, int64, error) {
 	return nil, 0, nil
 }
 
-func (s stubService) GetAllGlobal(_ context.Context, _ ListFilters, _ int, _ int) ([]GetResponse, int64, error) {
+func (s stubService) GetAllGlobal(_ context.Context, _ ListFilters, _ int, _ int) ([]api.Report, int64, error) {
 	if s.getAllGlobalError != nil {
 		return nil, 0, s.getAllGlobalError
 	}
@@ -35,21 +36,21 @@ func (s stubService) GetAllGlobal(_ context.Context, _ ListFilters, _ int, _ int
 	return s.getAllGlobalResponse, s.getAllGlobalTotal, nil
 }
 
-func (s stubService) GetById(_ context.Context, _ string, _ string, _ string) (GetResponse, error) {
-	return GetResponse{}, nil
+func (s stubService) GetById(_ context.Context, _ string, _ string, _ string) (api.Report, error) {
+	return api.Report{}, nil
 }
 
-func (s stubService) Create(_ context.Context, _ string, _ string, _ CreateRequest) (GetResponse, error) {
+func (s stubService) Create(_ context.Context, _ string, _ string, _ api.ReportCreateRequest) (api.Report, error) {
 	if s.createError != nil {
-		return GetResponse{}, s.createError
+		return api.Report{}, s.createError
 	}
 
 	return s.createResponse, nil
 }
 
-func (s stubService) Update(_ context.Context, _ string, _ string, _ string, _ UpdateRequest) (GetResponse, error) {
+func (s stubService) Update(_ context.Context, _ string, _ string, _ string, _ api.ReportUpdateRequest) (api.Report, error) {
 	if s.updateError != nil {
-		return GetResponse{}, s.updateError
+		return api.Report{}, s.updateError
 	}
 
 	return s.updateResponse, nil
@@ -64,8 +65,8 @@ func newReportRouter(t *testing.T, svc Service) *gin.Engine {
 	require.NoError(t, err)
 
 	r := gin.New()
-	api := r.Group("/api")
-	RegisterRoutes(api, h)
+	apiGroup := r.Group("/api")
+	RegisterRoutes(apiGroup, h)
 
 	return r
 }
@@ -95,15 +96,15 @@ func TestListAllReturnsReports(t *testing.T) {
 	releaseID := uuid.MustParse("8b1e2f4a-9c3d-4e5f-a6b7-c8d9e0f1a2b3")
 
 	r := newReportRouter(t, stubService{
-		getAllGlobalResponse: []GetResponse{
+		getAllGlobalResponse: []api.Report{
 			{
-				ID:            "sast-1",
-				ApplicationID: applicationID,
-				ReleaseID:     releaseID,
+				Id:            "sast-1",
+				ApplicationId: applicationID,
+				ReleaseId:     releaseID,
 				Application:   "demo-app",
 				Version:       "v1.0.0",
-				Type:          "sast",
-				Status:        "failed",
+				Type:          api.ReportTypeSast,
+				Status:        api.JobStatusFailed,
 			},
 		},
 		getAllGlobalTotal: 1,
@@ -129,20 +130,21 @@ func TestListAllReturnsInternalServerError(t *testing.T) {
 func TestCreateReportReturnsCreated(t *testing.T) {
 	applicationID := uuid.MustParse("5d8dd803-fca6-4f7c-9dd2-24417622d630")
 	releaseID := uuid.MustParse("8b1e2f4a-9c3d-4e5f-a6b7-c8d9e0f1a2b3")
+	location := "ci"
 
 	r := newReportRouter(t, stubService{
-		createResponse: GetResponse{
-			ID:            "sast-1",
-			ApplicationID: applicationID,
-			ReleaseID:     releaseID,
-			Type:          "sast",
-			Status:        "started",
+		createResponse: api.Report{
+			Id:            "sast-1",
+			ApplicationId: applicationID,
+			ReleaseId:     releaseID,
+			Type:          api.ReportTypeSast,
+			Status:        api.JobStatusStarted,
 		},
 	})
 
 	path := "/api/v1/application/" + applicationID.String() + "/release/" + releaseID.String() + "/report"
-	rr := testutil.DoGinJSONRequest(t, r, http.MethodPost, path, CreateRequest{
-		ID: "sast-1", Type: "sast", Status: "started", Location: "ci",
+	rr := testutil.DoGinJSONRequest(t, r, http.MethodPost, path, api.ReportCreateRequest{
+		Id: "sast-1", Type: api.ReportTypeSast, Status: api.JobStatusStarted, Location: &location,
 	}, nil)
 	response := testutil.AssertJSONStatus(t, rr, http.StatusCreated)
 	data, ok := response["data"].(map[string]any)
@@ -157,6 +159,6 @@ func TestUpdateReportReturnsNotFound(t *testing.T) {
 	r := newReportRouter(t, stubService{updateError: ErrReportNotFound})
 
 	path := "/api/v1/application/" + applicationID.String() + "/release/" + releaseID.String() + "/report/sast-1"
-	rr := testutil.DoGinJSONRequest(t, r, http.MethodPatch, path, UpdateRequest{Status: "success"}, nil)
+	rr := testutil.DoGinJSONRequest(t, r, http.MethodPatch, path, api.ReportUpdateRequest{Status: api.JobStatusSuccess}, nil)
 	require.Equal(t, http.StatusNotFound, rr.Code)
 }

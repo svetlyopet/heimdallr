@@ -20,6 +20,7 @@ import (
 type testServer struct {
 	Server   *httptest.Server
 	RootPass string
+	Token    string
 }
 
 func startTestServer(t *testing.T) testServer {
@@ -36,10 +37,13 @@ func startTestServer(t *testing.T) testServer {
 	ts := httptest.NewServer(srv.HTTPHandler())
 	t.Cleanup(ts.Close)
 
-	return testServer{
+	server := testServer{
 		Server:   ts,
 		RootPass: rootPassword,
 	}
+	server.Token = loginToken(t, server, "root", rootPassword)
+
+	return server
 }
 
 func doRequest(t *testing.T, ts testServer, method, path string, body any, headers map[string]string) (*http.Response, map[string]any) {
@@ -78,11 +82,23 @@ func doRequest(t *testing.T, ts testServer, method, path string, body any, heade
 	return resp, parsed
 }
 
-func authHeaders(username, password string) map[string]string {
-	return map[string]string{
-		"X-Auth-Username": username,
-		"X-Auth-Password": password,
-	}
+func loginToken(t *testing.T, ts testServer, username, password string) string {
+	t.Helper()
+
+	resp, parsed := doRequest(t, ts, http.MethodPost, "/api/v1/auth/login", map[string]string{
+		"username": username,
+		"password": password,
+	}, nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	data := dataField(t, parsed)
+	token, ok := data["token"].(string)
+	require.True(t, ok, fmt.Sprintf("expected login token, got %#v", parsed))
+	return token
+}
+
+func authHeaders(ts testServer) map[string]string {
+	return bearerHeader(ts.Token)
 }
 
 func bearerHeader(token string) map[string]string {

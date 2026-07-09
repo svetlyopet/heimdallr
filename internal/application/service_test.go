@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"github.com/svetlyopet/heimdallr/internal/application/api"
 	"github.com/svetlyopet/heimdallr/internal/testutil"
 	"gorm.io/gorm"
 )
@@ -22,10 +23,11 @@ func newApplicationService(t *testing.T) (Service, *gorm.DB) {
 func TestServiceCreateReturnsApplication(t *testing.T) {
 	svc, _ := newApplicationService(t)
 
-	created, err := svc.Create(context.Background(), CreateRequest{
+	repoURL := api.URL("https://example.com/new")
+	created, err := svc.Create(context.Background(), api.ApplicationCreateRequest{
 		Name:          "new-app",
-		Description:   "desc",
-		RepositoryURL: "https://example.com/new",
+		Description:   ptr("desc"),
+		RepositoryUrl: &repoURL,
 	})
 	require.NoError(t, err)
 	require.Equal(t, "new-app", created.Name)
@@ -34,10 +36,11 @@ func TestServiceCreateReturnsApplication(t *testing.T) {
 func TestServiceCreateReturnsConflictForDuplicateName(t *testing.T) {
 	svc, _ := newApplicationService(t)
 
-	req := CreateRequest{
+	repoURL := api.URL("https://example.com/dup")
+	req := api.ApplicationCreateRequest{
 		Name:          "dup-app",
-		Description:   "desc",
-		RepositoryURL: "https://example.com/dup",
+		Description:   ptr("desc"),
+		RepositoryUrl: &repoURL,
 	}
 	_, err := svc.Create(context.Background(), req)
 	require.NoError(t, err)

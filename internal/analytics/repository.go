@@ -3,13 +3,14 @@ package analytics
 import (
 	"context"
 
+	"github.com/svetlyopet/heimdallr/internal/analytics/api"
 	"gorm.io/gorm"
 )
 
 type Repository interface {
-	GetAutomationOverview(ctx context.Context) (AutomationAnalyticsResponse, error)
-	GetAutomationOverviewByID(ctx context.Context, automationID string) (AutomationAnalyticsResponse, error)
-	GetComplianceOverview(ctx context.Context) (ComplianceAnalyticsResponse, error)
+	GetAutomationOverview(ctx context.Context) (api.AutomationAnalytics, error)
+	GetAutomationOverviewByID(ctx context.Context, automationID string) (api.AutomationAnalytics, error)
+	GetComplianceOverview(ctx context.Context) (api.ComplianceAnalytics, error)
 }
 
 type repository struct {
@@ -23,79 +24,93 @@ type jobTotals struct {
 	StartedJobs    int64
 }
 
-func (r repository) GetAutomationOverview(ctx context.Context) (AutomationAnalyticsResponse, error) {
+type locationJobRow struct {
+	Location       string
+	TotalJobs      int64
+	SuccessfulJobs int64
+	FailedJobs     int64
+	StartedJobs    int64
+}
+
+type automationJobRow struct {
+	AutomationID   string
+	Automation     string
+	Provider       string
+	TotalJobs      int64
+	SuccessfulJobs int64
+	FailedJobs     int64
+	StartedJobs    int64
+}
+
+type reportTotals struct {
+	TotalReports      int64
+	SuccessfulReports int64
+	FailedReports     int64
+	StartedReports    int64
+}
+
+type latestReleaseRow struct {
+	ApplicationID   string
+	Application     string
+	LatestReleaseID string
+	LatestVersion   string
+}
+
+func (r repository) GetAutomationOverview(ctx context.Context) (api.AutomationAnalytics, error) {
 	var totalAutomations int64
 	if err := r.db.WithContext(ctx).
 		Table("automations").
 		Count(&totalAutomations).Error; err != nil {
-		return AutomationAnalyticsResponse{}, err
+		return api.AutomationAnalytics{}, err
 	}
 
 	totals, err := r.getTotals(ctx, "")
 	if err != nil {
-		return AutomationAnalyticsResponse{}, err
+		return api.AutomationAnalytics{}, err
 	}
 
 	byLocation, err := r.getByLocation(ctx, "")
 	if err != nil {
-		return AutomationAnalyticsResponse{}, err
+		return api.AutomationAnalytics{}, err
 	}
 
 	byAutomation, err := r.getByAutomation(ctx, "")
 	if err != nil {
-		return AutomationAnalyticsResponse{}, err
+		return api.AutomationAnalytics{}, err
 	}
 
-	return AutomationAnalyticsResponse{
-		TotalAutomations: totalAutomations,
-		TotalJobs:        totals.TotalJobs,
-		SuccessfulJobs:   totals.SuccessfulJobs,
-		FailedJobs:       totals.FailedJobs,
-		StartedJobs:      totals.StartedJobs,
-		SuccessRate:      calculateSuccessRate(totals.SuccessfulJobs, totals.TotalJobs),
-		ByLocation:       byLocation,
-		ByAutomation:     byAutomation,
-	}, nil
+	return buildAutomationAnalytics(totalAutomations, totals, byLocation, byAutomation), nil
 }
 
-func (r repository) GetAutomationOverviewByID(ctx context.Context, automationID string) (AutomationAnalyticsResponse, error) {
+func (r repository) GetAutomationOverviewByID(ctx context.Context, automationID string) (api.AutomationAnalytics, error) {
 	var totalAutomations int64
 	if err := r.db.WithContext(ctx).
 		Table("automations").
 		Where("id = ?", automationID).
 		Count(&totalAutomations).Error; err != nil {
-		return AutomationAnalyticsResponse{}, err
+		return api.AutomationAnalytics{}, err
 	}
 
 	if totalAutomations == 0 {
-		return AutomationAnalyticsResponse{}, ErrAutomationNotFound
+		return api.AutomationAnalytics{}, ErrAutomationNotFound
 	}
 
 	totals, err := r.getTotals(ctx, automationID)
 	if err != nil {
-		return AutomationAnalyticsResponse{}, err
+		return api.AutomationAnalytics{}, err
 	}
 
 	byLocation, err := r.getByLocation(ctx, automationID)
 	if err != nil {
-		return AutomationAnalyticsResponse{}, err
+		return api.AutomationAnalytics{}, err
 	}
 
 	byAutomation, err := r.getByAutomation(ctx, automationID)
 	if err != nil {
-		return AutomationAnalyticsResponse{}, err
+		return api.AutomationAnalytics{}, err
 	}
 
-	return AutomationAnalyticsResponse{
-		TotalAutomations: totalAutomations,
-		TotalJobs:        totals.TotalJobs,
-		SuccessfulJobs:   totals.SuccessfulJobs,
-		FailedJobs:       totals.FailedJobs,
-		StartedJobs:      totals.StartedJobs,
-		SuccessRate:      calculateSuccessRate(totals.SuccessfulJobs, totals.TotalJobs),
-		ByLocation:       byLocation,
-		ByAutomation:     byAutomation,
-	}, nil
+	return buildAutomationAnalytics(totalAutomations, totals, byLocation, byAutomation), nil
 }
 
 func (r repository) getTotals(ctx context.Context, automationID string) (jobTotals, error) {
@@ -121,8 +136,8 @@ func (r repository) getTotals(ctx context.Context, automationID string) (jobTota
 	return totals, nil
 }
 
-func (r repository) getByLocation(ctx context.Context, automationID string) ([]LocationJobAnalytics, error) {
-	var rows []LocationJobAnalytics
+func (r repository) getByLocation(ctx context.Context, automationID string) ([]api.LocationJobAnalytics, error) {
+	var rows []locationJobRow
 
 	query := r.db.WithContext(ctx).
 		Table("jobs").
@@ -144,15 +159,11 @@ func (r repository) getByLocation(ctx context.Context, automationID string) ([]L
 		return nil, err
 	}
 
-	for index := range rows {
-		rows[index].SuccessRate = calculateSuccessRate(rows[index].SuccessfulJobs, rows[index].TotalJobs)
-	}
-
-	return rows, nil
+	return mapLocationRows(rows), nil
 }
 
-func (r repository) getByAutomation(ctx context.Context, automationID string) ([]AutomationJobAnalytics, error) {
-	var rows []AutomationJobAnalytics
+func (r repository) getByAutomation(ctx context.Context, automationID string) ([]api.AutomationJobAnalytics, error) {
+	var rows []automationJobRow
 
 	query := r.db.WithContext(ctx).
 		Table("jobs").
@@ -176,41 +187,82 @@ func (r repository) getByAutomation(ctx context.Context, automationID string) ([
 		return nil, err
 	}
 
-	for index := range rows {
-		rows[index].SuccessRate = calculateSuccessRate(rows[index].SuccessfulJobs, rows[index].TotalJobs)
-	}
-
-	return rows, nil
+	return mapAutomationRows(rows), nil
 }
 
-func calculateSuccessRate(successfulJobs int64, totalJobs int64) float64 {
-	if totalJobs == 0 {
+func calculateSuccessRate(successful int64, total int64) float64 {
+	if total == 0 {
 		return 0
 	}
 
-	return float64(successfulJobs) / float64(totalJobs) * 100
+	return float64(successful) / float64(total) * 100
 }
 
-func (r repository) GetComplianceOverview(ctx context.Context) (ComplianceAnalyticsResponse, error) {
+func buildAutomationAnalytics(
+	totalAutomations int64,
+	totals jobTotals,
+	byLocation []api.LocationJobAnalytics,
+	byAutomation []api.AutomationJobAnalytics,
+) api.AutomationAnalytics {
+	return api.AutomationAnalytics{
+		TotalAutomations: int(totalAutomations),
+		TotalJobs:        int(totals.TotalJobs),
+		SuccessfulJobs:   int(totals.SuccessfulJobs),
+		FailedJobs:       int(totals.FailedJobs),
+		StartedJobs:      int(totals.StartedJobs),
+		SuccessRate:      calculateSuccessRate(totals.SuccessfulJobs, totals.TotalJobs),
+		ByLocation:       byLocation,
+		ByAutomation:     byAutomation,
+	}
+}
+
+func mapLocationRows(rows []locationJobRow) []api.LocationJobAnalytics {
+	result := make([]api.LocationJobAnalytics, 0, len(rows))
+	for _, row := range rows {
+		result = append(result, api.LocationJobAnalytics{
+			Location:       row.Location,
+			TotalJobs:      int(row.TotalJobs),
+			SuccessfulJobs: int(row.SuccessfulJobs),
+			FailedJobs:     int(row.FailedJobs),
+			StartedJobs:    int(row.StartedJobs),
+			SuccessRate:    calculateSuccessRate(row.SuccessfulJobs, row.TotalJobs),
+		})
+	}
+
+	return result
+}
+
+func mapAutomationRows(rows []automationJobRow) []api.AutomationJobAnalytics {
+	result := make([]api.AutomationJobAnalytics, 0, len(rows))
+	for _, row := range rows {
+		result = append(result, api.AutomationJobAnalytics{
+			AutomationId:   row.AutomationID,
+			Automation:     row.Automation,
+			Provider:       row.Provider,
+			TotalJobs:      int(row.TotalJobs),
+			SuccessfulJobs: int(row.SuccessfulJobs),
+			FailedJobs:     int(row.FailedJobs),
+			StartedJobs:    int(row.StartedJobs),
+			SuccessRate:    calculateSuccessRate(row.SuccessfulJobs, row.TotalJobs),
+		})
+	}
+
+	return result
+}
+
+func (r repository) GetComplianceOverview(ctx context.Context) (api.ComplianceAnalytics, error) {
 	var totalApplications int64
 	if err := r.db.WithContext(ctx).
 		Table("applications").
 		Count(&totalApplications).Error; err != nil {
-		return ComplianceAnalyticsResponse{}, err
+		return api.ComplianceAnalytics{}, err
 	}
 
 	var totalReleases int64
 	if err := r.db.WithContext(ctx).
 		Table("releases").
 		Count(&totalReleases).Error; err != nil {
-		return ComplianceAnalyticsResponse{}, err
-	}
-
-	type reportTotals struct {
-		TotalReports      int64
-		SuccessfulReports int64
-		FailedReports     int64
-		StartedReports    int64
+		return api.ComplianceAnalytics{}, err
 	}
 
 	var totals reportTotals
@@ -223,14 +275,7 @@ func (r repository) GetComplianceOverview(ctx context.Context) (ComplianceAnalyt
 			SUM(CASE WHEN status = 'started' THEN 1 ELSE 0 END) AS started_reports
 		`).
 		Take(&totals).Error; err != nil {
-		return ComplianceAnalyticsResponse{}, err
-	}
-
-	type latestReleaseRow struct {
-		ApplicationID   string
-		Application     string
-		LatestReleaseID string
-		LatestVersion   string
+		return api.ComplianceAnalytics{}, err
 	}
 
 	var latestReleases []latestReleaseRow
@@ -251,10 +296,10 @@ func (r repository) GetComplianceOverview(ctx context.Context) (ComplianceAnalyt
 		`).
 		Order("r.application ASC").
 		Find(&latestReleases).Error; err != nil {
-		return ComplianceAnalyticsResponse{}, err
+		return api.ComplianceAnalytics{}, err
 	}
 
-	byApplication := make([]ApplicationComplianceStats, 0, len(latestReleases))
+	byApplication := make([]api.ApplicationComplianceStats, 0, len(latestReleases))
 	for _, row := range latestReleases {
 		var releaseTotals reportTotals
 		if err := r.db.WithContext(ctx).
@@ -267,29 +312,29 @@ func (r repository) GetComplianceOverview(ctx context.Context) (ComplianceAnalyt
 			`).
 			Where("release_id = ?", row.LatestReleaseID).
 			Take(&releaseTotals).Error; err != nil {
-			return ComplianceAnalyticsResponse{}, err
+			return api.ComplianceAnalytics{}, err
 		}
 
-		byApplication = append(byApplication, ApplicationComplianceStats{
-			ApplicationID:     row.ApplicationID,
+		byApplication = append(byApplication, api.ApplicationComplianceStats{
+			ApplicationId:     row.ApplicationID,
 			Application:       row.Application,
-			LatestReleaseID:   row.LatestReleaseID,
+			LatestReleaseId:   row.LatestReleaseID,
 			LatestVersion:     row.LatestVersion,
-			TotalReports:      releaseTotals.TotalReports,
-			SuccessfulReports: releaseTotals.SuccessfulReports,
-			FailedReports:     releaseTotals.FailedReports,
-			StartedReports:    releaseTotals.StartedReports,
+			TotalReports:      int(releaseTotals.TotalReports),
+			SuccessfulReports: int(releaseTotals.SuccessfulReports),
+			FailedReports:     int(releaseTotals.FailedReports),
+			StartedReports:    int(releaseTotals.StartedReports),
 			SuccessRate:       calculateSuccessRate(releaseTotals.SuccessfulReports, releaseTotals.TotalReports),
 		})
 	}
 
-	return ComplianceAnalyticsResponse{
-		TotalApplications: totalApplications,
-		TotalReleases:     totalReleases,
-		TotalReports:      totals.TotalReports,
-		SuccessfulReports: totals.SuccessfulReports,
-		FailedReports:     totals.FailedReports,
-		StartedReports:    totals.StartedReports,
+	return api.ComplianceAnalytics{
+		TotalApplications: int(totalApplications),
+		TotalReleases:     int(totalReleases),
+		TotalReports:      int(totals.TotalReports),
+		SuccessfulReports: int(totals.SuccessfulReports),
+		FailedReports:     int(totals.FailedReports),
+		StartedReports:    int(totals.StartedReports),
 		SuccessRate:       calculateSuccessRate(totals.SuccessfulReports, totals.TotalReports),
 		ByApplication:     byApplication,
 	}, nil

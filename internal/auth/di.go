@@ -25,5 +25,8 @@ func provideService(i do.Injector) (Service, error) {
 }
 
 func provideHandler(i do.Injector) (Handler, error) {
-	return NewHandler(do.MustInvoke[Service](i))
+	return NewHandler(
+		do.MustInvoke[Service](i),
+		do.MustInvoke[APITokenService](i),
+	)
 }

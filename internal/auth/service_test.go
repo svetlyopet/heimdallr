@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"testing"
 
+	openapi_types "github.com/oapi-codegen/runtime/types"
 	"github.com/stretchr/testify/require"
+	"github.com/svetlyopet/heimdallr/internal/auth/api"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
@@ -55,32 +57,33 @@ func TestServiceEnsureRootUserCreatesOnce(t *testing.T) {
 func TestServiceCreateDefaultRoleAndValidation(t *testing.T) {
 	svc, _, _ := newTestService(t, ServiceConfig{})
 
-	created, err := svc.Create(t.Context(), CreateRequest{
+	created, err := svc.Create(t.Context(), api.AuthCreateUserRequest{
 		Username: "reader-user",
-		Email:    "reader-user@example.com",
+		Email:    openapi_types.Email("reader-user@example.com"),
 		Password: "StrongPassword123!",
 	})
 	require.NoError(t, err)
-	require.Equal(t, []string{RoleReader}, created.Roles)
+	require.Equal(t, []api.AuthRole{api.Reader}, created.Roles)
 
-	_, err = svc.Create(t.Context(), CreateRequest{
+	owner := api.AuthRole("owner")
+	_, err = svc.Create(t.Context(), api.AuthCreateUserRequest{
 		Username: "bad-role-user",
-		Email:    "bad-role-user@example.com",
+		Email:    openapi_types.Email("bad-role-user@example.com"),
 		Password: "StrongPassword123!",
-		Roles:    []string{"owner"},
+		Roles:    &[]api.AuthRole{owner},
 	})
 	require.ErrorIs(t, err, ErrInvalidRole)
 
-	_, err = svc.Create(t.Context(), CreateRequest{
+	_, err = svc.Create(t.Context(), api.AuthCreateUserRequest{
 		Username: "   ",
-		Email:    "blank@example.com",
+		Email:    openapi_types.Email("blank@example.com"),
 		Password: "StrongPassword123!",
 	})
 	require.ErrorIs(t, err, ErrInvalidCredentials)
 
-	_, err = svc.Create(t.Context(), CreateRequest{
+	_, err = svc.Create(t.Context(), api.AuthCreateUserRequest{
 		Username: "short-password",
-		Email:    "short-password@example.com",
+		Email:    openapi_types.Email("short-password@example.com"),
 		Password: "short",
 	})
 	require.ErrorIs(t, err, ErrInvalidPasswordValue)
@@ -89,19 +92,19 @@ func TestServiceCreateDefaultRoleAndValidation(t *testing.T) {
 func TestServiceCreateDuplicateUsername(t *testing.T) {
 	svc, _, _ := newTestService(t, ServiceConfig{})
 
-	_, err := svc.Create(t.Context(), CreateRequest{
+	_, err := svc.Create(t.Context(), api.AuthCreateUserRequest{
 		Username: "duplicate-user",
-		Email:    "first@example.com",
+		Email:    openapi_types.Email("first@example.com"),
 		Password: "StrongPassword123!",
-		Roles:    []string{RoleReader},
+		Roles:    &[]api.AuthRole{api.Reader},
 	})
 	require.NoError(t, err)
 
-	_, err = svc.Create(t.Context(), CreateRequest{
+	_, err = svc.Create(t.Context(), api.AuthCreateUserRequest{
 		Username: "duplicate-user",
-		Email:    "second@example.com",
+		Email:    openapi_types.Email("second@example.com"),
 		Password: "StrongPassword123!",
-		Roles:    []string{RoleReader},
+		Roles:    &[]api.AuthRole{api.Reader},
 	})
 	require.ErrorIs(t, err, ErrUserAlreadyExists)
 }
@@ -136,11 +139,11 @@ func TestServiceDeleteRejectsRootUser(t *testing.T) {
 func TestServiceListAndUpdate(t *testing.T) {
 	svc, _, _ := newTestService(t, ServiceConfig{})
 
-	created, err := svc.Create(t.Context(), CreateRequest{
+	created, err := svc.Create(t.Context(), api.AuthCreateUserRequest{
 		Username: "managed-user",
-		Email:    "managed-user@example.com",
+		Email:    openapi_types.Email("managed-user@example.com"),
 		Password: "StrongPassword123!",
-		Roles:    []string{RoleReader},
+		Roles:    &[]api.AuthRole{api.Reader},
 	})
 	require.NoError(t, err)
 
@@ -149,16 +152,20 @@ func TestServiceListAndUpdate(t *testing.T) {
 	require.Len(t, listed, 1)
 	require.Equal(t, created.Username, listed[0].Username)
 
-	updated, err := svc.Update(t.Context(), created.ID, UpdateRequest{
-		Email:    "managed-user-updated@example.com",
-		Password: "StrongPasswordUpdated123!",
-		Roles:    []string{RoleAdmin},
+	updatedEmail := openapi_types.Email("managed-user-updated@example.com")
+	updatedPassword := "StrongPasswordUpdated123!"
+	updatedRoles := []api.AuthRole{api.Admin}
+	updated, err := svc.Update(t.Context(), created.Id, api.AuthUpdateUserRequest{
+		Email:    &updatedEmail,
+		Password: &updatedPassword,
+		Roles:    &updatedRoles,
 	})
 	require.NoError(t, err)
-	require.Equal(t, "managed-user-updated@example.com", updated.Email)
-	require.Equal(t, []string{RoleAdmin}, updated.Roles)
+	require.Equal(t, updatedEmail, updated.Email)
+	require.Equal(t, []api.AuthRole{api.Admin}, updated.Roles)
 
-	_, err = svc.Update(t.Context(), created.ID, UpdateRequest{Roles: []string{"owner"}})
+	owner := api.AuthRole("owner")
+	_, err = svc.Update(t.Context(), created.Id, api.AuthUpdateUserRequest{Roles: &[]api.AuthRole{owner}})
 	require.ErrorIs(t, err, ErrInvalidRole)
 }
 
@@ -173,7 +180,8 @@ func TestServiceUpdateRejectsRootRoleChange(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []string{RoleAdmin}, root.Roles)
 
-	_, err = svc.Update(t.Context(), root.ID.String(), UpdateRequest{Roles: []string{RoleReader}})
+	readerRoles := []api.AuthRole{api.Reader}
+	_, err = svc.Update(t.Context(), root.ID.String(), api.AuthUpdateUserRequest{Roles: &readerRoles})
 	require.ErrorIs(t, err, ErrRootRoleForbidden)
 
 	updatedRoot, err := repo.FindByID(t.Context(), root.ID.String())

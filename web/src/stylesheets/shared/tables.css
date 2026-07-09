@@ -87,14 +87,28 @@ tbody tr:hover {
 .row-actions {
     display: flex;
     justify-content: flex-end;
+    align-items: center;
     gap: 8px;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+}
+
+.row-actions .button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    white-space: nowrap;
 }
 
 .page-size {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px 16px;
+    align-items: flex-end;
+    justify-content: flex-end;
     min-width: 110px;
 }
 
 .page-size label {
+    min-width: 110px;
     font-size: 12px;
 }

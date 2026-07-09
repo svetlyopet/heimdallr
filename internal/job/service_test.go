@@ -2,13 +2,15 @@ package job
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"github.com/svetlyopet/heimdallr/internal/automation"
+	automationapi "github.com/svetlyopet/heimdallr/internal/automation/api"
+	"github.com/svetlyopet/heimdallr/internal/job/api"
 	"github.com/svetlyopet/heimdallr/internal/provider"
+	providerapi "github.com/svetlyopet/heimdallr/internal/provider/api"
 	"github.com/svetlyopet/heimdallr/internal/testutil"
 )
 
@@ -29,52 +31,59 @@ func newJobService(t *testing.T) (Service, automation.Service, provider.Service)
 func TestServiceCreateAndUpdateJobLifecycle(t *testing.T) {
 	jobSvc, automationSvc, providerSvc := newJobService(t)
 
-	prov, err := providerSvc.Create(context.Background(), provider.CreateRequest{
+	prov, err := providerSvc.Create(context.Background(), providerapi.ProviderCreateRequest{
 		Name: "awx",
-		URL:  "https://awx.example.com",
+		Url:  providerapi.URL("https://awx.example.com"),
 	})
 	require.NoError(t, err)
 
-	auto, err := automationSvc.Create(context.Background(), automation.CreateRequest{
+	url := "https://awx.example.com/#/templates/job_template/1"
+	auto, err := automationSvc.Create(context.Background(), automationapi.AutomationCreateRequest{
 		Name:       "deploy",
-		URL:        "https://awx.example.com/#/templates/job_template/1",
-		ProviderID: prov.ID,
+		Url:        &url,
+		ProviderId: prov.Id,
 	})
 	require.NoError(t, err)
 
-	created, err := jobSvc.Create(context.Background(), auto.ID.String(), CreateRequest{
-		ID:       "1000",
-		Status:   "started",
+	metadata := api.JobMetadata{"inventory": "true"}
+	created, err := jobSvc.Create(context.Background(), auto.Id.String(), api.JobCreateRequest{
+		Id:       "1000",
+		Status:   api.Started,
 		Location: "global",
-		URL:      "https://example.com/#/jobs/playbook/200",
-		Metadata: json.RawMessage(`{"inventory":"true"}`),
+		Url:      "https://example.com/#/jobs/playbook/200",
+		Metadata: &metadata,
 	})
 	require.NoError(t, err)
-	require.Equal(t, "started", created.Status)
+	require.Equal(t, api.JobStatus("started"), created.Status)
 
-	updated, err := jobSvc.Update(context.Background(), auto.ID.String(), "1000", UpdateRequest{
-		Status:   "success",
-		Metadata: json.RawMessage(`{"result":"ok"}`),
-		Output:   "dGVzdA==",
+	updateMetadata := api.JobMetadata{"result": "ok"}
+	output := api.JobOutput("dGVzdA==")
+	updated, err := jobSvc.Update(context.Background(), auto.Id.String(), "1000", api.JobUpdateRequest{
+		Status:   api.Success,
+		Metadata: &updateMetadata,
+		Output:   &output,
 	})
 	require.NoError(t, err)
-	require.Equal(t, "success", updated.Status)
-	require.Equal(t, "dGVzdA==", updated.Output)
+	require.Equal(t, api.Success, updated.Status)
+	require.NotNil(t, updated.Output)
+	require.Equal(t, "dGVzdA==", string(*updated.Output))
 }
 
 func TestServiceCreateReturnsInvalidOutputForBadBase64(t *testing.T) {
 	jobSvc, automationSvc, providerSvc := newJobService(t)
 
-	prov, err := providerSvc.Create(context.Background(), provider.CreateRequest{Name: "awx", URL: "https://awx.example.com"})
+	prov, err := providerSvc.Create(context.Background(), providerapi.ProviderCreateRequest{Name: "awx", Url: providerapi.URL("https://awx.example.com")})
 	require.NoError(t, err)
 
-	auto, err := automationSvc.Create(context.Background(), automation.CreateRequest{
-		Name: "deploy", URL: "https://awx.example.com/#/templates/job_template/1", ProviderID: prov.ID,
+	url := "https://awx.example.com/#/templates/job_template/1"
+	auto, err := automationSvc.Create(context.Background(), automationapi.AutomationCreateRequest{
+		Name: "deploy", Url: &url, ProviderId: prov.Id,
 	})
 	require.NoError(t, err)
 
-	_, err = jobSvc.Create(context.Background(), auto.ID.String(), CreateRequest{
-		ID: "1000", Status: "started", Location: "global", URL: "https://example.com/job/1", Output: "not-base64!",
+	output := api.JobOutput("not-base64!")
+	_, err = jobSvc.Create(context.Background(), auto.Id.String(), api.JobCreateRequest{
+		Id: "1000", Status: api.Started, Location: "global", Url: "https://example.com/job/1", Output: &output,
 	})
 	require.Error(t, err)
 }
@@ -82,15 +91,16 @@ func TestServiceCreateReturnsInvalidOutputForBadBase64(t *testing.T) {
 func TestServiceGetByIdReturnsNotFound(t *testing.T) {
 	jobSvc, automationSvc, providerSvc := newJobService(t)
 
-	prov, err := providerSvc.Create(context.Background(), provider.CreateRequest{Name: "awx", URL: "https://awx.example.com"})
+	prov, err := providerSvc.Create(context.Background(), providerapi.ProviderCreateRequest{Name: "awx", Url: providerapi.URL("https://awx.example.com")})
 	require.NoError(t, err)
 
-	auto, err := automationSvc.Create(context.Background(), automation.CreateRequest{
-		Name: "deploy", URL: "https://awx.example.com/#/templates/job_template/1", ProviderID: prov.ID,
+	url := "https://awx.example.com/#/templates/job_template/1"
+	auto, err := automationSvc.Create(context.Background(), automationapi.AutomationCreateRequest{
+		Name: "deploy", Url: &url, ProviderId: prov.Id,
 	})
 	require.NoError(t, err)
 
-	_, err = jobSvc.GetById(context.Background(), "missing", auto.ID.String())
+	_, err = jobSvc.GetById(context.Background(), "missing", auto.Id.String())
 	require.ErrorIs(t, err, ErrJobNotFound)
 }
 
@@ -98,16 +108,16 @@ type stubAutomationLookup struct {
 	getByIdError error
 }
 
-func (s stubAutomationLookup) GetByName(context.Context, string) (automation.GetResponse, error) {
-	return automation.GetResponse{}, nil
+func (s stubAutomationLookup) GetByName(context.Context, string) (automationapi.Automation, error) {
+	return automationapi.Automation{}, nil
 }
 
-func (s stubAutomationLookup) GetById(context.Context, string) (automation.GetResponse, error) {
+func (s stubAutomationLookup) GetById(context.Context, string) (automationapi.Automation, error) {
 	if s.getByIdError != nil {
-		return automation.GetResponse{}, s.getByIdError
+		return automationapi.Automation{}, s.getByIdError
 	}
 
-	return automation.GetResponse{}, nil
+	return automationapi.Automation{}, nil
 }
 
 type stubJobRepository struct {

@@ -1,12 +1,11 @@
 package application
 
-import "github.com/gin-gonic/gin"
+import (
+	"github.com/gin-gonic/gin"
+	"github.com/svetlyopet/heimdallr/internal/application/api"
+)
 
 func RegisterRoutes(rg *gin.RouterGroup, handler Handler) {
-	applicationRoutesV1 := rg.Group("/v1/application")
-	{
-		applicationRoutesV1.GET("", handler.List)
-		applicationRoutesV1.POST("", handler.Create)
-		applicationRoutesV1.GET("/:application_id", handler.Get)
-	}
+	strictHandler := api.NewStrictHandler(handler, nil)
+	api.RegisterHandlersWithOptions(rg, strictHandler, api.GinServerOptions{})
 }

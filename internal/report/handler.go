@@ -1,302 +1,243 @@
 package report
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"net/http"
-	"strconv"
-	"strings"
 
-	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
+	"github.com/svetlyopet/heimdallr/internal/report/api"
 )
 
 type Handler interface {
-	List(ctx *gin.Context)
-	ListAll(ctx *gin.Context)
-	Get(ctx *gin.Context)
-	Create(ctx *gin.Context)
-	Update(ctx *gin.Context)
+	api.StrictServerInterface
 }
 
 type handler struct {
 	service Service
 }
 
-func (h handler) List(ctx *gin.Context) {
-	applicationID, releaseID, ok := getValidScope(ctx)
+func (h handler) ListReleaseReports(ctx context.Context, request api.ListReleaseReportsRequestObject) (api.ListReleaseReportsResponseObject, error) {
+	page, limit, ok := paginationParams(request.Params.Page, request.Params.Limit)
 	if !ok {
-		return
+		return api.ListReleaseReports400JSONResponse{
+			BadRequestJSONResponse: api.BadRequestJSONResponse{Error: "page and limit must be positive integers"},
+		}, nil
 	}
 
-	page, err := strconv.Atoi(ctx.DefaultQuery("page", "1"))
-	if err != nil || page < 1 {
-		returnErrorResponse(ctx, http.StatusBadRequest, NewReportError("invalid query param value", errors.New("page must be a positive integer")))
-		return
-	}
-
-	limit, err := strconv.Atoi(ctx.DefaultQuery("limit", "10"))
-	if err != nil || limit < 1 {
-		returnErrorResponse(ctx, http.StatusBadRequest, NewReportError("invalid query param value", errors.New("limit must be a positive integer")))
-		return
-	}
-
-	reports, total, err := h.service.GetAll(ctx.Request.Context(), applicationID, releaseID, page, limit)
+	reports, total, err := h.service.GetAll(ctx, request.ApplicationId.String(), request.ReleaseId.String(), page, limit)
 	if err != nil {
-		statusCode := http.StatusInternalServerError
 		if errors.Is(err, ErrReportNotFound) {
-			statusCode = http.StatusNotFound
+			return api.ListReleaseReports404JSONResponse{
+				NotFoundJSONResponse: api.NotFoundJSONResponse{Error: reportErrorMessage(err, "release not found")},
+			}, nil
 		}
 
-		returnErrorResponse(ctx, statusCode, NewGetReportsError(err))
-		return
+		return api.ListReleaseReports500JSONResponse{
+			InternalServerErrorJSONResponse: api.InternalServerErrorJSONResponse{Error: reportErrorMessage(err, "failed to list reports")},
+		}, nil
 	}
 
-	totalPages := int64(0)
-	if total > 0 {
-		totalPages = (total + int64(limit) - 1) / int64(limit)
-	}
-
-	ctx.JSON(http.StatusOK, gin.H{
-		"data": reports,
-		"pagination": gin.H{
-			"page":        page,
-			"limit":       limit,
-			"total":       total,
-			"total_pages": totalPages,
-		},
-	})
+	return api.ListReleaseReports200JSONResponse{
+		Data:       reports,
+		Pagination: buildPagination(page, limit, total),
+	}, nil
 }
 
-func (h handler) ListAll(ctx *gin.Context) {
-	page, err := strconv.Atoi(ctx.DefaultQuery("page", "1"))
-	if err != nil || page < 1 {
-		returnErrorResponse(ctx, http.StatusBadRequest, NewReportError("invalid query param value", errors.New("page must be a positive integer")))
-		return
+func (h handler) CreateReleaseReport(ctx context.Context, request api.CreateReleaseReportRequestObject) (api.CreateReleaseReportResponseObject, error) {
+	if request.Body == nil {
+		return api.CreateReleaseReport400JSONResponse{
+			BadRequestJSONResponse: api.BadRequestJSONResponse{Error: "invalid request body"},
+		}, nil
 	}
 
-	limit, err := strconv.Atoi(ctx.DefaultQuery("limit", "10"))
-	if err != nil || limit < 1 {
-		returnErrorResponse(ctx, http.StatusBadRequest, NewReportError("invalid query param value", errors.New("limit must be a positive integer")))
-		return
-	}
-
-	filters := ListFilters{
-		ApplicationID: strings.TrimSpace(ctx.Query("application_id")),
-		ReleaseID:     strings.TrimSpace(ctx.Query("release_id")),
-		Status:        strings.TrimSpace(ctx.Query("status")),
-		Type:          strings.TrimSpace(ctx.Query("type")),
-	}
-
-	if filters.ApplicationID != "" {
-		if _, parseErr := uuid.Parse(filters.ApplicationID); parseErr != nil {
-			returnErrorResponse(ctx, http.StatusBadRequest, NewInvalidApplicationIDError(parseErr))
-			return
+	if request.Body.Metadata != nil {
+		if _, err := json.Marshal(request.Body.Metadata); err != nil {
+			return api.CreateReleaseReport400JSONResponse{
+				BadRequestJSONResponse: api.BadRequestJSONResponse{Error: "invalid metadata"},
+			}, nil
 		}
 	}
 
-	if filters.ReleaseID != "" {
-		if _, parseErr := uuid.Parse(filters.ReleaseID); parseErr != nil {
-			returnErrorResponse(ctx, http.StatusBadRequest, NewInvalidReleaseIDError(parseErr))
-			return
-		}
+	if request.Body.Output != nil && !isValidBase64(*request.Body.Output) {
+		return api.CreateReleaseReport400JSONResponse{
+			BadRequestJSONResponse: api.BadRequestJSONResponse{Error: "invalid output"},
+		}, nil
 	}
 
-	if filters.Status != "" {
-		switch filters.Status {
-		case "started", "skipped", "success", "failed":
-		default:
-			returnErrorResponse(ctx, http.StatusBadRequest, NewReportError("invalid query param value", errors.New("status must be one of started, skipped, success, failed")))
-			return
-		}
-	}
-
-	if filters.Type != "" {
-		switch filters.Type {
-		case "sast", "dast", "sbom", "code_coverage", "custom":
-		default:
-			returnErrorResponse(ctx, http.StatusBadRequest, NewReportError("invalid query param value", errors.New("type must be one of sast, dast, sbom, code_coverage, custom")))
-			return
-		}
-	}
-
-	reports, total, err := h.service.GetAllGlobal(ctx.Request.Context(), filters, page, limit)
+	report, err := h.service.Create(ctx, request.ApplicationId.String(), request.ReleaseId.String(), *request.Body)
 	if err != nil {
-		statusCode := http.StatusInternalServerError
+		if errors.Is(err, ErrReportNotFound) {
+			return api.CreateReleaseReport404JSONResponse{
+				NotFoundJSONResponse: api.NotFoundJSONResponse{Error: reportErrorMessage(err, "release not found")},
+			}, nil
+		}
+
+		if _, ok := errors.AsType[ReportError](err); ok {
+			return api.CreateReleaseReport400JSONResponse{
+				BadRequestJSONResponse: api.BadRequestJSONResponse{Error: reportErrorMessage(err, "invalid request")},
+			}, nil
+		}
+
+		return api.CreateReleaseReport500JSONResponse{
+			InternalServerErrorJSONResponse: api.InternalServerErrorJSONResponse{Error: reportErrorMessage(err, "failed to create report")},
+		}, nil
+	}
+
+	return api.CreateReleaseReport201JSONResponse{Data: report}, nil
+}
+
+func (h handler) GetReleaseReport(ctx context.Context, request api.GetReleaseReportRequestObject) (api.GetReleaseReportResponseObject, error) {
+	report, err := h.service.GetById(ctx, request.ApplicationId.String(), request.ReleaseId.String(), request.ReportId)
+	if err != nil {
+		if errors.Is(err, ErrReportNotFound) {
+			return api.GetReleaseReport404JSONResponse{
+				NotFoundJSONResponse: api.NotFoundJSONResponse{Error: reportErrorMessage(err, "report not found")},
+			}, nil
+		}
+
+		return api.GetReleaseReport500JSONResponse{
+			InternalServerErrorJSONResponse: api.InternalServerErrorJSONResponse{Error: reportErrorMessage(err, "failed to get report")},
+		}, nil
+	}
+
+	return api.GetReleaseReport200JSONResponse{Data: report}, nil
+}
+
+func (h handler) UpdateReleaseReport(ctx context.Context, request api.UpdateReleaseReportRequestObject) (api.UpdateReleaseReportResponseObject, error) {
+	if request.Body == nil {
+		return api.UpdateReleaseReport400JSONResponse{
+			BadRequestJSONResponse: api.BadRequestJSONResponse{Error: "invalid request body"},
+		}, nil
+	}
+
+	if request.Body.Metadata != nil {
+		if _, err := json.Marshal(request.Body.Metadata); err != nil {
+			return api.UpdateReleaseReport400JSONResponse{
+				BadRequestJSONResponse: api.BadRequestJSONResponse{Error: "invalid metadata"},
+			}, nil
+		}
+	}
+
+	if request.Body.Output != nil && !isValidBase64(*request.Body.Output) {
+		return api.UpdateReleaseReport400JSONResponse{
+			BadRequestJSONResponse: api.BadRequestJSONResponse{Error: "invalid output"},
+		}, nil
+	}
+
+	report, err := h.service.Update(ctx, request.ApplicationId.String(), request.ReleaseId.String(), request.ReportId, *request.Body)
+	if err != nil {
+		if errors.Is(err, ErrReportNotFound) {
+			return api.UpdateReleaseReport404JSONResponse{
+				NotFoundJSONResponse: api.NotFoundJSONResponse{Error: reportErrorMessage(err, "report not found")},
+			}, nil
+		}
+
+		if _, ok := errors.AsType[ReportError](err); ok {
+			return api.UpdateReleaseReport400JSONResponse{
+				BadRequestJSONResponse: api.BadRequestJSONResponse{Error: reportErrorMessage(err, "invalid request")},
+			}, nil
+		}
+
+		return api.UpdateReleaseReport500JSONResponse{
+			InternalServerErrorJSONResponse: api.InternalServerErrorJSONResponse{Error: reportErrorMessage(err, "failed to update report")},
+		}, nil
+	}
+
+	return api.UpdateReleaseReport200JSONResponse{Data: report}, nil
+}
+
+func (h handler) ListReportsGlobal(ctx context.Context, request api.ListReportsGlobalRequestObject) (api.ListReportsGlobalResponseObject, error) {
+	page, limit, ok := paginationParams(request.Params.Page, request.Params.Limit)
+	if !ok {
+		return api.ListReportsGlobal400JSONResponse{
+			BadRequestJSONResponse: api.BadRequestJSONResponse{Error: "page and limit must be positive integers"},
+		}, nil
+	}
+
+	if request.Params.Status != nil && !request.Params.Status.Valid() {
+		return api.ListReportsGlobal400JSONResponse{
+			BadRequestJSONResponse: api.BadRequestJSONResponse{Error: "status must be one of started, skipped, success, failed"},
+		}, nil
+	}
+
+	if request.Params.Type != nil && !request.Params.Type.Valid() {
+		return api.ListReportsGlobal400JSONResponse{
+			BadRequestJSONResponse: api.BadRequestJSONResponse{Error: "type must be one of sast, dast, sbom, code_coverage, custom"},
+		}, nil
+	}
+
+	filters := ListFilters{}
+	if request.Params.ApplicationId != nil {
+		filters.ApplicationID = request.Params.ApplicationId.String()
+	}
+	if request.Params.ReleaseId != nil {
+		filters.ReleaseID = request.Params.ReleaseId.String()
+	}
+	if request.Params.Status != nil {
+		filters.Status = string(*request.Params.Status)
+	}
+	if request.Params.Type != nil {
+		filters.Type = string(*request.Params.Type)
+	}
+
+	reports, total, err := h.service.GetAllGlobal(ctx, filters, page, limit)
+	if err != nil {
 		if errors.Is(err, ErrInvalidApplicationID) || errors.Is(err, ErrInvalidReleaseID) {
-			statusCode = http.StatusBadRequest
+			return api.ListReportsGlobal400JSONResponse{
+				BadRequestJSONResponse: api.BadRequestJSONResponse{Error: reportErrorMessage(err, "invalid query param value")},
+			}, nil
 		}
 
-		returnErrorResponse(ctx, statusCode, NewGetReportsError(err))
-		return
+		return api.ListReportsGlobal500JSONResponse{
+			InternalServerErrorJSONResponse: api.InternalServerErrorJSONResponse{Error: reportErrorMessage(err, "failed to list reports")},
+		}, nil
 	}
 
-	totalPages := int64(0)
-	if total > 0 {
-		totalPages = (total + int64(limit) - 1) / int64(limit)
-	}
-
-	ctx.JSON(http.StatusOK, gin.H{
-		"data": reports,
-		"pagination": gin.H{
-			"page":        page,
-			"limit":       limit,
-			"total":       total,
-			"total_pages": totalPages,
-		},
-	})
-}
-
-func (h handler) Get(ctx *gin.Context) {
-	applicationID, releaseID, ok := getValidScope(ctx)
-	if !ok {
-		return
-	}
-
-	reportID, ok := getValidReportID(ctx)
-	if !ok {
-		return
-	}
-
-	report, err := h.service.GetById(ctx.Request.Context(), applicationID, releaseID, reportID)
-	if err != nil {
-		statusCode := http.StatusInternalServerError
-		if errors.Is(err, ErrReportNotFound) {
-			statusCode = http.StatusNotFound
-		}
-
-		returnErrorResponse(ctx, statusCode, NewGetReportError(err))
-		return
-	}
-
-	ctx.JSON(http.StatusOK, gin.H{"data": report})
-}
-
-func (h handler) Create(ctx *gin.Context) {
-	applicationID, releaseID, ok := getValidScope(ctx)
-	if !ok {
-		return
-	}
-
-	var req CreateRequest
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		returnErrorResponse(ctx, http.StatusBadRequest, NewReportError("invalid request body", err))
-		return
-	}
-
-	if req.Metadata != nil && !json.Valid(req.Metadata) {
-		returnErrorResponse(ctx, http.StatusBadRequest, NewInvalidMetadataError(errors.New("not valid json")))
-		return
-	}
-
-	if req.Output != "" && !isValidBase64(req.Output) {
-		returnErrorResponse(ctx, http.StatusBadRequest, NewInvalidOutputError(errors.New("not valid encoding")))
-		return
-	}
-
-	report, err := h.service.Create(ctx.Request.Context(), applicationID, releaseID, req)
-	if err != nil {
-		statusCode := http.StatusInternalServerError
-		if errors.Is(err, ErrReportNotFound) {
-			statusCode = http.StatusNotFound
-		}
-
-		returnErrorResponse(ctx, statusCode, NewCreateReportError(err))
-		return
-	}
-
-	ctx.JSON(http.StatusCreated, gin.H{"data": report})
-}
-
-func (h handler) Update(ctx *gin.Context) {
-	applicationID, releaseID, ok := getValidScope(ctx)
-	if !ok {
-		return
-	}
-
-	reportID, ok := getValidReportID(ctx)
-	if !ok {
-		return
-	}
-
-	var req UpdateRequest
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		returnErrorResponse(ctx, http.StatusBadRequest, NewReportError("invalid request body", err))
-		return
-	}
-
-	if req.Metadata != nil && !json.Valid(req.Metadata) {
-		returnErrorResponse(ctx, http.StatusBadRequest, NewInvalidMetadataError(errors.New("not valid json")))
-		return
-	}
-
-	if req.Output != "" && !isValidBase64(req.Output) {
-		returnErrorResponse(ctx, http.StatusBadRequest, NewInvalidOutputError(errors.New("not valid encoding")))
-		return
-	}
-
-	report, err := h.service.Update(ctx.Request.Context(), applicationID, releaseID, reportID, req)
-	if err != nil {
-		statusCode := http.StatusInternalServerError
-		if errors.Is(err, ErrReportNotFound) {
-			statusCode = http.StatusNotFound
-		}
-
-		returnErrorResponse(ctx, statusCode, NewUpdateReportError(err))
-		return
-	}
-
-	ctx.JSON(http.StatusOK, gin.H{"data": report})
+	return api.ListReportsGlobal200JSONResponse{
+		Data:       reports,
+		Pagination: buildPagination(page, limit, total),
+	}, nil
 }
 
 func NewHandler(service Service) (Handler, error) {
 	return &handler{service: service}, nil
 }
 
-func getValidScope(ctx *gin.Context) (string, string, bool) {
-	applicationID := strings.TrimSpace(ctx.Param("application_id"))
-	if applicationID == "" {
-		returnErrorResponse(ctx, http.StatusBadRequest, NewInvalidApplicationIDError(ErrInvalidApplicationID))
-		return "", "", false
+func paginationParams(pagePtr, limitPtr *api.Page) (page int, limit int, ok bool) {
+	page = 1
+	limit = 10
+
+	if pagePtr != nil {
+		page = int(*pagePtr)
+	}
+	if limitPtr != nil {
+		limit = int(*limitPtr)
 	}
 
-	if _, err := uuid.Parse(applicationID); err != nil {
-		returnErrorResponse(ctx, http.StatusBadRequest, NewInvalidApplicationIDError(err))
-		return "", "", false
-	}
-
-	releaseID := strings.TrimSpace(ctx.Param("release_id"))
-	if releaseID == "" {
-		returnErrorResponse(ctx, http.StatusBadRequest, NewInvalidReleaseIDError(ErrInvalidReleaseID))
-		return "", "", false
-	}
-
-	if _, err := uuid.Parse(releaseID); err != nil {
-		returnErrorResponse(ctx, http.StatusBadRequest, NewInvalidReleaseIDError(err))
-		return "", "", false
-	}
-
-	return applicationID, releaseID, true
+	return page, limit, page >= 1 && limit >= 1
 }
 
-func getValidReportID(ctx *gin.Context) (string, bool) {
-	reportID := strings.TrimSpace(ctx.Param("report_id"))
-	if reportID == "" {
-		returnErrorResponse(ctx, http.StatusBadRequest, NewInvalidReportIDError(ErrInvalidReportID))
-		return "", false
+func buildPagination(page, limit int, total int64) api.Pagination {
+	totalPages := int64(0)
+	if total > 0 {
+		totalPages = (total + int64(limit) - 1) / int64(limit)
 	}
 
-	return reportID, true
+	return api.Pagination{
+		Page:       page,
+		Limit:      limit,
+		Total:      int(total),
+		TotalPages: int(totalPages),
+	}
 }
 
-func returnErrorResponse(ctx *gin.Context, statusCode int, err error) {
+func reportErrorMessage(err error, fallback string) string {
 	if reportErr, ok := errors.AsType[ReportError](err); ok {
-		ctx.JSON(statusCode, gin.H{"error": reportErr.Message})
-		return
+		return reportErr.Message
 	}
 
-	ctx.JSON(http.StatusInternalServerError, gin.H{"error": http.StatusText(http.StatusInternalServerError)})
+	return fallback
 }
 
 func isValidBase64(value string) bool {

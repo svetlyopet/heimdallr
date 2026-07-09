@@ -11,16 +11,18 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/svetlyopet/heimdallr/internal/auth"
+	authapi "github.com/svetlyopet/heimdallr/internal/auth/api"
 	"github.com/svetlyopet/heimdallr/internal/logger"
+	"github.com/svetlyopet/heimdallr/internal/token/api"
 	"gorm.io/gorm"
 )
 
 type Service interface {
-	List(ctx context.Context) ([]GetResponse, error)
-	Create(ctx context.Context, req CreateRequest, createdBy *uuid.UUID) (CreateResponse, error)
+	List(ctx context.Context) ([]api.Token, error)
+	Create(ctx context.Context, req api.TokenCreateRequest, createdBy *uuid.UUID) (api.TokenCreateResponse, error)
 	Delete(ctx context.Context, tokenID string) error
-	Authenticate(ctx context.Context, plainToken string) (auth.GetResponse, error)
-	HasScope(user auth.GetResponse, scope string) bool
+	Authenticate(ctx context.Context, plainToken string) (authapi.AuthUser, error)
+	HasScope(user authapi.AuthUser, scope string) bool
 }
 
 type service struct {
@@ -28,14 +30,14 @@ type service struct {
 	logger     *logger.Logger
 }
 
-func (s service) List(ctx context.Context) ([]GetResponse, error) {
+func (s service) List(ctx context.Context) ([]api.Token, error) {
 	tokens, err := s.repository.FindAll(ctx)
 	if err != nil {
 		s.logger.ErrorWithStack(ctx, "failed to list api tokens", err)
 		return nil, ErrListTokens
 	}
 
-	responses := make([]GetResponse, 0, len(tokens))
+	responses := make([]api.Token, 0, len(tokens))
 	for _, token := range tokens {
 		responses = append(responses, mapEntityToResponse(token))
 	}
@@ -43,16 +45,16 @@ func (s service) List(ctx context.Context) ([]GetResponse, error) {
 	return responses, nil
 }
 
-func (s service) Create(ctx context.Context, req CreateRequest, createdBy *uuid.UUID) (CreateResponse, error) {
-	scopes := normalizeScopes(req.Scopes)
+func (s service) Create(ctx context.Context, req api.TokenCreateRequest, createdBy *uuid.UUID) (api.TokenCreateResponse, error) {
+	scopes := normalizeScopes(scopesFromAPI(req.Scopes))
 	if len(scopes) == 0 {
-		return CreateResponse{}, ErrInvalidScopes
+		return api.TokenCreateResponse{}, ErrInvalidScopes
 	}
 
 	plainToken, tokenHash, err := generateToken()
 	if err != nil {
 		s.logger.ErrorWithStack(ctx, "failed to generate api token", err)
-		return CreateResponse{}, ErrCreateToken
+		return api.TokenCreateResponse{}, ErrCreateToken
 	}
 
 	token := APIToken{
@@ -66,12 +68,16 @@ func (s service) Create(ctx context.Context, req CreateRequest, createdBy *uuid.
 	created, err := s.repository.Create(ctx, token)
 	if err != nil {
 		s.logger.ErrorWithStack(ctx, "failed to create api token", err, slog.String("name", req.Name))
-		return CreateResponse{}, ErrCreateToken
+		return api.TokenCreateResponse{}, ErrCreateToken
 	}
 
-	return CreateResponse{
-		GetResponse: mapEntityToResponse(created),
-		Token:       plainToken,
+	response := mapEntityToResponse(created)
+	return api.TokenCreateResponse{
+		CreatedBy: response.CreatedBy,
+		Id:        response.Id,
+		Name:      response.Name,
+		Scopes:    scopesToAPI(scopes),
+		Token:     plainToken,
 	}, nil
 }
 
@@ -88,38 +94,47 @@ func (s service) Delete(ctx context.Context, tokenID string) error {
 	return nil
 }
 
-func (s service) Authenticate(ctx context.Context, plainToken string) (auth.GetResponse, error) {
+func (s service) Authenticate(ctx context.Context, plainToken string) (authapi.AuthUser, error) {
 	if plainToken == "" {
-		return auth.GetResponse{}, ErrInvalidToken
+		return authapi.AuthUser{}, ErrInvalidToken
 	}
 
 	tokenHash := hashToken(plainToken)
 	apiToken, err := s.repository.FindByHash(ctx, tokenHash)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return auth.GetResponse{}, ErrInvalidToken
+			return authapi.AuthUser{}, ErrInvalidToken
 		}
 
 		s.logger.ErrorWithStack(ctx, "failed to authenticate api token", err)
-		return auth.GetResponse{}, ErrInvalidToken
+		return authapi.AuthUser{}, ErrInvalidToken
 	}
 
 	roles := scopesToRoles(apiToken.Scopes)
+	authRoles := make([]authapi.AuthRole, 0, len(roles))
+	for _, role := range roles {
+		authRoles = append(authRoles, authapi.AuthRole(role))
+	}
 
-	return auth.GetResponse{
-		ID:       apiToken.ID.String(),
+	return authapi.AuthUser{
+		Id:       apiToken.ID.String(),
 		Username: "token:" + apiToken.Name,
 		Email:    "token@heimdallr.local",
-		Roles:    roles,
+		Roles:    authRoles,
 	}, nil
 }
 
-func (s service) HasScope(user auth.GetResponse, scope string) bool {
-	if slices.Contains(user.Roles, auth.RoleAdmin) {
+func (s service) HasScope(user authapi.AuthUser, scope string) bool {
+	roles := make([]string, 0, len(user.Roles))
+	for _, role := range user.Roles {
+		roles = append(roles, string(role))
+	}
+
+	if slices.Contains(roles, auth.RoleAdmin) {
 		return true
 	}
 
-	return slices.Contains(user.Roles, scope)
+	return slices.Contains(roles, scope)
 }
 
 func NewService(repository Repository, appLogger *logger.Logger) Service {
@@ -133,13 +148,31 @@ func NewService(repository Repository, appLogger *logger.Logger) Service {
 	}
 }
 
-func mapEntityToResponse(token APIToken) GetResponse {
-	return GetResponse{
-		ID:        token.ID,
+func mapEntityToResponse(token APIToken) api.Token {
+	return api.Token{
+		Id:        token.ID,
 		Name:      token.Name,
-		Scopes:    token.Scopes,
+		Scopes:    scopesToAPI(token.Scopes),
 		CreatedBy: token.CreatedBy,
 	}
+}
+
+func scopesFromAPI(scopes []api.TokenScope) []string {
+	result := make([]string, 0, len(scopes))
+	for _, scope := range scopes {
+		result = append(result, string(scope))
+	}
+
+	return result
+}
+
+func scopesToAPI(scopes []string) []api.TokenScope {
+	result := make([]api.TokenScope, 0, len(scopes))
+	for _, scope := range scopes {
+		result = append(result, api.TokenScope(scope))
+	}
+
+	return result
 }
 
 func generateToken() (string, string, error) {

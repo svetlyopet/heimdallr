@@ -1,10 +1,10 @@
 import { reactive } from "vue";
 import { apiRequest } from "../api/client";
-import { clearStoredCredentials, getStoredCredentials, setStoredCredentials } from "./headers";
+import { clearStoredToken, clearStoredUsername, getStoredToken, getStoredUsername, setStoredToken, setStoredUsername } from "./headers";
 
 export const sessionState = reactive({
     username: "",
-    password: "",
+    token: "",
     authenticated: false,
     roles: [],
     checking: false,
@@ -16,24 +16,36 @@ export function initSession() {
         return;
     }
 
-    const { username, password } = getStoredCredentials();
-    sessionState.username = username;
-    sessionState.password = password;
+    sessionState.token = getStoredToken();
+    sessionState.username = getStoredUsername();
     sessionState.initialized = true;
 }
 
-export function setSessionCredentials(username, password) {
+export async function loginWithCredentials(username, password) {
+    const response = await apiRequest("/v1/auth/login", {
+        method: "POST",
+        body: JSON.stringify({ username, password }),
+        skipAuth: true,
+    });
+
+    const token = response?.data?.token ?? "";
+    if (!token) {
+        throw new Error("missing login token");
+    }
+
     sessionState.username = username;
-    sessionState.password = password;
-    setStoredCredentials(username, password);
+    sessionState.token = token;
+    setStoredToken(token);
+    setStoredUsername(username);
 }
 
 export function clearSession() {
     sessionState.username = "";
-    sessionState.password = "";
+    sessionState.token = "";
     sessionState.authenticated = false;
     sessionState.roles = [];
-    clearStoredCredentials();
+    clearStoredToken();
+    clearStoredUsername();
 }
 
 export async function ensureSessionAccess() {
@@ -42,7 +54,7 @@ export async function ensureSessionAccess() {
 }
 
 export async function refreshSessionAccess() {
-    if (!sessionState.username || !sessionState.password) {
+    if (!sessionState.token) {
         sessionState.authenticated = false;
         sessionState.roles = [];
         return;

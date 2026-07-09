@@ -84,5 +84,14 @@
 
     .row-actions {
         justify-content: flex-start;
+        flex-wrap: nowrap;
+    }
+
+    table:not(.automation-table) td:has(.row-actions) {
+        display: block;
+    }
+
+    table:not(.automation-table) td:has(.row-actions)::before {
+        display: none;
     }
 }

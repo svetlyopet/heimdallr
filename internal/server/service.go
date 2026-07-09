@@ -8,26 +8,27 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/svetlyopet/heimdallr/internal/logger"
+	"github.com/svetlyopet/heimdallr/internal/server/api"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
 type LookupService interface {
-	GetById(ctx context.Context, serverID string) (GetResponse, error)
+	GetById(ctx context.Context, serverID string) (api.Server, error)
 }
 
 type Service interface {
-	GetAll(ctx context.Context, page int, limit int) ([]ListItemResponse, int64, error)
-	GetById(ctx context.Context, serverID string) (GetWithRelationsResponse, error)
-	Create(ctx context.Context, req CreateRequest) (GetResponse, error)
-	Update(ctx context.Context, serverID string, req UpdateRequest) (GetWithRelationsResponse, error)
+	GetAll(ctx context.Context, agentID string, page int, limit int) ([]api.ServerListItem, int64, error)
+	GetById(ctx context.Context, serverID string) (api.ServerWithRelations, error)
+	Create(ctx context.Context, req api.ServerCreateRequest) (api.Server, error)
+	Update(ctx context.Context, serverID string, req api.ServerUpdateRequest) (api.ServerWithRelations, error)
 
-	ListJobs(ctx context.Context, serverID string, page int, limit int) ([]JobAssociationResponse, int64, error)
-	AssociateJob(ctx context.Context, serverID string, req JobAssociateRequest) error
+	ListJobs(ctx context.Context, serverID string, page int, limit int) ([]api.ServerJobAssociation, int64, error)
+	AssociateJob(ctx context.Context, serverID string, req api.ServerJobAssociateRequest) error
 	DissociateJob(ctx context.Context, serverID string, jobID string, automationID uuid.UUID) error
 
-	ListReleases(ctx context.Context, serverID string, page int, limit int) ([]ReleaseAssociationResponse, int64, error)
-	AssociateRelease(ctx context.Context, serverID string, req ReleaseAssociateRequest) error
+	ListReleases(ctx context.Context, serverID string, page int, limit int) ([]api.ServerReleaseAssociation, int64, error)
+	AssociateRelease(ctx context.Context, serverID string, req api.ServerReleaseAssociateRequest) error
 	DissociateRelease(ctx context.Context, serverID string, releaseID uuid.UUID) error
 }
 
@@ -37,10 +38,10 @@ type service struct {
 	logger          *logger.Logger
 }
 
-func (s service) GetAll(ctx context.Context, page int, limit int) ([]ListItemResponse, int64, error) {
+func (s service) GetAll(ctx context.Context, agentID string, page int, limit int) ([]api.ServerListItem, int64, error) {
 	offset := (page - 1) * limit
 
-	servers, total, err := s.repository.FindAll(ctx, limit, offset)
+	servers, total, err := s.repository.FindAll(ctx, agentID, limit, offset)
 	if err != nil {
 		s.logger.ErrorWithStack(ctx, "failed to find servers", err,
 			slog.Int("page", page),
@@ -49,14 +50,19 @@ func (s service) GetAll(ctx context.Context, page int, limit int) ([]ListItemRes
 		return nil, 0, ErrListServers
 	}
 
-	responses := make([]ListItemResponse, 0, len(servers))
+	responses := make([]api.ServerListItem, 0, len(servers))
 	for _, server := range servers {
-		responses = append(responses, ListItemResponse{
-			GetResponse: mapEntityToResponse(server.Server),
-			Relations: RelationSummary{
-				AgentCount:   server.AgentCount,
-				JobCount:     server.JobCount,
-				ReleaseCount: server.ReleaseCount,
+		responses = append(responses, api.ServerListItem{
+			Id:              server.ID,
+			Hostname:        server.Hostname,
+			Metadata:        metadataFromEntity(server.Metadata),
+			OperatingSystem: server.OperatingSystem,
+			Hypervisor:      server.Hypervisor,
+			Location:        server.Location,
+			Relations: api.ServerRelationSummary{
+				AgentCount:   int(server.AgentCount),
+				JobCount:     int(server.JobCount),
+				ReleaseCount: int(server.ReleaseCount),
 			},
 		})
 	}
@@ -64,17 +70,17 @@ func (s service) GetAll(ctx context.Context, page int, limit int) ([]ListItemRes
 	return responses, total, nil
 }
 
-func (s service) GetById(ctx context.Context, serverID string) (GetWithRelationsResponse, error) {
+func (s service) GetById(ctx context.Context, serverID string) (api.ServerWithRelations, error) {
 	server, err := s.repository.FindById(ctx, serverID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return GetWithRelationsResponse{}, ErrServerNotFound
+			return api.ServerWithRelations{}, ErrServerNotFound
 		}
 
 		s.logger.ErrorWithStack(ctx, "failed to find server by id", err,
 			slog.String("server_id", serverID),
 		)
-		return GetWithRelationsResponse{}, ErrGetServer
+		return api.ServerWithRelations{}, ErrGetServer
 	}
 
 	counts, err := s.repository.GetRelationCounts(ctx, server.ID)
@@ -82,80 +88,81 @@ func (s service) GetById(ctx context.Context, serverID string) (GetWithRelations
 		s.logger.ErrorWithStack(ctx, "failed to get server relation counts", err,
 			slog.String("server_id", serverID),
 		)
-		return GetWithRelationsResponse{}, ErrGetServer
+		return api.ServerWithRelations{}, ErrGetServer
 	}
 
-	return GetWithRelationsResponse{
-		GetResponse: mapEntityToResponse(server),
-		Relations:   counts,
-	}, nil
+	return mapEntityToWithRelations(server, counts), nil
 }
 
-func (s service) Create(ctx context.Context, req CreateRequest) (GetResponse, error) {
+func (s service) Create(ctx context.Context, req api.ServerCreateRequest) (api.Server, error) {
 	_, err := s.repository.FindByHostname(ctx, req.Hostname)
 	if err == nil {
-		return GetResponse{}, ErrServerAlreadyExists
+		return api.Server{}, ErrServerAlreadyExists
 	}
 
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
 		s.logger.ErrorWithStack(ctx, "failed to check server existence before create", err,
 			slog.String("hostname", req.Hostname),
 		)
-		return GetResponse{}, ErrCreateServer
+		return api.Server{}, ErrCreateServer
 	}
 
-	metadata := normalizeMetadata(req.Metadata)
+	metadata := metadataToEntity(req.Metadata)
 
 	server := Server{
 		ID:              uuid.New(),
 		Hostname:        req.Hostname,
 		Metadata:        metadata,
-		OperatingSystem: req.OperatingSystem,
-		Hypervisor:      req.Hypervisor,
-		Location:        req.Location,
+		OperatingSystem: stringValue(req.OperatingSystem),
+		Hypervisor:      stringValue(req.Hypervisor),
+		Location:        stringValue(req.Location),
 	}
 
 	created, err := s.repository.Create(ctx, server)
 	if err != nil {
 		if isUniqueViolation(err) {
-			return GetResponse{}, ErrServerAlreadyExists
+			return api.Server{}, ErrServerAlreadyExists
 		}
 
 		s.logger.ErrorWithStack(ctx, "failed to create server", err,
 			slog.String("hostname", req.Hostname),
 		)
-		return GetResponse{}, ErrCreateServer
+		return api.Server{}, ErrCreateServer
 	}
 
-	if err := s.attachAgents(ctx, created.ID, req.AgentIDs, req.Agents); err != nil {
-		return GetResponse{}, err
+	agentIDs := uuidSliceValue(req.AgentIds)
+	agents := agentCreateSliceValue(req.Agents)
+	if err := s.attachAgents(ctx, created.ID, agentIDs, agents); err != nil {
+		return api.Server{}, err
 	}
 
 	return mapEntityToResponse(created), nil
 }
 
-func (s service) Update(ctx context.Context, serverID string, req UpdateRequest) (GetWithRelationsResponse, error) {
+func (s service) Update(ctx context.Context, serverID string, req api.ServerUpdateRequest) (api.ServerWithRelations, error) {
 	if err := s.ensureServerExists(ctx, serverID); err != nil {
-		return GetWithRelationsResponse{}, err
+		return api.ServerWithRelations{}, err
 	}
 
 	serverEntity, err := s.repository.FindById(ctx, serverID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return GetWithRelationsResponse{}, ErrServerNotFound
+			return api.ServerWithRelations{}, ErrServerNotFound
 		}
 
-		return GetWithRelationsResponse{}, ErrUpdateServer
+		return api.ServerWithRelations{}, ErrUpdateServer
 	}
 
-	if err := s.attachAgents(ctx, serverEntity.ID, req.AgentIDs, req.Agents); err != nil {
-		return GetWithRelationsResponse{}, err
+	agentIDs := uuidSliceValue(req.AgentIds)
+	agents := agentCreateSliceValue(req.Agents)
+	if err := s.attachAgents(ctx, serverEntity.ID, agentIDs, agents); err != nil {
+		return api.ServerWithRelations{}, err
 	}
 
 	return s.GetById(ctx, serverID)
 }
 
-func (s service) attachAgents(ctx context.Context, serverID uuid.UUID, agentIDs []uuid.UUID, agents []AgentRegistrationInput) error {
+func (s service) attachAgents(ctx context.Context, serverID uuid.UUID, agentIDs []uuid.UUID, agents []api.AgentCreateRequest) error {
 	if len(agentIDs) > 0 {
 		if err := s.agentAttachment.AttachAgentIDs(ctx, serverID, agentIDs); err != nil {
 			return err
@@ -171,7 +178,7 @@ func (s service) attachAgents(ctx context.Context, serverID uuid.UUID, agentIDs 
 	return nil
 }
 
-func (s service) ListJobs(ctx context.Context, serverID string, page int, limit int) ([]JobAssociationResponse, int64, error) {
+func (s service) ListJobs(ctx context.Context, serverID string, page int, limit int) ([]api.ServerJobAssociation, int64, error) {
 	if err := s.ensureServerExists(ctx, serverID); err != nil {
 		return nil, 0, err
 	}
@@ -186,7 +193,7 @@ func (s service) ListJobs(ctx context.Context, serverID string, page int, limit 
 		return nil, 0, ErrListJobs
 	}
 
-	responses := make([]JobAssociationResponse, 0, len(rows))
+	responses := make([]api.ServerJobAssociation, 0, len(rows))
 	for _, row := range rows {
 		responses = append(responses, mapJobAssociationRow(row))
 	}
@@ -194,7 +201,7 @@ func (s service) ListJobs(ctx context.Context, serverID string, page int, limit 
 	return responses, total, nil
 }
 
-func (s service) AssociateJob(ctx context.Context, serverID string, req JobAssociateRequest) error {
+func (s service) AssociateJob(ctx context.Context, serverID string, req api.ServerJobAssociateRequest) error {
 	server, err := s.repository.FindById(ctx, serverID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -207,11 +214,11 @@ func (s service) AssociateJob(ctx context.Context, serverID string, req JobAssoc
 		return ErrAssociateJob
 	}
 
-	exists, err := s.repository.JobExists(ctx, req.JobID, req.AutomationID)
+	exists, err := s.repository.JobExists(ctx, req.JobId, req.AutomationId)
 	if err != nil {
 		s.logger.ErrorWithStack(ctx, "failed to check job existence", err,
-			slog.String("job_id", req.JobID),
-			slog.String("automation_id", req.AutomationID.String()),
+			slog.String("job_id", req.JobId),
+			slog.String("automation_id", req.AutomationId.String()),
 		)
 		return ErrAssociateJob
 	}
@@ -220,7 +227,7 @@ func (s service) AssociateJob(ctx context.Context, serverID string, req JobAssoc
 		return ErrJobNotFound
 	}
 
-	associated, err := s.repository.JobAssociationExists(ctx, server.ID, req.JobID, req.AutomationID)
+	associated, err := s.repository.JobAssociationExists(ctx, server.ID, req.JobId, req.AutomationId)
 	if err != nil {
 		s.logger.ErrorWithStack(ctx, "failed to check job association", err,
 			slog.String("server_id", serverID),
@@ -234,14 +241,14 @@ func (s service) AssociateJob(ctx context.Context, serverID string, req JobAssoc
 
 	association := ServerJob{
 		ServerID:     server.ID,
-		JobID:        req.JobID,
-		AutomationID: req.AutomationID,
+		JobID:        req.JobId,
+		AutomationID: req.AutomationId,
 	}
 
 	if err := s.repository.CreateJobAssociation(ctx, association); err != nil {
 		s.logger.ErrorWithStack(ctx, "failed to create job association", err,
 			slog.String("server_id", serverID),
-			slog.String("job_id", req.JobID),
+			slog.String("job_id", req.JobId),
 		)
 		return ErrAssociateJob
 	}
@@ -277,7 +284,7 @@ func (s service) DissociateJob(ctx context.Context, serverID string, jobID strin
 	return nil
 }
 
-func (s service) ListReleases(ctx context.Context, serverID string, page int, limit int) ([]ReleaseAssociationResponse, int64, error) {
+func (s service) ListReleases(ctx context.Context, serverID string, page int, limit int) ([]api.ServerReleaseAssociation, int64, error) {
 	if err := s.ensureServerExists(ctx, serverID); err != nil {
 		return nil, 0, err
 	}
@@ -292,7 +299,7 @@ func (s service) ListReleases(ctx context.Context, serverID string, page int, li
 		return nil, 0, ErrListReleases
 	}
 
-	responses := make([]ReleaseAssociationResponse, 0, len(rows))
+	responses := make([]api.ServerReleaseAssociation, 0, len(rows))
 	for _, row := range rows {
 		responses = append(responses, mapReleaseAssociationRow(row))
 	}
@@ -300,7 +307,7 @@ func (s service) ListReleases(ctx context.Context, serverID string, page int, li
 	return responses, total, nil
 }
 
-func (s service) AssociateRelease(ctx context.Context, serverID string, req ReleaseAssociateRequest) error {
+func (s service) AssociateRelease(ctx context.Context, serverID string, req api.ServerReleaseAssociateRequest) error {
 	server, err := s.repository.FindById(ctx, serverID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -313,10 +320,10 @@ func (s service) AssociateRelease(ctx context.Context, serverID string, req Rele
 		return ErrAssociateRelease
 	}
 
-	exists, err := s.repository.ReleaseExists(ctx, req.ReleaseID, req.ApplicationID)
+	exists, err := s.repository.ReleaseExists(ctx, req.ReleaseId, req.ApplicationId)
 	if err != nil {
 		s.logger.ErrorWithStack(ctx, "failed to check release existence", err,
-			slog.String("release_id", req.ReleaseID.String()),
+			slog.String("release_id", req.ReleaseId.String()),
 		)
 		return ErrAssociateRelease
 	}
@@ -325,7 +332,7 @@ func (s service) AssociateRelease(ctx context.Context, serverID string, req Rele
 		return ErrReleaseNotFound
 	}
 
-	associated, err := s.repository.ReleaseAssociationExists(ctx, server.ID, req.ReleaseID)
+	associated, err := s.repository.ReleaseAssociationExists(ctx, server.ID, req.ReleaseId)
 	if err != nil {
 		s.logger.ErrorWithStack(ctx, "failed to check release association", err,
 			slog.String("server_id", serverID),
@@ -339,14 +346,14 @@ func (s service) AssociateRelease(ctx context.Context, serverID string, req Rele
 
 	association := ServerRelease{
 		ServerID:      server.ID,
-		ReleaseID:     req.ReleaseID,
-		ApplicationID: req.ApplicationID,
+		ReleaseID:     req.ReleaseId,
+		ApplicationID: req.ApplicationId,
 	}
 
 	if err := s.repository.CreateReleaseAssociation(ctx, association); err != nil {
 		s.logger.ErrorWithStack(ctx, "failed to create release association", err,
 			slog.String("server_id", serverID),
-			slog.String("release_id", req.ReleaseID.String()),
+			slog.String("release_id", req.ReleaseId.String()),
 		)
 		return ErrAssociateRelease
 	}
@@ -410,34 +417,102 @@ func NewService(repository Repository, agentAttachment AgentAttachmentService, a
 	}
 }
 
-func mapEntityToResponse(server Server) GetResponse {
-	metadata := json.RawMessage(server.Metadata)
-	if len(metadata) == 0 {
-		metadata = json.RawMessage(`{}`)
-	}
-
-	return GetResponse{
-		ID:              server.ID,
+func mapEntityToResponse(server Server) api.Server {
+	return api.Server{
+		Id:              server.ID,
 		Hostname:        server.Hostname,
-		Metadata:        metadata,
+		Metadata:        metadataFromEntity(server.Metadata),
 		OperatingSystem: server.OperatingSystem,
 		Hypervisor:      server.Hypervisor,
 		Location:        server.Location,
 	}
 }
 
-func mapJobAssociationRow(row JobAssociationRow) JobAssociationResponse {
-	return JobAssociationResponse(row)
+func mapEntityToWithRelations(server Server, counts RelationSummary) api.ServerWithRelations {
+	return api.ServerWithRelations{
+		Id:              server.ID,
+		Hostname:        server.Hostname,
+		Metadata:        metadataFromEntity(server.Metadata),
+		OperatingSystem: server.OperatingSystem,
+		Hypervisor:      server.Hypervisor,
+		Location:        server.Location,
+		Relations: api.ServerRelationSummary{
+			AgentCount:   int(counts.AgentCount),
+			JobCount:     int(counts.JobCount),
+			ReleaseCount: int(counts.ReleaseCount),
+		},
+	}
 }
 
-func mapReleaseAssociationRow(row ReleaseAssociationRow) ReleaseAssociationResponse {
-	return ReleaseAssociationResponse(row)
+func mapJobAssociationRow(row JobAssociationRow) api.ServerJobAssociation {
+	return api.ServerJobAssociation{
+		JobId:        row.JobID,
+		AutomationId: row.AutomationID,
+		Automation:   row.Automation,
+		Provider:     row.Provider,
+		Status:       api.JobStatus(row.Status),
+		Location:     row.Location,
+		Url:          row.URL,
+	}
 }
 
-func normalizeMetadata(raw json.RawMessage) datatypes.JSON {
+func mapReleaseAssociationRow(row ReleaseAssociationRow) api.ServerReleaseAssociation {
+	return api.ServerReleaseAssociation{
+		ReleaseId:     row.ReleaseID,
+		ApplicationId: row.ApplicationID,
+		Application:   row.Application,
+		Version:       row.Version,
+		CommitSha:     row.CommitSHA,
+		Branch:        row.Branch,
+	}
+}
+
+func metadataFromEntity(raw datatypes.JSON) api.ServerMetadata {
 	if len(raw) == 0 {
+		return api.ServerMetadata{}
+	}
+
+	var metadata api.ServerMetadata
+	if err := json.Unmarshal(raw, &metadata); err != nil {
+		return api.ServerMetadata{}
+	}
+
+	return metadata
+}
+
+func metadataToEntity(metadata *api.ServerMetadata) datatypes.JSON {
+	if metadata == nil || len(*metadata) == 0 {
+		return datatypes.JSON([]byte(`{}`))
+	}
+
+	raw, err := json.Marshal(metadata)
+	if err != nil {
 		return datatypes.JSON([]byte(`{}`))
 	}
 
 	return datatypes.JSON(raw)
+}
+
+func stringValue(value *string) string {
+	if value == nil {
+		return ""
+	}
+
+	return *value
+}
+
+func uuidSliceValue(values *[]uuid.UUID) []uuid.UUID {
+	if values == nil {
+		return nil
+	}
+
+	return *values
+}
+
+func agentCreateSliceValue(values *[]api.AgentCreateRequest) []api.AgentCreateRequest {
+	if values == nil {
+		return nil
+	}
+
+	return *values
 }

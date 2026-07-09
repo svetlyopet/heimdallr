@@ -5,33 +5,34 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"github.com/svetlyopet/heimdallr/internal/analytics/api"
 )
 
 type stubRepository struct {
-	getAutomationOverviewResponse     AutomationAnalyticsResponse
+	getAutomationOverviewResponse     api.AutomationAnalytics
 	getAutomationOverviewError        error
-	getAutomationOverviewByIDResponse AutomationAnalyticsResponse
+	getAutomationOverviewByIDResponse api.AutomationAnalytics
 	getAutomationOverviewByIDError    error
 }
 
-func (s stubRepository) GetAutomationOverview(_ context.Context) (AutomationAnalyticsResponse, error) {
+func (s stubRepository) GetAutomationOverview(_ context.Context) (api.AutomationAnalytics, error) {
 	if s.getAutomationOverviewError != nil {
-		return AutomationAnalyticsResponse{}, s.getAutomationOverviewError
+		return api.AutomationAnalytics{}, s.getAutomationOverviewError
 	}
 
 	return s.getAutomationOverviewResponse, nil
 }
 
-func (s stubRepository) GetAutomationOverviewByID(_ context.Context, _ string) (AutomationAnalyticsResponse, error) {
+func (s stubRepository) GetAutomationOverviewByID(_ context.Context, _ string) (api.AutomationAnalytics, error) {
 	if s.getAutomationOverviewByIDError != nil {
-		return AutomationAnalyticsResponse{}, s.getAutomationOverviewByIDError
+		return api.AutomationAnalytics{}, s.getAutomationOverviewByIDError
 	}
 
 	return s.getAutomationOverviewByIDResponse, nil
 }
 
-func (s stubRepository) GetComplianceOverview(_ context.Context) (ComplianceAnalyticsResponse, error) {
-	return ComplianceAnalyticsResponse{}, nil
+func (s stubRepository) GetComplianceOverview(_ context.Context) (api.ComplianceAnalytics, error) {
+	return api.ComplianceAnalytics{}, nil
 }
 
 func TestServiceGetAutomationOverviewByIDReturnsNotFound(t *testing.T) {

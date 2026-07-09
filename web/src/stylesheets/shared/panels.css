@@ -19,7 +19,7 @@
     display: flex;
     justify-content: space-between;
     gap: 16px;
-    align-items: flex-start;
+    align-items: flex-end;
 }
 
 .panel-header h3 {

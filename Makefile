@@ -61,8 +61,58 @@ $(REPORTS_DIR)/report.json: out-reports test-web-stub
 web-install-deps: ## Install web dependencies
 	cd $(WEB_DIR) && npm install
 
+OAPI_CODEGEN := go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@$(shell go list -m -f '{{.Version}}' github.com/oapi-codegen/oapi-codegen/v2 2>/dev/null || echo latest)
+OPENAPI_SPEC := api/docs/openapi.yaml
+
+.PHONY: generate-automation-api
+generate-automation-api: ## Generate automation API from OpenAPI
+	@$(OAPI_CODEGEN) -config api/oapi-codegen/automation.cfg.yaml $(OPENAPI_SPEC)
+
+.PHONY: generate-job-api
+generate-job-api: ## Generate job API from OpenAPI
+	@$(OAPI_CODEGEN) -config api/oapi-codegen/job.cfg.yaml $(OPENAPI_SPEC)
+
+.PHONY: generate-application-api
+generate-application-api: ## Generate application API from OpenAPI
+	@$(OAPI_CODEGEN) -config api/oapi-codegen/application.cfg.yaml $(OPENAPI_SPEC)
+
+.PHONY: generate-release-api
+generate-release-api: ## Generate release API from OpenAPI
+	@$(OAPI_CODEGEN) -config api/oapi-codegen/release.cfg.yaml $(OPENAPI_SPEC)
+
+.PHONY: generate-report-api
+generate-report-api: ## Generate report API from OpenAPI
+	@$(OAPI_CODEGEN) -config api/oapi-codegen/report.cfg.yaml $(OPENAPI_SPEC)
+
+.PHONY: generate-provider-api
+generate-provider-api: ## Generate provider API from OpenAPI
+	@$(OAPI_CODEGEN) -config api/oapi-codegen/provider.cfg.yaml $(OPENAPI_SPEC)
+
+.PHONY: generate-analytics-api
+generate-analytics-api: ## Generate analytics API from OpenAPI
+	@$(OAPI_CODEGEN) -config api/oapi-codegen/analytics.cfg.yaml $(OPENAPI_SPEC)
+
+.PHONY: generate-server-api
+generate-server-api: ## Generate server API from OpenAPI
+	@$(OAPI_CODEGEN) -config api/oapi-codegen/server.cfg.yaml $(OPENAPI_SPEC)
+
+.PHONY: generate-agent-api
+generate-agent-api: ## Generate agent API from OpenAPI
+	@$(OAPI_CODEGEN) -config api/oapi-codegen/agent.cfg.yaml $(OPENAPI_SPEC)
+
+.PHONY: generate-auth-api
+generate-auth-api: ## Generate auth API from OpenAPI
+	@$(OAPI_CODEGEN) -config api/oapi-codegen/auth.cfg.yaml $(OPENAPI_SPEC)
+
+.PHONY: generate-token-api
+generate-token-api: ## Generate token API from OpenAPI
+	@$(OAPI_CODEGEN) -config api/oapi-codegen/token.cfg.yaml $(OPENAPI_SPEC)
+
+.PHONY: generate-api
+generate-api: generate-automation-api generate-job-api generate-application-api generate-release-api generate-report-api generate-provider-api generate-analytics-api generate-server-api generate-agent-api generate-auth-api generate-token-api ## Generate all OpenAPI server code
+
 .PHONY: lint-api
-lint-api: fmt download test-web-stub ## Lints all code with golangci-lint
+lint-api: fmt download generate-api test-web-stub ## Lints all code with golangci-lint
 	@go run github.com/golangci/golangci-lint/cmd/golangci-lint run
 
 test: test-web-stub ## Run unit tests
@@ -111,7 +161,7 @@ build-web: out-web ## Build web assets
 	@cd $(WEB_DIR) && npm run build
 
 .PHONY: build-api
-build-api: out-api ## Build api release
+build-api: out-api generate-api ## Build api release
 	@go build -ldflags="-w -s" -o $(APP_PATH) $(MAIN_PATH)
 
 build: build-web build-api ## Build api and web assets

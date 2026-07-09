@@ -23,7 +23,7 @@ func TestLookupServiceGetByIdReturnsServer(t *testing.T) {
 
 	got, err := lookup.GetById(context.Background(), created.ID.String())
 	require.NoError(t, err)
-	require.Equal(t, created.ID, got.ID)
+	require.Equal(t, created.ID, got.Id)
 	require.Equal(t, "lookup-host.example.com", got.Hostname)
 }
 

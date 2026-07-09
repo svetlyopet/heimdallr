@@ -1,166 +1,134 @@
 package release
 
 import (
+	"context"
 	"errors"
-	"net/http"
-	"strconv"
-	"strings"
 
-	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 	"github.com/svetlyopet/heimdallr/internal/application"
+	"github.com/svetlyopet/heimdallr/internal/release/api"
 )
 
 type Handler interface {
-	List(ctx *gin.Context)
-	Get(ctx *gin.Context)
-	Create(ctx *gin.Context)
+	api.StrictServerInterface
 }
 
 type handler struct {
 	service Service
 }
 
-func (h handler) List(ctx *gin.Context) {
-	applicationID, ok := getValidApplicationID(ctx)
+func (h handler) ListReleases(ctx context.Context, request api.ListReleasesRequestObject) (api.ListReleasesResponseObject, error) {
+	page, limit, ok := paginationParams(request.Params.Page, request.Params.Limit)
 	if !ok {
-		return
+		return api.ListReleases400JSONResponse{
+			BadRequestJSONResponse: api.BadRequestJSONResponse{Error: "page and limit must be positive integers"},
+		}, nil
 	}
 
-	page, err := strconv.Atoi(ctx.DefaultQuery("page", "1"))
-	if err != nil || page < 1 {
-		returnErrorResponse(ctx, http.StatusBadRequest, NewReleaseError("invalid query param value", errors.New("page must be a positive integer")))
-		return
-	}
-
-	limit, err := strconv.Atoi(ctx.DefaultQuery("limit", "10"))
-	if err != nil || limit < 1 {
-		returnErrorResponse(ctx, http.StatusBadRequest, NewReleaseError("invalid query param value", errors.New("limit must be a positive integer")))
-		return
-	}
-
-	releases, total, err := h.service.GetAll(ctx.Request.Context(), applicationID, page, limit)
+	releases, total, err := h.service.GetAll(ctx, request.ApplicationId.String(), page, limit)
 	if err != nil {
-		statusCode := http.StatusInternalServerError
 		if errors.Is(err, application.ErrApplicationNotFound) {
-			statusCode = http.StatusNotFound
+			return api.ListReleases404JSONResponse{
+				NotFoundJSONResponse: api.NotFoundJSONResponse{Error: releaseErrorMessage(err, "application not found")},
+			}, nil
 		}
 
-		returnErrorResponse(ctx, statusCode, NewGetReleasesError(err))
-		return
+		return api.ListReleases500JSONResponse{
+			InternalServerErrorJSONResponse: api.InternalServerErrorJSONResponse{Error: releaseErrorMessage(err, "failed to list releases")},
+		}, nil
 	}
 
-	totalPages := int64(0)
-	if total > 0 {
-		totalPages = (total + int64(limit) - 1) / int64(limit)
-	}
-
-	ctx.JSON(http.StatusOK, gin.H{
-		"data": releases,
-		"pagination": gin.H{
-			"page":        page,
-			"limit":       limit,
-			"total":       total,
-			"total_pages": totalPages,
-		},
-	})
+	return api.ListReleases200JSONResponse{
+		Data:       releases,
+		Pagination: buildPagination(page, limit, total),
+	}, nil
 }
 
-func (h handler) Get(ctx *gin.Context) {
-	applicationID, ok := getValidApplicationID(ctx)
-	if !ok {
-		return
+func (h handler) CreateRelease(ctx context.Context, request api.CreateReleaseRequestObject) (api.CreateReleaseResponseObject, error) {
+	if request.Body == nil {
+		return api.CreateRelease400JSONResponse{
+			BadRequestJSONResponse: api.BadRequestJSONResponse{Error: "invalid request body"},
+		}, nil
 	}
 
-	releaseID, ok := getValidReleaseID(ctx)
-	if !ok {
-		return
+	upsert := false
+	if request.Params.Upsert != nil {
+		upsert = *request.Params.Upsert
 	}
 
-	release, err := h.service.GetById(ctx.Request.Context(), releaseID, applicationID)
+	release, err := h.service.Create(ctx, request.ApplicationId.String(), *request.Body, upsert)
 	if err != nil {
-		statusCode := http.StatusInternalServerError
-		if errors.Is(err, ErrReleaseNotFound) {
-			statusCode = http.StatusNotFound
-		}
-
-		returnErrorResponse(ctx, statusCode, NewGetReleaseError(err))
-		return
-	}
-
-	ctx.JSON(http.StatusOK, gin.H{"data": release})
-}
-
-func (h handler) Create(ctx *gin.Context) {
-	applicationID, ok := getValidApplicationID(ctx)
-	if !ok {
-		return
-	}
-
-	var req CreateRequest
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		returnErrorResponse(ctx, http.StatusBadRequest, NewReleaseError("invalid request body", err))
-		return
-	}
-
-	upsert := strings.EqualFold(ctx.DefaultQuery("upsert", "false"), "true")
-
-	release, err := h.service.Create(ctx.Request.Context(), applicationID, req, upsert)
-	if err != nil {
-		statusCode := http.StatusInternalServerError
 		switch {
 		case errors.Is(err, application.ErrApplicationNotFound):
-			statusCode = http.StatusNotFound
+			return api.CreateRelease404JSONResponse{
+				NotFoundJSONResponse: api.NotFoundJSONResponse{Error: releaseErrorMessage(err, "application not found")},
+			}, nil
 		case errors.Is(err, ErrReleaseAlreadyExists):
-			statusCode = http.StatusConflict
+			return api.CreateRelease409JSONResponse{
+				ConflictJSONResponse: api.ConflictJSONResponse{Error: releaseErrorMessage(err, "release already exists")},
+			}, nil
 		}
 
-		returnErrorResponse(ctx, statusCode, NewCreateReleaseError(err))
-		return
+		return api.CreateRelease500JSONResponse{
+			InternalServerErrorJSONResponse: api.InternalServerErrorJSONResponse{Error: releaseErrorMessage(err, "failed to create release")},
+		}, nil
 	}
 
-	ctx.JSON(http.StatusCreated, gin.H{"data": release})
+	return api.CreateRelease201JSONResponse{Data: release}, nil
+}
+
+func (h handler) GetRelease(ctx context.Context, request api.GetReleaseRequestObject) (api.GetReleaseResponseObject, error) {
+	release, err := h.service.GetById(ctx, request.ReleaseId.String(), request.ApplicationId.String())
+	if err != nil {
+		if errors.Is(err, ErrReleaseNotFound) {
+			return api.GetRelease404JSONResponse{
+				NotFoundJSONResponse: api.NotFoundJSONResponse{Error: releaseErrorMessage(err, "release not found")},
+			}, nil
+		}
+
+		return api.GetRelease500JSONResponse{
+			InternalServerErrorJSONResponse: api.InternalServerErrorJSONResponse{Error: releaseErrorMessage(err, "failed to get release")},
+		}, nil
+	}
+
+	return api.GetRelease200JSONResponse{Data: release}, nil
 }
 
 func NewHandler(service Service) (Handler, error) {
 	return &handler{service: service}, nil
 }
 
-func getValidApplicationID(ctx *gin.Context) (string, bool) {
-	applicationID := strings.TrimSpace(ctx.Param("application_id"))
-	if applicationID == "" {
-		returnErrorResponse(ctx, http.StatusBadRequest, NewInvalidApplicationIDError(ErrInvalidApplicationID))
-		return "", false
+func paginationParams(pagePtr, limitPtr *api.Page) (page int, limit int, ok bool) {
+	page = 1
+	limit = 10
+
+	if pagePtr != nil {
+		page = int(*pagePtr)
+	}
+	if limitPtr != nil {
+		limit = int(*limitPtr)
 	}
 
-	if _, err := uuid.Parse(applicationID); err != nil {
-		returnErrorResponse(ctx, http.StatusBadRequest, NewInvalidApplicationIDError(err))
-		return "", false
-	}
-
-	return applicationID, true
+	return page, limit, page >= 1 && limit >= 1
 }
 
-func getValidReleaseID(ctx *gin.Context) (string, bool) {
-	releaseID := strings.TrimSpace(ctx.Param("release_id"))
-	if releaseID == "" {
-		returnErrorResponse(ctx, http.StatusBadRequest, NewInvalidReleaseIDError(ErrInvalidReleaseID))
-		return "", false
+func buildPagination(page, limit int, total int64) api.Pagination {
+	totalPages := int64(0)
+	if total > 0 {
+		totalPages = (total + int64(limit) - 1) / int64(limit)
 	}
 
-	if _, err := uuid.Parse(releaseID); err != nil {
-		returnErrorResponse(ctx, http.StatusBadRequest, NewInvalidReleaseIDError(err))
-		return "", false
+	return api.Pagination{
+		Page:       page,
+		Limit:      limit,
+		Total:      int(total),
+		TotalPages: int(totalPages),
 	}
-
-	return releaseID, true
 }
 
-func returnErrorResponse(ctx *gin.Context, statusCode int, err error) {
+func releaseErrorMessage(err error, fallback string) string {
 	if releaseErr, ok := errors.AsType[ReleaseError](err); ok {
-		ctx.JSON(statusCode, gin.H{"error": releaseErr.Message})
-		return
+		return releaseErr.Message
 	}
 
-	ctx.JSON(http.StatusInternalServerError, gin.H{"error": http.StatusText(http.StatusInternalServerError)})
+	return fallback
 }

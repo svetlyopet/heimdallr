@@ -9,7 +9,7 @@ import (
 )
 
 type Repository interface {
-	FindAll(ctx context.Context, limit int, offset int) ([]ServerWithCounts, int64, error)
+	FindAll(ctx context.Context, agentID string, limit int, offset int) ([]ServerWithCounts, int64, error)
 	FindById(ctx context.Context, serverID string) (Server, error)
 	FindByHostname(ctx context.Context, hostname string) (Server, error)
 	Create(ctx context.Context, server Server) (Server, error)
@@ -30,6 +30,12 @@ type Repository interface {
 
 type ServerWithCounts struct {
 	Server
+	AgentCount   int64
+	JobCount     int64
+	ReleaseCount int64
+}
+
+type RelationSummary struct {
 	AgentCount   int64
 	JobCount     int64
 	ReleaseCount int64
@@ -58,11 +64,16 @@ type repository struct {
 	db *gorm.DB
 }
 
-func (r repository) FindAll(ctx context.Context, limit int, offset int) ([]ServerWithCounts, int64, error) {
+func (r repository) FindAll(ctx context.Context, agentID string, limit int, offset int) ([]ServerWithCounts, int64, error) {
 	var servers []ServerWithCounts
 	var total int64
 
-	query := r.db.WithContext(ctx).Model(&Server{})
+	query := r.db.WithContext(ctx).Model(&Server{}).Where("servers.deleted_at IS NULL")
+
+	if agentID != "" {
+		query = query.Joins("INNER JOIN server_agents ON server_agents.server_id = servers.id").
+			Where("server_agents.agent_id = ?", agentID)
+	}
 
 	if err := query.Count(&total).Error; err != nil {
 		return nil, 0, err
@@ -72,12 +83,19 @@ func (r repository) FindAll(ctx context.Context, limit int, offset int) ([]Serve
 		Table("servers").
 		Select(`
 			servers.*,
-			(SELECT COUNT(*) FROM agents WHERE agents.server_id = servers.id AND agents.deleted_at IS NULL) AS agent_count,
+			(SELECT COUNT(*) FROM server_agents WHERE server_agents.server_id = servers.id) AS agent_count,
 			(SELECT COUNT(*) FROM server_jobs WHERE server_jobs.server_id = servers.id) AS job_count,
 			(SELECT COUNT(*) FROM server_releases WHERE server_releases.server_id = servers.id) AS release_count
 		`).
-		Where("servers.deleted_at IS NULL").
-		Order("servers.hostname ASC")
+		Where("servers.deleted_at IS NULL")
+
+	if agentID != "" {
+		findQuery = findQuery.
+			Joins("INNER JOIN server_agents ON server_agents.server_id = servers.id").
+			Where("server_agents.agent_id = ?", agentID)
+	}
+
+	findQuery = findQuery.Order("servers.hostname ASC")
 
 	if limit > 0 {
 		findQuery = findQuery.Limit(limit)
@@ -130,8 +148,8 @@ func (r repository) GetRelationCounts(ctx context.Context, serverID uuid.UUID) (
 	var summary RelationSummary
 
 	if err := r.db.WithContext(ctx).
-		Table("agents").
-		Where("server_id = ? AND deleted_at IS NULL", serverID).
+		Table("server_agents").
+		Where("server_id = ?", serverID).
 		Count(&summary.AgentCount).Error; err != nil {
 		return RelationSummary{}, err
 	}

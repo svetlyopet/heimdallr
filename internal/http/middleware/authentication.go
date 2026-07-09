@@ -9,35 +9,17 @@ import (
 	"github.com/svetlyopet/heimdallr/internal/token"
 )
 
-const (
-	authHeaderUsername = "X-Auth-Username"
-	authHeaderPassword = "X-Auth-Password"
-	authHeaderBearer   = "Authorization"
-)
+const authHeaderBearer = "Authorization"
 
-func Authentication(authService auth.Service, tokenService token.Service) gin.HandlerFunc {
+func Authentication(tokenService token.Service) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		if bearerToken := extractBearerToken(ctx.GetHeader(authHeaderBearer)); bearerToken != "" {
-			user, err := tokenService.Authenticate(ctx.Request.Context(), bearerToken)
-			if err != nil {
-				ctx.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": auth.ErrInvalidCredentials.Error()})
-				return
-			}
-
-			ctx.Set("auth.user", user)
-			ctx.Next()
-			return
-		}
-
-		username := ctx.GetHeader(authHeaderUsername)
-		password := ctx.GetHeader(authHeaderPassword)
-
-		if username == "" || password == "" {
+		bearerToken := extractBearerToken(ctx.GetHeader(authHeaderBearer))
+		if bearerToken == "" {
 			ctx.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": auth.ErrInvalidAuthHeader.Error()})
 			return
 		}
 
-		user, err := authService.Authenticate(ctx.Request.Context(), username, password)
+		user, err := tokenService.Authenticate(ctx.Request.Context(), bearerToken)
 		if err != nil {
 			ctx.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": auth.ErrInvalidCredentials.Error()})
 			return

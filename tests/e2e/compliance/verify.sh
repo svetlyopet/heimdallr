@@ -11,10 +11,9 @@ RELEASE_ID="$(cat "${STATE_DIR}/release_id")"
 RELEASE_VERSION="$(cat "${STATE_DIR}/release_version")"
 REPORT_ID="$(cat "${STATE_DIR}/report_id")"
 
-auth_headers=(
-  -H "X-Auth-Username: ${HEIMDALLR_USER}"
-  -H "X-Auth-Password: ${HEIMDALLR_PASSWORD}"
-)
+# shellcheck source=../lib/auth.sh
+source "$(dirname "${BASH_SOURCE[0]}")/../lib/auth.sh"
+setup_auth_headers
 
 release_json="$(curl -sf "${auth_headers[@]}" "${HEIMDALLR_URL}/api/v1/application/${APPLICATION_ID}/release/${RELEASE_ID}")"
 echo "${release_json}" | jq -e ".data.version == \"${RELEASE_VERSION}\"" >/dev/null

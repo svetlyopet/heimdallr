@@ -1,12 +1,11 @@
 package provider
 
-import "github.com/gin-gonic/gin"
+import (
+	"github.com/gin-gonic/gin"
+	"github.com/svetlyopet/heimdallr/internal/provider/api"
+)
 
 func RegisterRoutes(rg *gin.RouterGroup, handler Handler) {
-	providerRoutesV1 := rg.Group("/v1/provider")
-	{
-		providerRoutesV1.GET("", handler.List)
-		providerRoutesV1.GET("/:provider_id", handler.Get)
-		providerRoutesV1.POST("", handler.Create)
-	}
+	strictHandler := api.NewStrictHandler(handler, nil)
+	api.RegisterHandlersWithOptions(rg, strictHandler, api.GinServerOptions{})
 }

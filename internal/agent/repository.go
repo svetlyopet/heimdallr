@@ -2,7 +2,9 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -10,22 +12,20 @@ import (
 
 type Repository interface {
 	FindAll(ctx context.Context, serverID string, limit int, offset int) ([]Agent, int64, error)
-	FindAllGlobal(ctx context.Context, unassignedOnly bool, limit int, offset int) ([]Agent, int64, error)
+	FindAllGlobal(ctx context.Context, filter ListFilters, limit int, offset int) ([]AgentWithCount, int64, error)
 	FindById(ctx context.Context, agentID string, serverID string) (Agent, error)
-	FindByIdGlobal(ctx context.Context, agentID string) (Agent, error)
+	FindByIdGlobal(ctx context.Context, agentID string) (AgentWithCount, error)
+	FindByName(ctx context.Context, name string) (Agent, error)
+	FindServersByAgent(ctx context.Context, agentID string, limit int, offset int) ([]LinkedServer, int64, error)
 	CreateUnassigned(ctx context.Context, agent Agent) (Agent, error)
-	CreateOnServer(ctx context.Context, agent Agent) (Agent, error)
-	AttachToServer(ctx context.Context, serverID uuid.UUID, hostname string, agentIDs []uuid.UUID) error
-	Delete(ctx context.Context, serverID string, agentID string) error
+	CreateOnServer(ctx context.Context, serverID uuid.UUID, agent Agent) (Agent, error)
+	AttachToServer(ctx context.Context, serverID uuid.UUID, agentIDs []uuid.UUID) error
+	DetachFromServer(ctx context.Context, serverID string, agentID string) error
+	DeleteGlobal(ctx context.Context, agentID string) error
 }
 
 type repository struct {
 	db *gorm.DB
-}
-
-type serverRelation struct {
-	ServerID uuid.UUID
-	Server   string
 }
 
 func (r repository) FindAll(ctx context.Context, serverID string, limit int, offset int) ([]Agent, int64, error) {
@@ -39,8 +39,8 @@ func (r repository) FindAll(ctx context.Context, serverID string, limit int, off
 
 	query := r.db.WithContext(ctx).
 		Table("agents").
-		Joins("JOIN servers ON servers.id = agents.server_id").
-		Where("agents.server_id = ? AND agents.deleted_at IS NULL", serverID)
+		Joins("INNER JOIN server_agents ON server_agents.agent_id = agents.id").
+		Where("server_agents.server_id = ? AND agents.deleted_at IS NULL", serverID)
 
 	if err := query.Count(&total).Error; err != nil {
 		return nil, 0, err
@@ -65,17 +65,35 @@ func (r repository) FindAll(ctx context.Context, serverID string, limit int, off
 	return agents, total, nil
 }
 
-func (r repository) FindAllGlobal(ctx context.Context, unassignedOnly bool, limit int, offset int) ([]Agent, int64, error) {
-	var agents []Agent
+func (r repository) FindAllGlobal(ctx context.Context, filter ListFilters, limit int, offset int) ([]AgentWithCount, int64, error) {
+	var agents []AgentWithCount
 	var total int64
 
 	query := r.db.WithContext(ctx).
 		Table("agents").
-		Joins("LEFT JOIN servers ON servers.id = agents.server_id").
 		Where("agents.deleted_at IS NULL")
 
-	if unassignedOnly {
-		query = query.Where("agents.server_id IS NULL")
+	if filter.UnassignedOnly {
+		query = query.Where(`
+			NOT EXISTS (
+				SELECT 1 FROM server_agents
+				WHERE server_agents.agent_id = agents.id
+			)
+		`)
+	}
+
+	if strings.TrimSpace(filter.ServerID) != "" {
+		query = query.Where(`
+			EXISTS (
+				SELECT 1 FROM server_agents
+				WHERE server_agents.agent_id = agents.id
+				  AND server_agents.server_id = ?
+			)
+		`, strings.TrimSpace(filter.ServerID))
+	}
+
+	if strings.TrimSpace(filter.AgentID) != "" {
+		query = query.Where("agents.id = ?", strings.TrimSpace(filter.AgentID))
 	}
 
 	if err := query.Count(&total).Error; err != nil {
@@ -83,7 +101,7 @@ func (r repository) FindAllGlobal(ctx context.Context, unassignedOnly bool, limi
 	}
 
 	findQuery := query.
-		Select(agentSelectColumns()).
+		Select(agentWithCountSelectColumns()).
 		Order("agents.name ASC")
 
 	if limit > 0 {
@@ -94,7 +112,7 @@ func (r repository) FindAllGlobal(ctx context.Context, unassignedOnly bool, limi
 		findQuery = findQuery.Offset(offset)
 	}
 
-	if err := findQuery.Find(&agents).Error; err != nil {
+	if err := findQuery.Scan(&agents).Error; err != nil {
 		return nil, 0, err
 	}
 
@@ -109,22 +127,13 @@ func (r repository) FindById(ctx context.Context, agentID string, serverID strin
 		return Agent{}, gorm.ErrRecordNotFound
 	}
 
-	return findAgentById(ctx, r.db, agentID, serverID)
-}
-
-func (r repository) FindByIdGlobal(ctx context.Context, agentID string) (Agent, error) {
-	agentID = strings.TrimSpace(agentID)
-	if agentID == "" {
-		return Agent{}, gorm.ErrRecordNotFound
-	}
-
 	var agent Agent
 
 	if err := r.db.WithContext(ctx).
 		Table("agents").
 		Select(agentSelectColumns()).
-		Joins("LEFT JOIN servers ON servers.id = agents.server_id").
-		Where("agents.id = ? AND agents.deleted_at IS NULL", agentID).
+		Joins("INNER JOIN server_agents ON server_agents.agent_id = agents.id").
+		Where("agents.id = ? AND server_agents.server_id = ? AND agents.deleted_at IS NULL", agentID, serverID).
 		Take(&agent).Error; err != nil {
 		return Agent{}, err
 	}
@@ -132,44 +141,121 @@ func (r repository) FindByIdGlobal(ctx context.Context, agentID string) (Agent, 
 	return agent, nil
 }
 
-func (r repository) CreateUnassigned(ctx context.Context, agent Agent) (Agent, error) {
-	agent.ServerID = nil
-	agent.Server = ""
+func (r repository) FindByIdGlobal(ctx context.Context, agentID string) (AgentWithCount, error) {
+	agentID = strings.TrimSpace(agentID)
+	if agentID == "" {
+		return AgentWithCount{}, gorm.ErrRecordNotFound
+	}
 
+	var agent AgentWithCount
+
+	if err := r.db.WithContext(ctx).
+		Table("agents").
+		Select(agentWithCountSelectColumns()).
+		Where("agents.id = ? AND agents.deleted_at IS NULL", agentID).
+		Take(&agent).Error; err != nil {
+		return AgentWithCount{}, err
+	}
+
+	return agent, nil
+}
+
+func (r repository) FindByName(ctx context.Context, name string) (Agent, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return Agent{}, gorm.ErrRecordNotFound
+	}
+
+	var agent Agent
+
+	if err := r.db.WithContext(ctx).
+		Where("name = ? AND deleted_at IS NULL", name).
+		Take(&agent).Error; err != nil {
+		return Agent{}, err
+	}
+
+	return agent, nil
+}
+
+func (r repository) FindServersByAgent(ctx context.Context, agentID string, limit int, offset int) ([]LinkedServer, int64, error) {
+	agentID = strings.TrimSpace(agentID)
+	if agentID == "" {
+		return nil, 0, gorm.ErrRecordNotFound
+	}
+
+	var servers []LinkedServer
+	var total int64
+
+	query := r.db.WithContext(ctx).
+		Table("servers").
+		Joins("INNER JOIN server_agents ON server_agents.server_id = servers.id").
+		Where("server_agents.agent_id = ? AND servers.deleted_at IS NULL", agentID)
+
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	findQuery := query.
+		Select("servers.id, servers.hostname").
+		Order("servers.hostname ASC")
+
+	if limit > 0 {
+		findQuery = findQuery.Limit(limit)
+	}
+
+	if offset > 0 {
+		findQuery = findQuery.Offset(offset)
+	}
+
+	if err := findQuery.Scan(&servers).Error; err != nil {
+		return nil, 0, err
+	}
+
+	return servers, total, nil
+}
+
+func (r repository) CreateUnassigned(ctx context.Context, agent Agent) (Agent, error) {
 	if err := r.db.WithContext(ctx).Create(&agent).Error; err != nil {
 		return Agent{}, err
 	}
 
-	return r.FindByIdGlobal(ctx, agent.ID.String())
+	created, err := r.FindByIdGlobal(ctx, agent.ID.String())
+	if err != nil {
+		return Agent{}, err
+	}
+
+	return created.Agent, nil
 }
 
-func (r repository) CreateOnServer(ctx context.Context, agent Agent) (Agent, error) {
-	if agent.ServerID == nil || *agent.ServerID == uuid.Nil {
+func (r repository) CreateOnServer(ctx context.Context, serverID uuid.UUID, agent Agent) (Agent, error) {
+	if serverID == uuid.Nil {
 		return Agent{}, gorm.ErrRecordNotFound
 	}
 
-	var returned Agent
+	var created Agent
 
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		relation, err := findServerRelation(ctx, tx, *agent.ServerID)
-		if err != nil {
-			return err
-		}
-
-		agent.Server = relation.Server
-		serverID := relation.ServerID
-		agent.ServerID = &serverID
-
 		if err := tx.Create(&agent).Error; err != nil {
 			return err
 		}
 
-		created, err := findAgentById(ctx, tx, agent.ID.String(), agent.ServerID.String())
-		if err != nil {
+		link := ServerAgent{
+			ServerID:  serverID,
+			AgentID:   agent.ID,
+			CreatedAt: time.Now().UTC(),
+		}
+
+		if err := tx.Create(&link).Error; err != nil {
 			return err
 		}
 
-		returned = created
+		if err := tx.Table("agents").
+			Select(agentSelectColumns()).
+			Where("agents.id = ? AND agents.deleted_at IS NULL", agent.ID).
+			Take(&created).Error; err != nil {
+			return err
+		}
+
 		return nil
 	})
 
@@ -177,10 +263,10 @@ func (r repository) CreateOnServer(ctx context.Context, agent Agent) (Agent, err
 		return Agent{}, err
 	}
 
-	return returned, nil
+	return created, nil
 }
 
-func (r repository) AttachToServer(ctx context.Context, serverID uuid.UUID, hostname string, agentIDs []uuid.UUID) error {
+func (r repository) AttachToServer(ctx context.Context, serverID uuid.UUID, agentIDs []uuid.UUID) error {
 	if serverID == uuid.Nil || len(agentIDs) == 0 {
 		return nil
 	}
@@ -196,23 +282,25 @@ func (r repository) AttachToServer(ctx context.Context, serverID uuid.UUID, host
 				return err
 			}
 
-			if existing.ServerID != nil {
-				return ErrAgentAlreadyAssigned
+			var count int64
+			if err := tx.Model(&ServerAgent{}).
+				Where("server_id = ? AND agent_id = ?", serverID, agentID).
+				Count(&count).Error; err != nil {
+				return err
 			}
 
-			result := tx.Model(&Agent{}).
-				Where("id = ? AND server_id IS NULL AND deleted_at IS NULL", agentID).
-				Updates(map[string]any{
-					"server_id": serverID,
-					"server":    hostname,
-				})
-
-			if result.Error != nil {
-				return result.Error
+			if count > 0 {
+				return ErrAgentAlreadyLinked
 			}
 
-			if result.RowsAffected == 0 {
-				return ErrAgentAlreadyAssigned
+			link := ServerAgent{
+				ServerID:  serverID,
+				AgentID:   agentID,
+				CreatedAt: time.Now().UTC(),
+			}
+
+			if err := tx.Create(&link).Error; err != nil {
+				return err
 			}
 		}
 
@@ -220,10 +308,10 @@ func (r repository) AttachToServer(ctx context.Context, serverID uuid.UUID, host
 	})
 }
 
-func (r repository) Delete(ctx context.Context, serverID string, agentID string) error {
+func (r repository) DetachFromServer(ctx context.Context, serverID string, agentID string) error {
 	result := r.db.WithContext(ctx).
-		Where("id = ? AND server_id = ?", agentID, serverID).
-		Delete(&Agent{})
+		Where("server_id = ? AND agent_id = ?", serverID, agentID).
+		Delete(&ServerAgent{})
 
 	if result.Error != nil {
 		return result.Error
@@ -236,48 +324,28 @@ func (r repository) Delete(ctx context.Context, serverID string, agentID string)
 	return nil
 }
 
-func findServerRelation(ctx context.Context, db *gorm.DB, serverID uuid.UUID) (serverRelation, error) {
-	if serverID == uuid.Nil {
-		return serverRelation{}, gorm.ErrRecordNotFound
-	}
+func (r repository) DeleteGlobal(ctx context.Context, agentID string) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("agent_id = ?", agentID).Delete(&ServerAgent{}).Error; err != nil {
+			return err
+		}
 
-	var relation serverRelation
+		result := tx.Where("id = ?", agentID).Delete(&Agent{})
+		if result.Error != nil {
+			return result.Error
+		}
 
-	if err := db.WithContext(ctx).
-		Table("servers").
-		Select("servers.id AS server_id, servers.hostname AS server").
-		Where("servers.id = ?", serverID).
-		Take(&relation).Error; err != nil {
-		return serverRelation{}, err
-	}
+		if result.RowsAffected == 0 {
+			return gorm.ErrRecordNotFound
+		}
 
-	if relation.ServerID == uuid.Nil || relation.Server == "" {
-		return serverRelation{}, gorm.ErrRecordNotFound
-	}
-
-	return relation, nil
-}
-
-func findAgentById(ctx context.Context, db *gorm.DB, agentID string, serverID string) (Agent, error) {
-	var agent Agent
-
-	if err := db.WithContext(ctx).
-		Table("agents").
-		Select(agentSelectColumns()).
-		Joins("JOIN servers ON servers.id = agents.server_id").
-		Where("agents.id = ? AND agents.server_id = ? AND agents.deleted_at IS NULL", agentID, serverID).
-		Take(&agent).Error; err != nil {
-		return Agent{}, err
-	}
-
-	return agent, nil
+		return nil
+	})
 }
 
 func agentSelectColumns() string {
 	return `
 		agents.id,
-		COALESCE(servers.hostname, agents.server, '') AS server,
-		agents.server_id,
 		agents.name,
 		agents.type,
 		agents.version,
@@ -287,6 +355,35 @@ func agentSelectColumns() string {
 	`
 }
 
+func agentWithCountSelectColumns() string {
+	return `
+		agents.id,
+		agents.name,
+		agents.type,
+		agents.version,
+		agents.metadata,
+		agents.created_at,
+		agents.updated_at,
+		(
+			SELECT COUNT(*)
+			FROM server_agents
+			WHERE server_agents.agent_id = agents.id
+		) AS server_count
+	`
+}
+
 func NewRepository(db *gorm.DB) Repository {
 	return &repository{db: db}
+}
+
+func isUniqueViolation(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	if errors.Is(err, gorm.ErrDuplicatedKey) {
+		return true
+	}
+
+	return strings.Contains(strings.ToLower(err.Error()), "unique constraint")
 }

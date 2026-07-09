@@ -9,15 +9,16 @@ import (
 	"github.com/google/uuid"
 	"github.com/svetlyopet/heimdallr/internal/logger"
 	"github.com/svetlyopet/heimdallr/internal/release"
+	"github.com/svetlyopet/heimdallr/internal/report/api"
 	"gorm.io/gorm"
 )
 
 type Service interface {
-	GetAll(ctx context.Context, applicationID string, releaseID string, page int, limit int) ([]GetResponse, int64, error)
-	GetAllGlobal(ctx context.Context, filters ListFilters, page int, limit int) ([]GetResponse, int64, error)
-	GetById(ctx context.Context, applicationID string, releaseID string, reportID string) (GetResponse, error)
-	Create(ctx context.Context, applicationID string, releaseID string, req CreateRequest) (GetResponse, error)
-	Update(ctx context.Context, applicationID string, releaseID string, reportID string, req UpdateRequest) (GetResponse, error)
+	GetAll(ctx context.Context, applicationID string, releaseID string, page int, limit int) ([]api.Report, int64, error)
+	GetAllGlobal(ctx context.Context, filters ListFilters, page int, limit int) ([]api.Report, int64, error)
+	GetById(ctx context.Context, applicationID string, releaseID string, reportID string) (api.Report, error)
+	Create(ctx context.Context, applicationID string, releaseID string, req api.ReportCreateRequest) (api.Report, error)
+	Update(ctx context.Context, applicationID string, releaseID string, reportID string, req api.ReportUpdateRequest) (api.Report, error)
 }
 
 type service struct {
@@ -26,7 +27,7 @@ type service struct {
 	logger               *logger.Logger
 }
 
-func (s service) GetAll(ctx context.Context, applicationID string, releaseID string, page int, limit int) ([]GetResponse, int64, error) {
+func (s service) GetAll(ctx context.Context, applicationID string, releaseID string, page int, limit int) ([]api.Report, int64, error) {
 	if _, err := s.releaseLookupService.GetById(ctx, releaseID, applicationID); err != nil {
 		if errors.Is(err, release.ErrReleaseNotFound) {
 			return nil, 0, ErrReportNotFound
@@ -46,7 +47,7 @@ func (s service) GetAll(ctx context.Context, applicationID string, releaseID str
 		return nil, 0, ErrListReports
 	}
 
-	responses := make([]GetResponse, 0, len(reports))
+	responses := make([]api.Report, 0, len(reports))
 	for _, report := range reports {
 		reportResponse, mapErr := mapEntityToResponse(report)
 		if mapErr != nil {
@@ -59,7 +60,7 @@ func (s service) GetAll(ctx context.Context, applicationID string, releaseID str
 	return responses, total, nil
 }
 
-func (s service) GetAllGlobal(ctx context.Context, filters ListFilters, page int, limit int) ([]GetResponse, int64, error) {
+func (s service) GetAllGlobal(ctx context.Context, filters ListFilters, page int, limit int) ([]api.Report, int64, error) {
 	if filters.ApplicationID != "" {
 		if _, err := uuid.Parse(filters.ApplicationID); err != nil {
 			return nil, 0, ErrInvalidApplicationID
@@ -80,7 +81,7 @@ func (s service) GetAllGlobal(ctx context.Context, filters ListFilters, page int
 		return nil, 0, ErrListReports
 	}
 
-	responses := make([]GetResponse, 0, len(reports))
+	responses := make([]api.Report, 0, len(reports))
 	for _, report := range reports {
 		reportResponse, mapErr := mapEntityToResponse(report)
 		if mapErr != nil {
@@ -93,107 +94,127 @@ func (s service) GetAllGlobal(ctx context.Context, filters ListFilters, page int
 	return responses, total, nil
 }
 
-func (s service) GetById(ctx context.Context, applicationID string, releaseID string, reportID string) (GetResponse, error) {
+func (s service) GetById(ctx context.Context, applicationID string, releaseID string, reportID string) (api.Report, error) {
 	report, err := s.repository.FindById(ctx, reportID, releaseID, applicationID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return GetResponse{}, ErrReportNotFound
+			return api.Report{}, ErrReportNotFound
 		}
 
 		s.logger.ErrorWithStack(ctx, "failed to find report by id", err,
 			slog.String("report_id", reportID),
 			slog.String("release_id", releaseID),
 		)
-		return GetResponse{}, ErrGetReport
+		return api.Report{}, ErrGetReport
 	}
 
 	return mapEntityToResponse(report)
 }
 
-func (s service) Create(ctx context.Context, applicationID string, releaseID string, req CreateRequest) (GetResponse, error) {
+func (s service) Create(ctx context.Context, applicationID string, releaseID string, req api.ReportCreateRequest) (api.Report, error) {
 	parsedReleaseID, err := uuid.Parse(releaseID)
 	if err != nil {
-		return GetResponse{}, ErrInvalidReleaseID
+		return api.Report{}, ErrInvalidReleaseID
 	}
 
 	parsedApplicationID, err := uuid.Parse(applicationID)
 	if err != nil {
-		return GetResponse{}, ErrInvalidApplicationID
+		return api.Report{}, ErrInvalidApplicationID
 	}
 
 	if _, err := s.releaseLookupService.GetById(ctx, releaseID, applicationID); err != nil {
 		if errors.Is(err, release.ErrReleaseNotFound) {
-			return GetResponse{}, ErrReportNotFound
+			return api.Report{}, ErrReportNotFound
 		}
 
-		return GetResponse{}, ErrCreateReport
+		return api.Report{}, ErrCreateReport
 	}
 
-	metadata, err := json.Marshal(req.Metadata)
+	metadata, err := marshalMetadata(req.Metadata)
 	if err != nil {
-		return GetResponse{}, NewInvalidMetadataError(err)
+		return api.Report{}, NewInvalidMetadataError(err)
+	}
+
+	location := ""
+	if req.Location != nil {
+		location = *req.Location
+	}
+
+	url := ""
+	if req.Url != nil {
+		url = string(*req.Url)
+	}
+
+	output := ""
+	if req.Output != nil {
+		output = *req.Output
 	}
 
 	report := Report{
-		ID:            req.ID,
+		ID:            req.Id,
 		ReleaseID:     parsedReleaseID,
 		ApplicationID: parsedApplicationID,
-		Type:          req.Type,
-		Status:        req.Status,
-		Location:      req.Location,
-		URL:           req.URL,
+		Type:          string(req.Type),
+		Status:        string(req.Status),
+		Location:      location,
+		URL:           url,
 		Metadata:      metadata,
-		Output:        req.Output,
+		Output:        output,
 	}
 
 	created, err := s.repository.Create(ctx, report)
 	if err != nil {
 		s.logger.ErrorWithStack(ctx, "failed to create report", err,
-			slog.String("report_id", req.ID),
+			slog.String("report_id", req.Id),
 			slog.String("release_id", releaseID),
 		)
-		return GetResponse{}, ErrCreateReport
+		return api.Report{}, ErrCreateReport
 	}
 
 	return mapEntityToResponse(created)
 }
 
-func (s service) Update(ctx context.Context, applicationID string, releaseID string, reportID string, req UpdateRequest) (GetResponse, error) {
+func (s service) Update(ctx context.Context, applicationID string, releaseID string, reportID string, req api.ReportUpdateRequest) (api.Report, error) {
 	parsedReleaseID, err := uuid.Parse(releaseID)
 	if err != nil {
-		return GetResponse{}, ErrInvalidReleaseID
+		return api.Report{}, ErrInvalidReleaseID
 	}
 
 	parsedApplicationID, err := uuid.Parse(applicationID)
 	if err != nil {
-		return GetResponse{}, ErrInvalidApplicationID
+		return api.Report{}, ErrInvalidApplicationID
 	}
 
-	metadata, err := json.Marshal(req.Metadata)
+	metadata, err := marshalMetadata(req.Metadata)
 	if err != nil {
-		return GetResponse{}, NewInvalidMetadataError(err)
+		return api.Report{}, NewInvalidMetadataError(err)
+	}
+
+	output := ""
+	if req.Output != nil {
+		output = *req.Output
 	}
 
 	report := Report{
 		ID:            reportID,
 		ReleaseID:     parsedReleaseID,
 		ApplicationID: parsedApplicationID,
-		Status:        req.Status,
+		Status:        string(req.Status),
 		Metadata:      metadata,
-		Output:        req.Output,
+		Output:        output,
 	}
 
 	updated, err := s.repository.Update(ctx, report)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return GetResponse{}, ErrReportNotFound
+			return api.Report{}, ErrReportNotFound
 		}
 
 		s.logger.ErrorWithStack(ctx, "failed to update report", err,
 			slog.String("report_id", reportID),
 			slog.String("release_id", releaseID),
 		)
-		return GetResponse{}, ErrUpdateReport
+		return api.Report{}, ErrUpdateReport
 	}
 
 	return mapEntityToResponse(updated)
@@ -215,24 +236,51 @@ func NewService(
 	}
 }
 
-func mapEntityToResponse(report Report) (GetResponse, error) {
-	metadata, err := json.Marshal(report.Metadata)
-	if err != nil {
-		return GetResponse{}, err
+func mapEntityToResponse(report Report) (api.Report, error) {
+	var metadataPtr *api.ReportMetadata
+	if len(report.Metadata) > 0 && string(report.Metadata) != "null" {
+		var metadata api.ReportMetadata
+		if err := json.Unmarshal(report.Metadata, &metadata); err != nil {
+			return api.Report{}, err
+		}
+		metadataPtr = &metadata
 	}
 
-	return GetResponse{
-		ID:            report.ID,
-		ApplicationID: report.ApplicationID,
-		ReleaseID:     report.ReleaseID,
+	var locationPtr *string
+	if report.Location != "" {
+		locationPtr = &report.Location
+	}
+
+	var urlPtr *string
+	if report.URL != "" {
+		urlPtr = &report.URL
+	}
+
+	var outputPtr *string
+	if report.Output != "" {
+		outputPtr = &report.Output
+	}
+
+	return api.Report{
+		Id:            report.ID,
+		ApplicationId: report.ApplicationID,
+		ReleaseId:     report.ReleaseID,
 		Application:   report.Application,
 		Version:       report.Version,
-		Type:          report.Type,
-		Status:        report.Status,
-		Location:      report.Location,
-		URL:           report.URL,
-		Metadata:      metadata,
-		Output:        report.Output,
+		Type:          api.ReportType(report.Type),
+		Status:        api.JobStatus(report.Status),
+		Location:      locationPtr,
+		Url:           urlPtr,
+		Metadata:      metadataPtr,
+		Output:        outputPtr,
 		CreatedAt:     report.CreatedAt,
 	}, nil
+}
+
+func marshalMetadata(metadata *api.ReportMetadata) ([]byte, error) {
+	if metadata == nil {
+		return []byte("null"), nil
+	}
+
+	return json.Marshal(metadata)
 }

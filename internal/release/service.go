@@ -9,17 +9,18 @@ import (
 	"github.com/google/uuid"
 	"github.com/svetlyopet/heimdallr/internal/application"
 	"github.com/svetlyopet/heimdallr/internal/logger"
+	"github.com/svetlyopet/heimdallr/internal/release/api"
 	"gorm.io/gorm"
 )
 
 type LookupService interface {
-	GetById(ctx context.Context, releaseID string, applicationID string) (GetWithSummaryResponse, error)
+	GetById(ctx context.Context, releaseID string, applicationID string) (api.ReleaseWithCompliance, error)
 }
 
 type Service interface {
-	GetAll(ctx context.Context, applicationID string, page int, limit int) ([]ListItemResponse, int64, error)
-	GetById(ctx context.Context, releaseID string, applicationID string) (GetWithSummaryResponse, error)
-	Create(ctx context.Context, applicationID string, req CreateRequest, upsert bool) (GetResponse, error)
+	GetAll(ctx context.Context, applicationID string, page int, limit int) ([]api.ReleaseListItem, int64, error)
+	GetById(ctx context.Context, releaseID string, applicationID string) (api.ReleaseWithCompliance, error)
+	Create(ctx context.Context, applicationID string, req api.ReleaseCreateRequest, upsert bool) (api.Release, error)
 }
 
 type service struct {
@@ -28,7 +29,7 @@ type service struct {
 	logger                   *logger.Logger
 }
 
-func (s service) GetAll(ctx context.Context, applicationID string, page int, limit int) ([]ListItemResponse, int64, error) {
+func (s service) GetAll(ctx context.Context, applicationID string, page int, limit int) ([]api.ReleaseListItem, int64, error) {
 	if _, err := uuid.Parse(applicationID); err != nil {
 		return nil, 0, ErrInvalidApplicationID
 	}
@@ -64,34 +65,41 @@ func (s service) GetAll(ctx context.Context, applicationID string, page int, lim
 		return nil, 0, ErrListReleases
 	}
 
-	responses := make([]ListItemResponse, 0, len(releases))
+	responses := make([]api.ReleaseListItem, 0, len(releases))
 	for _, release := range releases {
-		summary := summaries[release.ID]
-		responses = append(responses, ListItemResponse{
-			GetResponse: mapEntityToResponse(release),
-			Compliance:  summary,
+		mapped := mapEntityToResponse(release)
+		responses = append(responses, api.ReleaseListItem{
+			Id:            mapped.Id,
+			ApplicationId: mapped.ApplicationId,
+			Application:   mapped.Application,
+			Version:       mapped.Version,
+			CommitSha:     mapped.CommitSha,
+			PipelineUrl:   mapped.PipelineUrl,
+			Branch:        mapped.Branch,
+			CreatedAt:     mapped.CreatedAt,
+			Compliance:    summaries[release.ID],
 		})
 	}
 
 	return responses, total, nil
 }
 
-func (s service) GetById(ctx context.Context, releaseID string, applicationID string) (GetWithSummaryResponse, error) {
+func (s service) GetById(ctx context.Context, releaseID string, applicationID string) (api.ReleaseWithCompliance, error) {
 	if _, err := uuid.Parse(applicationID); err != nil {
-		return GetWithSummaryResponse{}, ErrInvalidApplicationID
+		return api.ReleaseWithCompliance{}, ErrInvalidApplicationID
 	}
 
 	release, err := s.repository.FindById(ctx, releaseID, applicationID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return GetWithSummaryResponse{}, ErrReleaseNotFound
+			return api.ReleaseWithCompliance{}, ErrReleaseNotFound
 		}
 
 		s.logger.ErrorWithStack(ctx, "failed to find release by id", err,
 			slog.String("release_id", releaseID),
 			slog.String("application_id", applicationID),
 		)
-		return GetWithSummaryResponse{}, ErrGetRelease
+		return api.ReleaseWithCompliance{}, ErrGetRelease
 	}
 
 	summary, err := s.repository.GetComplianceSummary(ctx, release.ID)
@@ -99,33 +107,56 @@ func (s service) GetById(ctx context.Context, releaseID string, applicationID st
 		s.logger.ErrorWithStack(ctx, "failed to get release compliance summary", err,
 			slog.String("release_id", releaseID),
 		)
-		return GetWithSummaryResponse{}, ErrGetRelease
+		return api.ReleaseWithCompliance{}, ErrGetRelease
 	}
 
-	return GetWithSummaryResponse{
-		GetResponse: mapEntityToResponse(release),
-		Compliance:  summary,
+	mapped := mapEntityToResponse(release)
+	return api.ReleaseWithCompliance{
+		Id:            mapped.Id,
+		ApplicationId: mapped.ApplicationId,
+		Application:   mapped.Application,
+		Version:       mapped.Version,
+		CommitSha:     mapped.CommitSha,
+		PipelineUrl:   mapped.PipelineUrl,
+		Branch:        mapped.Branch,
+		CreatedAt:     mapped.CreatedAt,
+		Compliance:    summary,
 	}, nil
 }
 
-func (s service) Create(ctx context.Context, applicationID string, req CreateRequest, upsert bool) (GetResponse, error) {
+func (s service) Create(ctx context.Context, applicationID string, req api.ReleaseCreateRequest, upsert bool) (api.Release, error) {
 	parsedApplicationID, err := uuid.Parse(applicationID)
 	if err != nil {
-		return GetResponse{}, ErrInvalidApplicationID
+		return api.Release{}, ErrInvalidApplicationID
 	}
 
 	app, err := s.applicationLookupService.GetById(ctx, applicationID)
 	if err != nil {
 		if errors.Is(err, application.ErrApplicationNotFound) {
-			return GetResponse{}, application.ErrApplicationNotFound
+			return api.Release{}, application.ErrApplicationNotFound
 		}
 
-		return GetResponse{}, ErrCreateRelease
+		return api.Release{}, ErrCreateRelease
 	}
 
 	version := strings.TrimSpace(req.Version)
 	if version == "" {
-		return GetResponse{}, ErrCreateRelease
+		return api.Release{}, ErrCreateRelease
+	}
+
+	commitSHA := ""
+	if req.CommitSha != nil {
+		commitSHA = strings.TrimSpace(*req.CommitSha)
+	}
+
+	pipelineURL := ""
+	if req.PipelineUrl != nil {
+		pipelineURL = string(*req.PipelineUrl)
+	}
+
+	branch := ""
+	if req.Branch != nil {
+		branch = strings.TrimSpace(*req.Branch)
 	}
 
 	release := Release{
@@ -133,9 +164,9 @@ func (s service) Create(ctx context.Context, applicationID string, req CreateReq
 		ApplicationID: parsedApplicationID,
 		Application:   app.Name,
 		Version:       version,
-		CommitSHA:     strings.TrimSpace(req.CommitSHA),
-		PipelineURL:   strings.TrimSpace(req.PipelineURL),
-		Branch:        strings.TrimSpace(req.Branch),
+		CommitSHA:     commitSHA,
+		PipelineURL:   pipelineURL,
+		Branch:        branch,
 	}
 
 	if upsert {
@@ -145,7 +176,7 @@ func (s service) Create(ctx context.Context, applicationID string, req CreateReq
 				slog.String("application_id", applicationID),
 				slog.String("version", version),
 			)
-			return GetResponse{}, ErrCreateRelease
+			return api.Release{}, ErrCreateRelease
 		}
 
 		return mapEntityToResponse(created), nil
@@ -153,11 +184,11 @@ func (s service) Create(ctx context.Context, applicationID string, req CreateReq
 
 	_, findErr := s.repository.FindByApplicationAndVersion(ctx, parsedApplicationID, version)
 	if findErr == nil {
-		return GetResponse{}, ErrReleaseAlreadyExists
+		return api.Release{}, ErrReleaseAlreadyExists
 	}
 
 	if !errors.Is(findErr, gorm.ErrRecordNotFound) {
-		return GetResponse{}, ErrCreateRelease
+		return api.Release{}, ErrCreateRelease
 	}
 
 	created, err := s.repository.Create(ctx, release)
@@ -166,7 +197,7 @@ func (s service) Create(ctx context.Context, applicationID string, req CreateReq
 			slog.String("application_id", applicationID),
 			slog.String("version", version),
 		)
-		return GetResponse{}, ErrCreateRelease
+		return api.Release{}, ErrCreateRelease
 	}
 
 	return mapEntityToResponse(created), nil
@@ -188,14 +219,14 @@ func NewService(
 	}
 }
 
-func mapEntityToResponse(release Release) GetResponse {
-	return GetResponse{
-		ID:            release.ID,
-		ApplicationID: release.ApplicationID,
+func mapEntityToResponse(release Release) api.Release {
+	return api.Release{
+		Id:            release.ID,
+		ApplicationId: release.ApplicationID,
 		Application:   release.Application,
 		Version:       release.Version,
-		CommitSHA:     release.CommitSHA,
-		PipelineURL:   release.PipelineURL,
+		CommitSha:     release.CommitSHA,
+		PipelineUrl:   api.URL(release.PipelineURL),
 		Branch:        release.Branch,
 		CreatedAt:     release.CreatedAt,
 	}

@@ -1,74 +1,28 @@
 package auth
 
 import (
-	"errors"
-	"net/http"
-
 	"github.com/gin-gonic/gin"
+	"github.com/svetlyopet/heimdallr/internal/auth/api"
 )
 
-const (
-	authHeaderUsername = "X-Auth-Username"
-	authHeaderPassword = "X-Auth-Password"
-)
-
-func RegisterRoutes(rg *gin.RouterGroup, handler Handler, service Service) {
-	authRoutesV1 := rg.Group("/v1/auth")
-	authRoutesV1.Use(RequireRoles(service, RoleAdmin))
-	{
-		authRoutesV1.GET("/users", handler.List)
-		authRoutesV1.POST("/users", handler.Create)
-		authRoutesV1.PUT("/users/:user_id", handler.Update)
-		authRoutesV1.DELETE("/users/:user_id", handler.Delete)
-	}
+func RegisterPublicRoutes(rg *gin.RouterGroup, handler Handler) {
+	strictHandler := api.NewStrictHandler(handler, nil)
+	api.RegisterHandlersWithOptions(rg, strictHandler, api.GinServerOptions{})
 }
 
 func RequireRoles(service Service, roles ...string) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		if user, err := userFromContext(ctx); err == nil {
-			if !service.HasAnyRole(user, roles...) {
-				ctx.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": ErrInsufficientRole.Error()})
-				return
-			}
-
-			ctx.Next()
-			return
-		}
-
-		username := ctx.GetHeader(authHeaderUsername)
-		password := ctx.GetHeader(authHeaderPassword)
-
-		if username == "" || password == "" {
-			ctx.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": ErrInvalidAuthHeader.Error()})
-			return
-		}
-
-		user, err := service.Authenticate(ctx.Request.Context(), username, password)
+		user, err := UserFromGinContext(ctx)
 		if err != nil {
-			ctx.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": ErrInvalidCredentials.Error()})
+			ctx.AbortWithStatusJSON(401, gin.H{"error": ErrInvalidCredentials.Error()})
 			return
 		}
 
 		if !service.HasAnyRole(user, roles...) {
-			ctx.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": ErrInsufficientRole.Error()})
+			ctx.AbortWithStatusJSON(403, gin.H{"error": ErrInsufficientRole.Error()})
 			return
 		}
 
-		ctx.Set("auth.user", user)
 		ctx.Next()
 	}
-}
-
-func userFromContext(ctx *gin.Context) (GetResponse, error) {
-	value, exists := ctx.Get("auth.user")
-	if !exists {
-		return GetResponse{}, ErrInvalidCredentials
-	}
-
-	user, ok := value.(GetResponse)
-	if !ok {
-		return GetResponse{}, errors.New("invalid auth user context type")
-	}
-
-	return user, nil
 }

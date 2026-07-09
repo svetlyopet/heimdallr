@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/svetlyopet/heimdallr/internal/auth/api"
 	"github.com/svetlyopet/heimdallr/internal/logger"
 	"gorm.io/gorm"
 )
@@ -26,13 +27,13 @@ const (
 const passwordAlphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()-_=+[]{}<>?"
 
 type Service interface {
-	Authenticate(ctx context.Context, username string, password string) (GetResponse, error)
-	List(ctx context.Context) ([]GetResponse, error)
-	Create(ctx context.Context, req CreateRequest) (GetResponse, error)
-	Update(ctx context.Context, userID string, req UpdateRequest) (GetResponse, error)
+	Authenticate(ctx context.Context, username string, password string) (api.AuthUser, error)
+	List(ctx context.Context) ([]api.AuthUser, error)
+	Create(ctx context.Context, req api.AuthCreateUserRequest) (api.AuthUser, error)
+	Update(ctx context.Context, userID string, req api.AuthUpdateUserRequest) (api.AuthUser, error)
 	Delete(ctx context.Context, userID string) error
 	EnsureRootUser(ctx context.Context) (string, error)
-	HasAnyRole(user GetResponse, requiredRoles ...string) bool
+	HasAnyRole(user api.AuthUser, requiredRoles ...string) bool
 }
 
 type ServiceConfig struct {
@@ -46,55 +47,55 @@ type service struct {
 	supportedRoles    map[string]struct{}
 }
 
-func (s service) Authenticate(ctx context.Context, username string, password string) (GetResponse, error) {
+func (s service) Authenticate(ctx context.Context, username string, password string) (api.AuthUser, error) {
 	username = strings.TrimSpace(username)
 	if username == "" || password == "" {
-		return GetResponse{}, ErrInvalidCredentials
+		return api.AuthUser{}, ErrInvalidCredentials
 	}
 
 	user, err := s.repository.FindByUsername(ctx, username)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return GetResponse{}, ErrInvalidCredentials
+			return api.AuthUser{}, ErrInvalidCredentials
 		}
 
 		s.logger.ErrorWithStack(ctx, "failed to authenticate user", err, slog.String("username", username))
-		return GetResponse{}, ErrInvalidCredentials
+		return api.AuthUser{}, ErrInvalidCredentials
 	}
 
 	hashed := hashPassword(password)
 	if subtle.ConstantTimeCompare([]byte(user.PasswordHash), []byte(hashed)) != 1 {
-		return GetResponse{}, ErrInvalidCredentials
+		return api.AuthUser{}, ErrInvalidCredentials
 	}
 
 	return mapEntityToResponse(user), nil
 }
 
-func (s service) Create(ctx context.Context, req CreateRequest) (GetResponse, error) {
+func (s service) Create(ctx context.Context, req api.AuthCreateUserRequest) (api.AuthUser, error) {
 	username := strings.TrimSpace(req.Username)
-	email := strings.TrimSpace(req.Email)
+	email := strings.TrimSpace(string(req.Email))
 
 	if username == "" || email == "" {
-		return GetResponse{}, ErrInvalidCredentials
+		return api.AuthUser{}, ErrInvalidCredentials
 	}
 
 	if len(req.Password) < minimumPasswordSize || strings.TrimSpace(req.Password) == "" {
-		return GetResponse{}, ErrInvalidPasswordValue
+		return api.AuthUser{}, ErrInvalidPasswordValue
 	}
 
-	roles, err := s.validateRoles(req.Roles, true)
+	roles, err := s.validateRoles(rolesFromAPI(req.Roles), true)
 	if err != nil {
-		return GetResponse{}, err
+		return api.AuthUser{}, err
 	}
 
 	_, err = s.repository.FindByUsername(ctx, username)
 	if err == nil {
-		return GetResponse{}, ErrUserAlreadyExists
+		return api.AuthUser{}, ErrUserAlreadyExists
 	}
 
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
 		s.logger.ErrorWithStack(ctx, "failed to check user existence before create", err, slog.String("username", username))
-		return GetResponse{}, ErrCreateUser
+		return api.AuthUser{}, ErrCreateUser
 	}
 
 	created, err := s.repository.Create(ctx, User{
@@ -105,24 +106,24 @@ func (s service) Create(ctx context.Context, req CreateRequest) (GetResponse, er
 	})
 	if err != nil {
 		if errors.Is(err, gorm.ErrDuplicatedKey) {
-			return GetResponse{}, ErrUserAlreadyExists
+			return api.AuthUser{}, ErrUserAlreadyExists
 		}
 
 		s.logger.ErrorWithStack(ctx, "failed to create user", err, slog.String("username", username))
-		return GetResponse{}, ErrCreateUser
+		return api.AuthUser{}, ErrCreateUser
 	}
 
 	return mapEntityToResponse(created), nil
 }
 
-func (s service) List(ctx context.Context) ([]GetResponse, error) {
+func (s service) List(ctx context.Context) ([]api.AuthUser, error) {
 	users, err := s.repository.List(ctx)
 	if err != nil {
 		s.logger.ErrorWithStack(ctx, "failed to list users", err)
 		return nil, ErrListUsers
 	}
 
-	responses := make([]GetResponse, 0, len(users))
+	responses := make([]api.AuthUser, 0, len(users))
 	for _, user := range users {
 		responses = append(responses, mapEntityToResponse(user))
 	}
@@ -130,50 +131,50 @@ func (s service) List(ctx context.Context) ([]GetResponse, error) {
 	return responses, nil
 }
 
-func (s service) Update(ctx context.Context, userID string, req UpdateRequest) (GetResponse, error) {
+func (s service) Update(ctx context.Context, userID string, req api.AuthUpdateUserRequest) (api.AuthUser, error) {
 	userID = strings.TrimSpace(userID)
 	if userID == "" {
-		return GetResponse{}, ErrInvalidUserID
+		return api.AuthUser{}, ErrInvalidUserID
 	}
 
 	existing, err := s.repository.FindByID(ctx, userID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return GetResponse{}, ErrUserNotFound
+			return api.AuthUser{}, ErrUserNotFound
 		}
 
 		s.logger.ErrorWithStack(ctx, "failed to find user for update", err, slog.String("user_id", userID))
-		return GetResponse{}, ErrUpdateUser
+		return api.AuthUser{}, ErrUpdateUser
 	}
 
 	update := User{}
 
-	if req.Email != "" {
-		email := strings.TrimSpace(req.Email)
+	if req.Email != nil {
+		email := strings.TrimSpace(string(*req.Email))
 		if email == "" {
-			return GetResponse{}, ErrInvalidCredentials
+			return api.AuthUser{}, ErrInvalidCredentials
 		}
 		update.Email = email
 	}
 
-	if req.Password != "" {
-		if len(req.Password) < minimumPasswordSize || strings.TrimSpace(req.Password) == "" {
-			return GetResponse{}, ErrInvalidPasswordValue
+	if req.Password != nil {
+		if len(*req.Password) < minimumPasswordSize || strings.TrimSpace(*req.Password) == "" {
+			return api.AuthUser{}, ErrInvalidPasswordValue
 		}
-		update.PasswordHash = hashPassword(req.Password)
+		update.PasswordHash = hashPassword(*req.Password)
 	}
 
 	if req.Roles != nil {
-		roles, err := s.validateRoles(req.Roles, false)
+		roles, err := s.validateRoles(rolesFromAPI(req.Roles), false)
 		if err != nil {
-			return GetResponse{}, err
+			return api.AuthUser{}, err
 		}
 		if len(roles) == 0 {
 			roles = existing.Roles
 		}
 
 		if existing.Username == rootUsername && !slices.Equal(roles, existing.Roles) {
-			return GetResponse{}, ErrRootRoleForbidden
+			return api.AuthUser{}, ErrRootRoleForbidden
 		}
 		update.Roles = roles
 	}
@@ -181,11 +182,11 @@ func (s service) Update(ctx context.Context, userID string, req UpdateRequest) (
 	updated, err := s.repository.UpdateByID(ctx, userID, update)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return GetResponse{}, ErrUserNotFound
+			return api.AuthUser{}, ErrUserNotFound
 		}
 
 		s.logger.ErrorWithStack(ctx, "failed to update user", err, slog.String("user_id", userID))
-		return GetResponse{}, ErrUpdateUser
+		return api.AuthUser{}, ErrUpdateUser
 	}
 
 	return mapEntityToResponse(updated), nil
@@ -264,13 +265,13 @@ func (s service) EnsureRootUser(ctx context.Context) (string, error) {
 	return password, nil
 }
 
-func (s service) HasAnyRole(user GetResponse, requiredRoles ...string) bool {
+func (s service) HasAnyRole(user api.AuthUser, requiredRoles ...string) bool {
 	if len(requiredRoles) == 0 {
 		return true
 	}
 
 	userRoles := map[string]struct{}{}
-	for _, role := range normalizeRoles(user.Roles) {
+	for _, role := range normalizeRoles(rolesFromSlice(user.Roles)) {
 		userRoles[role] = struct{}{}
 	}
 
@@ -338,11 +339,11 @@ func generateSecurePassword(length int) (string, error) {
 	return string(bytes), nil
 }
 
-func mapEntityToResponse(user User) GetResponse {
-	return GetResponse{
-		ID:       user.ID.String(),
+func mapEntityToResponse(user User) api.AuthUser {
+	return api.AuthUser{
+		Id:       user.ID.String(),
 		Username: user.Username,
-		Email:    user.Email,
-		Roles:    user.Roles,
+		Email:    emailToAPI(user.Email),
+		Roles:    rolesToAPI(user.Roles),
 	}
 }

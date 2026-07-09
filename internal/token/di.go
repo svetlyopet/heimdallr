@@ -10,6 +10,7 @@ var Package = do.Package(
 	do.Lazy(provideRepository),
 	do.Lazy(provideService),
 	do.Lazy(provideHandler),
+	do.Lazy(provideAuthTokenService),
 )
 
 func provideRepository(i do.Injector) (Repository, error) {

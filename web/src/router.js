@@ -14,6 +14,7 @@ import ReleasePage from "./pages/ReleasePage.vue";
 import ReportDetailPage from "./pages/ReportDetailPage.vue";
 import ReportPage from "./pages/ReportPage.vue";
 import ServerDetailPage from "./pages/ServerDetailPage.vue";
+import ServerJobsPage from "./pages/ServerJobsPage.vue";
 import ServerPage from "./pages/ServerPage.vue";
 import UsersPage from "./pages/UsersPage.vue";
 import { ensureSessionAccess, sessionState } from "./auth/session";
@@ -104,8 +105,24 @@ const routes = [
         },
     },
     {
+        path: "/servers/:serverId/jobs",
+        name: "server-jobs",
+        component: ServerJobsPage,
+        meta: {
+            requiresAuth: true,
+        },
+    },
+    {
         path: "/servers/:serverId/agents/:agentId",
         name: "agent-detail",
+        component: AgentDetailPage,
+        meta: {
+            requiresAuth: true,
+        },
+    },
+    {
+        path: "/agents/:agentId",
+        name: "agent-detail-global",
         component: AgentDetailPage,
         meta: {
             requiresAuth: true,

@@ -68,8 +68,6 @@ func (a *App) RegisterRoutes(rg *gin.RouterGroup) {
 	analytics.RegisterRoutes(rg, a.analyticsHandler)
 	server.RegisterRoutes(rg, a.serverHandler)
 	agent.RegisterRoutes(rg, a.agentHandler)
-	agent.RegisterGlobalRoutes(rg, a.agentHandler)
-	auth.RegisterRoutes(rg, a.authHandler, a.authService)
 	token.RegisterRoutes(rg, a.tokenHandler, a.authService)
 }
 

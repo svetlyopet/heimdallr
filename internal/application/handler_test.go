@@ -9,20 +9,21 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"github.com/svetlyopet/heimdallr/internal/application/api"
 	"github.com/svetlyopet/heimdallr/internal/testutil"
 )
 
 type stubApplicationService struct {
-	getAllResponse []GetResponse
+	getAllResponse []api.Application
 	getAllTotal    int64
 	getAllError    error
-	getByIdResp    GetResponse
+	getByIdResp    api.Application
 	getByIdError   error
-	createResp     GetResponse
+	createResp     api.Application
 	createError    error
 }
 
-func (s stubApplicationService) GetAll(_ context.Context, _ int, _ int) ([]GetResponse, int64, error) {
+func (s stubApplicationService) GetAll(_ context.Context, _ int, _ int) ([]api.Application, int64, error) {
 	if s.getAllError != nil {
 		return nil, 0, s.getAllError
 	}
@@ -30,21 +31,21 @@ func (s stubApplicationService) GetAll(_ context.Context, _ int, _ int) ([]GetRe
 	return s.getAllResponse, s.getAllTotal, nil
 }
 
-func (s stubApplicationService) GetById(_ context.Context, _ string) (GetResponse, error) {
+func (s stubApplicationService) GetById(_ context.Context, _ string) (api.Application, error) {
 	if s.getByIdError != nil {
-		return GetResponse{}, s.getByIdError
+		return api.Application{}, s.getByIdError
 	}
 
 	return s.getByIdResp, nil
 }
 
-func (s stubApplicationService) GetByName(_ context.Context, _ string) (GetResponse, error) {
-	return GetResponse{}, nil
+func (s stubApplicationService) GetByName(_ context.Context, _ string) (api.Application, error) {
+	return api.Application{}, nil
 }
 
-func (s stubApplicationService) Create(_ context.Context, _ CreateRequest) (GetResponse, error) {
+func (s stubApplicationService) Create(_ context.Context, _ api.ApplicationCreateRequest) (api.Application, error) {
 	if s.createError != nil {
-		return GetResponse{}, s.createError
+		return api.Application{}, s.createError
 	}
 
 	return s.createResp, nil
@@ -59,8 +60,8 @@ func newApplicationRouter(t *testing.T, svc Service) *gin.Engine {
 	require.NoError(t, err)
 
 	r := gin.New()
-	api := r.Group("/api")
-	RegisterRoutes(api, h)
+	apiGroup := r.Group("/api")
+	RegisterRoutes(apiGroup, h)
 
 	return r
 }
@@ -75,7 +76,7 @@ func TestHandlerListReturnsBadRequestForInvalidPage(t *testing.T) {
 func TestHandlerListReturnsApplications(t *testing.T) {
 	appID := uuid.New()
 	r := newApplicationRouter(t, stubApplicationService{
-		getAllResponse: []GetResponse{{ID: appID, Name: "demo-app"}},
+		getAllResponse: []api.Application{{Id: appID, Name: "demo-app"}},
 		getAllTotal:    1,
 	})
 
@@ -93,14 +94,15 @@ func TestHandlerGetReturnsNotFound(t *testing.T) {
 
 func TestHandlerCreateReturnsCreated(t *testing.T) {
 	appID := uuid.New()
+	repoURL := api.URL("https://example.com/new")
 	r := newApplicationRouter(t, stubApplicationService{
-		createResp: GetResponse{ID: appID, Name: "new-app"},
+		createResp: api.Application{Id: appID, Name: "new-app"},
 	})
 
-	rr := testutil.DoGinJSONRequest(t, r, http.MethodPost, "/api/v1/application", CreateRequest{
+	rr := testutil.DoGinJSONRequest(t, r, http.MethodPost, "/api/v1/application", api.ApplicationCreateRequest{
 		Name:          "new-app",
-		Description:   "desc",
-		RepositoryURL: "https://example.com/new",
+		Description:   ptr("desc"),
+		RepositoryUrl: &repoURL,
 	}, nil)
 	response := testutil.AssertJSONStatus(t, rr, http.StatusCreated)
 	data, ok := response["data"].(map[string]any)
@@ -111,7 +113,7 @@ func TestHandlerCreateReturnsCreated(t *testing.T) {
 func TestHandlerCreateReturnsConflict(t *testing.T) {
 	r := newApplicationRouter(t, stubApplicationService{createError: ErrApplicationAlreadyExists})
 
-	rr := testutil.DoGinJSONRequest(t, r, http.MethodPost, "/api/v1/application", CreateRequest{Name: "dup"}, nil)
+	rr := testutil.DoGinJSONRequest(t, r, http.MethodPost, "/api/v1/application", api.ApplicationCreateRequest{Name: "dup"}, nil)
 	require.Equal(t, http.StatusConflict, rr.Code)
 }
 
@@ -120,4 +122,8 @@ func TestHandlerListReturnsInternalServerError(t *testing.T) {
 
 	rr := testutil.DoGinJSONRequest(t, r, http.MethodGet, "/api/v1/application", nil, nil)
 	require.Equal(t, http.StatusInternalServerError, rr.Code)
+}
+
+func ptr(s string) *string {
+	return &s
 }

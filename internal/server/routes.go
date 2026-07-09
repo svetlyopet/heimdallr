@@ -1,27 +1,11 @@
 package server
 
-import "github.com/gin-gonic/gin"
+import (
+	"github.com/gin-gonic/gin"
+	"github.com/svetlyopet/heimdallr/internal/server/api"
+)
 
 func RegisterRoutes(rg *gin.RouterGroup, handler Handler) {
-	serverRoutesV1 := rg.Group("/v1/server")
-	{
-		serverRoutesV1.GET("", handler.List)
-		serverRoutesV1.POST("", handler.Create)
-		serverRoutesV1.GET("/:server_id", handler.Get)
-		serverRoutesV1.PUT("/:server_id", handler.Update)
-
-		jobRoutes := serverRoutesV1.Group("/:server_id/job")
-		{
-			jobRoutes.GET("", handler.ListJobs)
-			jobRoutes.POST("", handler.AssociateJob)
-			jobRoutes.DELETE("/:job_id", handler.DissociateJob)
-		}
-
-		releaseRoutes := serverRoutesV1.Group("/:server_id/release")
-		{
-			releaseRoutes.GET("", handler.ListReleases)
-			releaseRoutes.POST("", handler.AssociateRelease)
-			releaseRoutes.DELETE("/:release_id", handler.DissociateRelease)
-		}
-	}
+	strictHandler := api.NewStrictHandler(handler, nil)
+	api.RegisterHandlersWithOptions(rg, strictHandler, api.GinServerOptions{})
 }

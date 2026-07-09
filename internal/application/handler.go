@@ -1,111 +1,119 @@
 package application
 
 import (
+	"context"
 	"errors"
-	"net/http"
-	"strconv"
 
-	"github.com/gin-gonic/gin"
+	"github.com/svetlyopet/heimdallr/internal/application/api"
 )
 
 type Handler interface {
-	List(ctx *gin.Context)
-	Get(ctx *gin.Context)
-	Create(ctx *gin.Context)
+	api.StrictServerInterface
 }
 
 type handler struct {
 	service Service
 }
 
-func (h handler) List(ctx *gin.Context) {
-	page, err := strconv.Atoi(ctx.DefaultQuery("page", "1"))
-	if err != nil || page < 1 {
-		applicationErr := NewApplicationError("invalid query param value", errors.New("page must be a positive integer"))
-		returnErrorResponse(ctx, http.StatusBadRequest, applicationErr)
-		return
+func (h handler) ListApplications(ctx context.Context, request api.ListApplicationsRequestObject) (api.ListApplicationsResponseObject, error) {
+	page, limit, ok := paginationParams(request.Params.Page, request.Params.Limit)
+	if !ok {
+		return api.ListApplications400JSONResponse{
+			BadRequestJSONResponse: api.BadRequestJSONResponse{Error: "page and limit must be positive integers"},
+		}, nil
 	}
 
-	limit, err := strconv.Atoi(ctx.DefaultQuery("limit", "10"))
-	if err != nil || limit < 1 {
-		applicationErr := NewApplicationError("invalid query param value", errors.New("limit must be a positive integer"))
-		returnErrorResponse(ctx, http.StatusBadRequest, applicationErr)
-		return
-	}
-
-	applications, total, err := h.service.GetAll(ctx.Request.Context(), page, limit)
+	applications, total, err := h.service.GetAll(ctx, page, limit)
 	if err != nil {
-		returnErrorResponse(ctx, http.StatusInternalServerError, NewGetApplicationsError(err))
-		return
+		return api.ListApplications500JSONResponse{
+			InternalServerErrorJSONResponse: api.InternalServerErrorJSONResponse{Error: applicationErrorMessage(err, "failed to list applications")},
+		}, nil
 	}
 
+	return api.ListApplications200JSONResponse{
+		Data:       applications,
+		Pagination: buildPagination(page, limit, total),
+	}, nil
+}
+
+func (h handler) CreateApplication(ctx context.Context, request api.CreateApplicationRequestObject) (api.CreateApplicationResponseObject, error) {
+	if request.Body == nil {
+		return api.CreateApplication400JSONResponse{
+			BadRequestJSONResponse: api.BadRequestJSONResponse{Error: "invalid request body"},
+		}, nil
+	}
+
+	application, err := h.service.Create(ctx, *request.Body)
+	if err != nil {
+		if errors.Is(err, ErrApplicationAlreadyExists) {
+			return api.CreateApplication409JSONResponse{
+				ConflictJSONResponse: api.ConflictJSONResponse{Error: applicationErrorMessage(err, "application already exists")},
+			}, nil
+		}
+
+		return api.CreateApplication500JSONResponse{
+			InternalServerErrorJSONResponse: api.InternalServerErrorJSONResponse{Error: applicationErrorMessage(err, "failed to create application")},
+		}, nil
+	}
+
+	return api.CreateApplication201JSONResponse{Data: application}, nil
+}
+
+func (h handler) GetApplication(ctx context.Context, request api.GetApplicationRequestObject) (api.GetApplicationResponseObject, error) {
+	application, err := h.service.GetById(ctx, request.ApplicationId.String())
+	if err != nil {
+		if errors.Is(err, ErrApplicationNotFound) {
+			return api.GetApplication404JSONResponse{
+				NotFoundJSONResponse: api.NotFoundJSONResponse{Error: applicationErrorMessage(err, "application not found")},
+			}, nil
+		}
+
+		return api.GetApplication500JSONResponse{
+			InternalServerErrorJSONResponse: api.InternalServerErrorJSONResponse{Error: applicationErrorMessage(err, "failed to get application")},
+		}, nil
+	}
+
+	return api.GetApplication200JSONResponse{Data: application}, nil
+}
+
+func NewHandler(service Service) (Handler, error) {
+	return &handler{
+		service: service,
+	}, nil
+}
+
+func paginationParams(pagePtr, limitPtr *api.Page) (page int, limit int, ok bool) {
+	page = 1
+	limit = 10
+
+	if pagePtr != nil {
+		page = int(*pagePtr)
+	}
+	if limitPtr != nil {
+		limit = int(*limitPtr)
+	}
+
+	return page, limit, page >= 1 && limit >= 1
+}
+
+func buildPagination(page, limit int, total int64) api.Pagination {
 	totalPages := int64(0)
 	if total > 0 {
 		totalPages = (total + int64(limit) - 1) / int64(limit)
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"data": applications,
-		"pagination": gin.H{
-			"page":        page,
-			"limit":       limit,
-			"total":       total,
-			"total_pages": totalPages,
-		},
-	})
+	return api.Pagination{
+		Page:       page,
+		Limit:      limit,
+		Total:      int(total),
+		TotalPages: int(totalPages),
+	}
 }
 
-func (h handler) Get(ctx *gin.Context) {
-	applicationID := ctx.Param("application_id")
-	if applicationID == "" {
-		returnErrorResponse(ctx, http.StatusBadRequest, NewInvalidApplicationIDError(ErrInvalidApplicationID))
-		return
-	}
-
-	application, err := h.service.GetById(ctx.Request.Context(), applicationID)
-	if err != nil {
-		if errors.Is(err, ErrApplicationNotFound) {
-			returnErrorResponse(ctx, http.StatusNotFound, NewApplicationNotFoundError(err))
-			return
-		}
-
-		returnErrorResponse(ctx, http.StatusInternalServerError, NewGetApplicationError(err))
-		return
-	}
-
-	ctx.JSON(http.StatusOK, gin.H{"data": application})
-}
-
-func (h handler) Create(ctx *gin.Context) {
-	var req CreateRequest
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		returnErrorResponse(ctx, http.StatusBadRequest, NewApplicationError("invalid request body", err))
-		return
-	}
-
-	application, err := h.service.Create(ctx.Request.Context(), req)
-	if err != nil {
-		statusCode := http.StatusInternalServerError
-		if errors.Is(err, ErrApplicationAlreadyExists) {
-			statusCode = http.StatusConflict
-		}
-
-		returnErrorResponse(ctx, statusCode, NewCreateApplicationError(err))
-		return
-	}
-
-	ctx.JSON(http.StatusCreated, gin.H{"data": application})
-}
-
-func NewHandler(service Service) (Handler, error) {
-	return &handler{service: service}, nil
-}
-
-func returnErrorResponse(ctx *gin.Context, statusCode int, err error) {
+func applicationErrorMessage(err error, fallback string) string {
 	if applicationErr, ok := errors.AsType[ApplicationError](err); ok {
-		ctx.JSON(statusCode, gin.H{"error": applicationErr.Message})
-		return
+		return applicationErr.Message
 	}
 
-	ctx.JSON(http.StatusInternalServerError, gin.H{"error": http.StatusText(http.StatusInternalServerError)})
+	return fallback
 }

@@ -15,10 +15,10 @@ import (
 func newAgentTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 
-	return testutil.NewSQLiteDB(t, &server.Server{}, &Agent{})
+	return testutil.NewSQLiteDB(t, &server.Server{}, &Agent{}, &ServerAgent{})
 }
 
-func TestRepositoryCreatePopulatesServerHostname(t *testing.T) {
+func TestRepositoryCreateOnServer(t *testing.T) {
 	db := newAgentTestDB(t)
 	repo := NewRepository(db)
 
@@ -29,16 +29,14 @@ func TestRepositoryCreatePopulatesServerHostname(t *testing.T) {
 		Metadata: datatypes.JSON([]byte(`{}`)),
 	}).Error)
 
-	created, err := repo.CreateOnServer(context.Background(), Agent{
+	created, err := repo.CreateOnServer(context.Background(), serverID, Agent{
 		ID:       uuid.New(),
-		ServerID: uuidPtr(serverID),
 		Name:     "datadog",
 		Type:     "monitoring",
 		Version:  "7.0.0",
 		Metadata: datatypes.JSON([]byte(`{}`)),
 	})
 	require.NoError(t, err)
-	require.Equal(t, "web-01.example.com", created.Server)
 	require.Equal(t, "datadog", created.Name)
 }
 
@@ -54,8 +52,7 @@ func TestRepositoryCreateUnassigned(t *testing.T) {
 		Metadata: datatypes.JSON([]byte(`{}`)),
 	})
 	require.NoError(t, err)
-	require.Nil(t, created.ServerID)
-	require.Equal(t, "", created.Server)
+	require.Equal(t, "orphan-agent", created.Name)
 }
 
 func TestRepositoryAttachToServer(t *testing.T) {
@@ -76,14 +73,47 @@ func TestRepositoryAttachToServer(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	require.NoError(t, repo.AttachToServer(context.Background(), serverID, "attach-host.example.com", []uuid.UUID{created.ID}))
+	require.NoError(t, repo.AttachToServer(context.Background(), serverID, []uuid.UUID{created.ID}))
 
 	found, err := repo.FindById(context.Background(), created.ID.String(), serverID.String())
 	require.NoError(t, err)
-	require.Equal(t, "attach-host.example.com", found.Server)
+	require.Equal(t, "falcon", found.Name)
 }
 
-func TestRepositoryAttachToServerRejectsAssignedAgent(t *testing.T) {
+func TestRepositoryAttachToServerAllowsMultipleServers(t *testing.T) {
+	db := newAgentTestDB(t)
+	repo := NewRepository(db)
+
+	serverA := uuid.New()
+	serverB := uuid.New()
+	require.NoError(t, db.Create(&server.Server{
+		ID:       serverA,
+		Hostname: "host-a.example.com",
+		Metadata: datatypes.JSON([]byte(`{}`)),
+	}).Error)
+	require.NoError(t, db.Create(&server.Server{
+		ID:       serverB,
+		Hostname: "host-b.example.com",
+		Metadata: datatypes.JSON([]byte(`{}`)),
+	}).Error)
+
+	created, err := repo.CreateUnassigned(context.Background(), Agent{
+		ID:       uuid.New(),
+		Name:     "shared-agent",
+		Metadata: datatypes.JSON([]byte(`{}`)),
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, repo.AttachToServer(context.Background(), serverA, []uuid.UUID{created.ID}))
+	require.NoError(t, repo.AttachToServer(context.Background(), serverB, []uuid.UUID{created.ID}))
+
+	servers, total, err := repo.FindServersByAgent(context.Background(), created.ID.String(), 10, 0)
+	require.NoError(t, err)
+	require.Equal(t, int64(2), total)
+	require.Len(t, servers, 2)
+}
+
+func TestRepositoryAttachToServerRejectsDuplicateLink(t *testing.T) {
 	db := newAgentTestDB(t)
 	repo := NewRepository(db)
 
@@ -94,23 +124,15 @@ func TestRepositoryAttachToServerRejectsAssignedAgent(t *testing.T) {
 		Metadata: datatypes.JSON([]byte(`{}`)),
 	}).Error)
 
-	created, err := repo.CreateOnServer(context.Background(), Agent{
+	created, err := repo.CreateOnServer(context.Background(), serverID, Agent{
 		ID:       uuid.New(),
-		ServerID: uuidPtr(serverID),
 		Name:     "assigned",
 		Metadata: datatypes.JSON([]byte(`{}`)),
 	})
 	require.NoError(t, err)
 
-	otherServerID := uuid.New()
-	require.NoError(t, db.Create(&server.Server{
-		ID:       otherServerID,
-		Hostname: "host-b.example.com",
-		Metadata: datatypes.JSON([]byte(`{}`)),
-	}).Error)
-
-	err = repo.AttachToServer(context.Background(), otherServerID, "host-b.example.com", []uuid.UUID{created.ID})
-	require.ErrorIs(t, err, ErrAgentAlreadyAssigned)
+	err = repo.AttachToServer(context.Background(), serverID, []uuid.UUID{created.ID})
+	require.ErrorIs(t, err, ErrAgentAlreadyLinked)
 }
 
 func TestRepositoryFindAllReturnsAgents(t *testing.T) {
@@ -124,9 +146,8 @@ func TestRepositoryFindAllReturnsAgents(t *testing.T) {
 		Metadata: datatypes.JSON([]byte(`{}`)),
 	}).Error)
 
-	_, err := repo.CreateOnServer(context.Background(), Agent{
+	_, err := repo.CreateOnServer(context.Background(), serverID, Agent{
 		ID:       uuid.New(),
-		ServerID: uuidPtr(serverID),
 		Name:     "crowdstrike",
 		Metadata: datatypes.JSON([]byte(`{}`)),
 	})
@@ -136,7 +157,7 @@ func TestRepositoryFindAllReturnsAgents(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int64(1), total)
 	require.Len(t, agents, 1)
-	require.Equal(t, "db-01.example.com", agents[0].Server)
+	require.Equal(t, "crowdstrike", agents[0].Name)
 }
 
 func TestRepositoryFindAllGlobalUnassignedOnly(t *testing.T) {
@@ -157,15 +178,14 @@ func TestRepositoryFindAllGlobalUnassignedOnly(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	_, err = repo.CreateOnServer(context.Background(), Agent{
+	_, err = repo.CreateOnServer(context.Background(), serverID, Agent{
 		ID:       uuid.New(),
-		ServerID: uuidPtr(serverID),
 		Name:     "assigned",
 		Metadata: datatypes.JSON([]byte(`{}`)),
 	})
 	require.NoError(t, err)
 
-	agents, total, err := repo.FindAllGlobal(context.Background(), true, 10, 0)
+	agents, total, err := repo.FindAllGlobal(context.Background(), ListFilters{UnassignedOnly: true}, 10, 0)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), total)
 	require.Len(t, agents, 1)
@@ -184,9 +204,8 @@ func TestRepositoryFindByIdReturnsAgent(t *testing.T) {
 	}).Error)
 
 	agentID := uuid.New()
-	_, err := repo.CreateOnServer(context.Background(), Agent{
+	_, err := repo.CreateOnServer(context.Background(), serverID, Agent{
 		ID:       agentID,
-		ServerID: uuidPtr(serverID),
 		Name:     "falcon",
 		Metadata: datatypes.JSON([]byte(`{}`)),
 	})
@@ -212,6 +231,7 @@ func TestRepositoryFindByIdGlobalReturnsUnassignedAgent(t *testing.T) {
 	found, err := repo.FindByIdGlobal(context.Background(), created.ID.String())
 	require.NoError(t, err)
 	require.Equal(t, "global-agent", found.Name)
+	require.Equal(t, int64(0), found.ServerCount)
 }
 
 func TestRepositoryFindByIdReturnsNotFound(t *testing.T) {
@@ -222,7 +242,7 @@ func TestRepositoryFindByIdReturnsNotFound(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestRepositoryDeleteRemovesAgent(t *testing.T) {
+func TestRepositoryDetachRemovesLinkOnly(t *testing.T) {
 	db := newAgentTestDB(t)
 	repo := NewRepository(db)
 
@@ -234,16 +254,55 @@ func TestRepositoryDeleteRemovesAgent(t *testing.T) {
 	}).Error)
 
 	agentID := uuid.New()
-	_, err := repo.CreateOnServer(context.Background(), Agent{
+	_, err := repo.CreateOnServer(context.Background(), serverID, Agent{
 		ID:       agentID,
-		ServerID: uuidPtr(serverID),
 		Name:     "temp-agent",
 		Metadata: datatypes.JSON([]byte(`{}`)),
 	})
 	require.NoError(t, err)
 
-	require.NoError(t, repo.Delete(context.Background(), serverID.String(), agentID.String()))
+	require.NoError(t, repo.DetachFromServer(context.Background(), serverID.String(), agentID.String()))
 
 	_, err = repo.FindById(context.Background(), agentID.String(), serverID.String())
 	require.Error(t, err)
+
+	found, err := repo.FindByIdGlobal(context.Background(), agentID.String())
+	require.NoError(t, err)
+	require.Equal(t, "temp-agent", found.Name)
+}
+
+func TestRepositoryFindByNameReturnsAgent(t *testing.T) {
+	db := newAgentTestDB(t)
+	repo := NewRepository(db)
+
+	created, err := repo.CreateUnassigned(context.Background(), Agent{
+		ID:       uuid.New(),
+		Name:     "named-agent",
+		Metadata: datatypes.JSON([]byte(`{}`)),
+	})
+	require.NoError(t, err)
+
+	found, err := repo.FindByName(context.Background(), "named-agent")
+	require.NoError(t, err)
+	require.Equal(t, created.ID, found.ID)
+}
+
+func TestRepositoryCreateUnassignedRejectsDuplicateName(t *testing.T) {
+	db := newAgentTestDB(t)
+	repo := NewRepository(db)
+
+	_, err := repo.CreateUnassigned(context.Background(), Agent{
+		ID:       uuid.New(),
+		Name:     "duplicate-agent",
+		Metadata: datatypes.JSON([]byte(`{}`)),
+	})
+	require.NoError(t, err)
+
+	_, err = repo.CreateUnassigned(context.Background(), Agent{
+		ID:       uuid.New(),
+		Name:     "duplicate-agent",
+		Metadata: datatypes.JSON([]byte(`{}`)),
+	})
+	require.Error(t, err)
+	require.True(t, isUniqueViolation(err))
 }

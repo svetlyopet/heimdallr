@@ -1,358 +1,308 @@
 package server
 
 import (
+	"context"
 	"errors"
-	"net/http"
-	"strconv"
 
-	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
+	"github.com/svetlyopet/heimdallr/internal/server/api"
 )
 
 type Handler interface {
-	List(ctx *gin.Context)
-	Get(ctx *gin.Context)
-	Create(ctx *gin.Context)
-	Update(ctx *gin.Context)
-
-	ListJobs(ctx *gin.Context)
-	AssociateJob(ctx *gin.Context)
-	DissociateJob(ctx *gin.Context)
-
-	ListReleases(ctx *gin.Context)
-	AssociateRelease(ctx *gin.Context)
-	DissociateRelease(ctx *gin.Context)
+	api.StrictServerInterface
 }
 
 type handler struct {
 	service Service
 }
 
-func (h handler) List(ctx *gin.Context) {
-	page, limit, ok := parsePagination(ctx)
+func (h handler) ListServers(ctx context.Context, request api.ListServersRequestObject) (api.ListServersResponseObject, error) {
+	page, limit, ok := paginationParams(request.Params.Page, request.Params.Limit)
 	if !ok {
-		return
+		return api.ListServers400JSONResponse{
+			BadRequestJSONResponse: api.BadRequestJSONResponse{Error: "page and limit must be positive integers"},
+		}, nil
 	}
 
-	servers, total, err := h.service.GetAll(ctx.Request.Context(), page, limit)
+	agentID := ""
+	if request.Params.AgentId != nil {
+		agentID = request.Params.AgentId.String()
+	}
+
+	servers, total, err := h.service.GetAll(ctx, agentID, page, limit)
 	if err != nil {
-		returnErrorResponse(ctx, http.StatusInternalServerError, NewGetServersError(err))
-		return
+		return api.ListServers500JSONResponse{
+			InternalServerErrorJSONResponse: api.InternalServerErrorJSONResponse{Error: serverErrorMessage(err, "failed to list servers")},
+		}, nil
 	}
 
-	writePaginatedResponse(ctx, servers, page, limit, total)
+	return api.ListServers200JSONResponse{
+		Data:       servers,
+		Pagination: buildPagination(page, limit, total),
+	}, nil
 }
 
-func (h handler) Get(ctx *gin.Context) {
-	serverID, ok := getValidServerID(ctx)
-	if !ok {
-		return
+func (h handler) CreateServer(ctx context.Context, request api.CreateServerRequestObject) (api.CreateServerResponseObject, error) {
+	if request.Body == nil {
+		return api.CreateServer400JSONResponse{
+			BadRequestJSONResponse: api.BadRequestJSONResponse{Error: "invalid request body"},
+		}, nil
+	}
+	if request.Body.Hostname == "" {
+		return api.CreateServer400JSONResponse{
+			BadRequestJSONResponse: api.BadRequestJSONResponse{Error: "invalid request body"},
+		}, nil
 	}
 
-	server, err := h.service.GetById(ctx.Request.Context(), serverID)
+	server, err := h.service.Create(ctx, *request.Body)
+	if err != nil {
+		if errors.Is(err, ErrServerAlreadyExists) {
+			return api.CreateServer409JSONResponse{
+				ConflictJSONResponse: api.ConflictJSONResponse{Error: serverErrorMessage(err, "server already exists")},
+			}, nil
+		}
+		if errors.Is(err, ErrAgentAlreadyLinked) || errors.Is(err, ErrAgentAlreadyExists) {
+			return api.CreateServer409JSONResponse{
+				ConflictJSONResponse: api.ConflictJSONResponse{Error: serverErrorMessage(err, err.Error())},
+			}, nil
+		}
+
+		return api.CreateServer500JSONResponse{
+			InternalServerErrorJSONResponse: api.InternalServerErrorJSONResponse{Error: serverErrorMessage(err, "failed to create server")},
+		}, nil
+	}
+
+	return api.CreateServer201JSONResponse{Data: server}, nil
+}
+
+func (h handler) GetServer(ctx context.Context, request api.GetServerRequestObject) (api.GetServerResponseObject, error) {
+	server, err := h.service.GetById(ctx, request.ServerId.String())
 	if err != nil {
 		if errors.Is(err, ErrServerNotFound) {
-			returnErrorResponse(ctx, http.StatusNotFound, NewServerNotFoundError(err))
-			return
+			return api.GetServer404JSONResponse{
+				NotFoundJSONResponse: api.NotFoundJSONResponse{Error: serverErrorMessage(err, "server not found")},
+			}, nil
 		}
 
-		returnErrorResponse(ctx, http.StatusInternalServerError, NewGetServerError(err))
-		return
+		return api.GetServer500JSONResponse{
+			InternalServerErrorJSONResponse: api.InternalServerErrorJSONResponse{Error: serverErrorMessage(err, "failed to get server")},
+		}, nil
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{"data": server})
+	return api.GetServer200JSONResponse{Data: server}, nil
 }
 
-func (h handler) Create(ctx *gin.Context) {
-	var req CreateRequest
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		returnErrorResponse(ctx, http.StatusBadRequest, NewServerError("invalid request body", err))
-		return
+func (h handler) UpdateServer(ctx context.Context, request api.UpdateServerRequestObject) (api.UpdateServerResponseObject, error) {
+	if request.Body == nil {
+		return api.UpdateServer400JSONResponse{
+			BadRequestJSONResponse: api.BadRequestJSONResponse{Error: "invalid request body"},
+		}, nil
 	}
 
-	server, err := h.service.Create(ctx.Request.Context(), req)
+	server, err := h.service.Update(ctx, request.ServerId.String(), *request.Body)
 	if err != nil {
-		statusCode := http.StatusInternalServerError
-		if errors.Is(err, ErrServerAlreadyExists) {
-			statusCode = http.StatusConflict
-		} else if errors.Is(err, ErrAgentAlreadyAssigned) {
-			statusCode = http.StatusConflict
-		}
-
-		returnErrorResponse(ctx, statusCode, NewCreateServerError(err))
-		return
-	}
-
-	ctx.JSON(http.StatusCreated, gin.H{"data": server})
-}
-
-func (h handler) Update(ctx *gin.Context) {
-	serverID, ok := getValidServerID(ctx)
-	if !ok {
-		return
-	}
-
-	var req UpdateRequest
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		returnErrorResponse(ctx, http.StatusBadRequest, NewServerError("invalid request body", err))
-		return
-	}
-
-	server, err := h.service.Update(ctx.Request.Context(), serverID, req)
-	if err != nil {
-		statusCode := http.StatusInternalServerError
 		switch {
 		case errors.Is(err, ErrServerNotFound):
-			statusCode = http.StatusNotFound
-		case errors.Is(err, ErrAgentAlreadyAssigned):
-			statusCode = http.StatusConflict
+			return api.UpdateServer404JSONResponse{
+				NotFoundJSONResponse: api.NotFoundJSONResponse{Error: serverErrorMessage(err, "server not found")},
+			}, nil
+		case errors.Is(err, ErrAgentAlreadyLinked), errors.Is(err, ErrAgentAlreadyExists):
+			return api.UpdateServer409JSONResponse{
+				ConflictJSONResponse: api.ConflictJSONResponse{Error: serverErrorMessage(err, err.Error())},
+			}, nil
 		}
 
-		errToReturn := NewUpdateServerError(err)
-		if errors.Is(err, ErrAgentAlreadyAssigned) {
-			errToReturn = NewAgentAlreadyAssignedError(err)
-		}
-
-		returnErrorResponse(ctx, statusCode, errToReturn)
-		return
+		return api.UpdateServer500JSONResponse{
+			InternalServerErrorJSONResponse: api.InternalServerErrorJSONResponse{Error: serverErrorMessage(err, "failed to update server")},
+		}, nil
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{"data": server})
+	return api.UpdateServer200JSONResponse{Data: server}, nil
 }
 
-func (h handler) ListJobs(ctx *gin.Context) {
-	serverID, ok := getValidServerID(ctx)
+func (h handler) ListServerJobs(ctx context.Context, request api.ListServerJobsRequestObject) (api.ListServerJobsResponseObject, error) {
+	page, limit, ok := paginationParams(request.Params.Page, request.Params.Limit)
 	if !ok {
-		return
+		return api.ListServerJobs400JSONResponse{
+			BadRequestJSONResponse: api.BadRequestJSONResponse{Error: "page and limit must be positive integers"},
+		}, nil
 	}
 
-	page, limit, ok := parsePagination(ctx)
-	if !ok {
-		return
-	}
-
-	jobs, total, err := h.service.ListJobs(ctx.Request.Context(), serverID, page, limit)
+	jobs, total, err := h.service.ListJobs(ctx, request.ServerId.String(), page, limit)
 	if err != nil {
 		if errors.Is(err, ErrServerNotFound) {
-			returnErrorResponse(ctx, http.StatusNotFound, NewServerNotFoundError(err))
-			return
+			return api.ListServerJobs404JSONResponse{
+				NotFoundJSONResponse: api.NotFoundJSONResponse{Error: serverErrorMessage(err, "server not found")},
+			}, nil
 		}
 
-		returnErrorResponse(ctx, http.StatusInternalServerError, NewListJobsError(err))
-		return
+		return api.ListServerJobs500JSONResponse{
+			InternalServerErrorJSONResponse: api.InternalServerErrorJSONResponse{Error: serverErrorMessage(err, "failed to list jobs")},
+		}, nil
 	}
 
-	writePaginatedResponse(ctx, jobs, page, limit, total)
+	return api.ListServerJobs200JSONResponse{
+		Data:       jobs,
+		Pagination: buildPagination(page, limit, total),
+	}, nil
 }
 
-func (h handler) AssociateJob(ctx *gin.Context) {
-	serverID, ok := getValidServerID(ctx)
-	if !ok {
-		return
+func (h handler) AssociateServerJob(ctx context.Context, request api.AssociateServerJobRequestObject) (api.AssociateServerJobResponseObject, error) {
+	if request.Body == nil {
+		return api.AssociateServerJob400JSONResponse{
+			BadRequestJSONResponse: api.BadRequestJSONResponse{Error: "invalid request body"},
+		}, nil
 	}
 
-	var req JobAssociateRequest
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		returnErrorResponse(ctx, http.StatusBadRequest, NewServerError("invalid request body", err))
-		return
-	}
-
-	if err := h.service.AssociateJob(ctx.Request.Context(), serverID, req); err != nil {
-		statusCode := http.StatusInternalServerError
+	if err := h.service.AssociateJob(ctx, request.ServerId.String(), *request.Body); err != nil {
 		switch {
 		case errors.Is(err, ErrServerNotFound), errors.Is(err, ErrJobNotFound):
-			statusCode = http.StatusNotFound
+			return api.AssociateServerJob404JSONResponse{
+				NotFoundJSONResponse: api.NotFoundJSONResponse{Error: serverErrorMessage(err, err.Error())},
+			}, nil
 		case errors.Is(err, ErrJobAlreadyAssociated):
-			statusCode = http.StatusConflict
+			return api.AssociateServerJob409JSONResponse{
+				ConflictJSONResponse: api.ConflictJSONResponse{Error: serverErrorMessage(err, "job already associated with server")},
+			}, nil
 		}
 
-		returnErrorResponse(ctx, statusCode, NewAssociateJobError(err))
-		return
+		return api.AssociateServerJob500JSONResponse{
+			InternalServerErrorJSONResponse: api.InternalServerErrorJSONResponse{Error: serverErrorMessage(err, "failed to associate job")},
+		}, nil
 	}
 
-	ctx.Status(http.StatusCreated)
+	return api.AssociateServerJob201Response{}, nil
 }
 
-func (h handler) DissociateJob(ctx *gin.Context) {
-	serverID, ok := getValidServerID(ctx)
-	if !ok {
-		return
+func (h handler) DissociateServerJob(ctx context.Context, request api.DissociateServerJobRequestObject) (api.DissociateServerJobResponseObject, error) {
+	if request.Params.AutomationId == (api.UUID{}) {
+		return api.DissociateServerJob400JSONResponse{
+			BadRequestJSONResponse: api.BadRequestJSONResponse{Error: "automation_id query param is required"},
+		}, nil
 	}
 
-	jobID := ctx.Param("job_id")
-	if jobID == "" {
-		returnErrorResponse(ctx, http.StatusBadRequest, NewServerError("invalid job id", ErrJobNotFound))
-		return
-	}
-
-	automationIDParam := ctx.Query("automation_id")
-	if automationIDParam == "" {
-		returnErrorResponse(ctx, http.StatusBadRequest, NewServerError("automation_id query param is required", ErrJobNotFound))
-		return
-	}
-
-	automationID, err := uuid.Parse(automationIDParam)
-	if err != nil {
-		returnErrorResponse(ctx, http.StatusBadRequest, NewServerError("invalid automation id", err))
-		return
-	}
-
-	if err := h.service.DissociateJob(ctx.Request.Context(), serverID, jobID, automationID); err != nil {
-		statusCode := http.StatusInternalServerError
+	if err := h.service.DissociateJob(ctx, request.ServerId.String(), request.JobId, request.Params.AutomationId); err != nil {
 		switch {
 		case errors.Is(err, ErrServerNotFound), errors.Is(err, ErrJobNotFound):
-			statusCode = http.StatusNotFound
+			return api.DissociateServerJob404JSONResponse{
+				NotFoundJSONResponse: api.NotFoundJSONResponse{Error: serverErrorMessage(err, err.Error())},
+			}, nil
 		}
 
-		returnErrorResponse(ctx, statusCode, NewDissociateJobError(err))
-		return
+		return api.DissociateServerJob500JSONResponse{
+			InternalServerErrorJSONResponse: api.InternalServerErrorJSONResponse{Error: serverErrorMessage(err, "failed to dissociate job")},
+		}, nil
 	}
 
-	ctx.Status(http.StatusNoContent)
+	return api.DissociateServerJob204Response{}, nil
 }
 
-func (h handler) ListReleases(ctx *gin.Context) {
-	serverID, ok := getValidServerID(ctx)
+func (h handler) ListServerReleases(ctx context.Context, request api.ListServerReleasesRequestObject) (api.ListServerReleasesResponseObject, error) {
+	page, limit, ok := paginationParams(request.Params.Page, request.Params.Limit)
 	if !ok {
-		return
+		return api.ListServerReleases400JSONResponse{
+			BadRequestJSONResponse: api.BadRequestJSONResponse{Error: "page and limit must be positive integers"},
+		}, nil
 	}
 
-	page, limit, ok := parsePagination(ctx)
-	if !ok {
-		return
-	}
-
-	releases, total, err := h.service.ListReleases(ctx.Request.Context(), serverID, page, limit)
+	releases, total, err := h.service.ListReleases(ctx, request.ServerId.String(), page, limit)
 	if err != nil {
 		if errors.Is(err, ErrServerNotFound) {
-			returnErrorResponse(ctx, http.StatusNotFound, NewServerNotFoundError(err))
-			return
+			return api.ListServerReleases404JSONResponse{
+				NotFoundJSONResponse: api.NotFoundJSONResponse{Error: serverErrorMessage(err, "server not found")},
+			}, nil
 		}
 
-		returnErrorResponse(ctx, http.StatusInternalServerError, NewListReleasesError(err))
-		return
+		return api.ListServerReleases500JSONResponse{
+			InternalServerErrorJSONResponse: api.InternalServerErrorJSONResponse{Error: serverErrorMessage(err, "failed to list releases")},
+		}, nil
 	}
 
-	writePaginatedResponse(ctx, releases, page, limit, total)
+	return api.ListServerReleases200JSONResponse{
+		Data:       releases,
+		Pagination: buildPagination(page, limit, total),
+	}, nil
 }
 
-func (h handler) AssociateRelease(ctx *gin.Context) {
-	serverID, ok := getValidServerID(ctx)
-	if !ok {
-		return
+func (h handler) AssociateServerRelease(ctx context.Context, request api.AssociateServerReleaseRequestObject) (api.AssociateServerReleaseResponseObject, error) {
+	if request.Body == nil {
+		return api.AssociateServerRelease400JSONResponse{
+			BadRequestJSONResponse: api.BadRequestJSONResponse{Error: "invalid request body"},
+		}, nil
 	}
 
-	var req ReleaseAssociateRequest
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		returnErrorResponse(ctx, http.StatusBadRequest, NewServerError("invalid request body", err))
-		return
-	}
-
-	if err := h.service.AssociateRelease(ctx.Request.Context(), serverID, req); err != nil {
-		statusCode := http.StatusInternalServerError
+	if err := h.service.AssociateRelease(ctx, request.ServerId.String(), *request.Body); err != nil {
 		switch {
 		case errors.Is(err, ErrServerNotFound), errors.Is(err, ErrReleaseNotFound):
-			statusCode = http.StatusNotFound
+			return api.AssociateServerRelease404JSONResponse{
+				NotFoundJSONResponse: api.NotFoundJSONResponse{Error: serverErrorMessage(err, err.Error())},
+			}, nil
 		case errors.Is(err, ErrReleaseAlreadyAssociated):
-			statusCode = http.StatusConflict
+			return api.AssociateServerRelease409JSONResponse{
+				ConflictJSONResponse: api.ConflictJSONResponse{Error: serverErrorMessage(err, "release already associated with server")},
+			}, nil
 		}
 
-		returnErrorResponse(ctx, statusCode, NewAssociateReleaseError(err))
-		return
+		return api.AssociateServerRelease500JSONResponse{
+			InternalServerErrorJSONResponse: api.InternalServerErrorJSONResponse{Error: serverErrorMessage(err, "failed to associate release")},
+		}, nil
 	}
 
-	ctx.Status(http.StatusCreated)
+	return api.AssociateServerRelease201Response{}, nil
 }
 
-func (h handler) DissociateRelease(ctx *gin.Context) {
-	serverID, ok := getValidServerID(ctx)
-	if !ok {
-		return
-	}
-
-	releaseIDParam := ctx.Param("release_id")
-	if releaseIDParam == "" {
-		returnErrorResponse(ctx, http.StatusBadRequest, NewServerError("invalid release id", ErrReleaseNotFound))
-		return
-	}
-
-	releaseID, err := uuid.Parse(releaseIDParam)
-	if err != nil {
-		returnErrorResponse(ctx, http.StatusBadRequest, NewServerError("invalid release id", err))
-		return
-	}
-
-	if err := h.service.DissociateRelease(ctx.Request.Context(), serverID, releaseID); err != nil {
-		statusCode := http.StatusInternalServerError
+func (h handler) DissociateServerRelease(ctx context.Context, request api.DissociateServerReleaseRequestObject) (api.DissociateServerReleaseResponseObject, error) {
+	if err := h.service.DissociateRelease(ctx, request.ServerId.String(), request.ReleaseId); err != nil {
 		switch {
 		case errors.Is(err, ErrServerNotFound), errors.Is(err, ErrReleaseNotFound):
-			statusCode = http.StatusNotFound
+			return api.DissociateServerRelease404JSONResponse{
+				NotFoundJSONResponse: api.NotFoundJSONResponse{Error: serverErrorMessage(err, err.Error())},
+			}, nil
 		}
 
-		returnErrorResponse(ctx, statusCode, NewDissociateReleaseError(err))
-		return
+		return api.DissociateServerRelease500JSONResponse{
+			InternalServerErrorJSONResponse: api.InternalServerErrorJSONResponse{Error: serverErrorMessage(err, "failed to dissociate release")},
+		}, nil
 	}
 
-	ctx.Status(http.StatusNoContent)
+	return api.DissociateServerRelease204Response{}, nil
 }
 
 func NewHandler(service Service) (Handler, error) {
 	return &handler{service: service}, nil
 }
 
-func getValidServerID(ctx *gin.Context) (string, bool) {
-	serverID := ctx.Param("server_id")
-	if serverID == "" {
-		returnErrorResponse(ctx, http.StatusBadRequest, NewInvalidServerIDError(ErrInvalidServerID))
-		return "", false
+func paginationParams(pagePtr, limitPtr *api.Page) (page int, limit int, ok bool) {
+	page = 1
+	limit = 10
+
+	if pagePtr != nil {
+		page = int(*pagePtr)
+	}
+	if limitPtr != nil {
+		limit = int(*limitPtr)
 	}
 
-	if _, err := uuid.Parse(serverID); err != nil {
-		returnErrorResponse(ctx, http.StatusBadRequest, NewInvalidServerIDError(err))
-		return "", false
-	}
-
-	return serverID, true
+	return page, limit, page >= 1 && limit >= 1
 }
 
-func parsePagination(ctx *gin.Context) (int, int, bool) {
-	page, err := strconv.Atoi(ctx.DefaultQuery("page", "1"))
-	if err != nil || page < 1 {
-		returnErrorResponse(ctx, http.StatusBadRequest, NewServerError("invalid query param value", errors.New("page must be a positive integer")))
-		return 0, 0, false
-	}
-
-	limit, err := strconv.Atoi(ctx.DefaultQuery("limit", "10"))
-	if err != nil || limit < 1 {
-		returnErrorResponse(ctx, http.StatusBadRequest, NewServerError("invalid query param value", errors.New("limit must be a positive integer")))
-		return 0, 0, false
-	}
-
-	return page, limit, true
-}
-
-func writePaginatedResponse(ctx *gin.Context, data any, page int, limit int, total int64) {
+func buildPagination(page, limit int, total int64) api.Pagination {
 	totalPages := int64(0)
 	if total > 0 {
 		totalPages = (total + int64(limit) - 1) / int64(limit)
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"data": data,
-		"pagination": gin.H{
-			"page":        page,
-			"limit":       limit,
-			"total":       total,
-			"total_pages": totalPages,
-		},
-	})
+	return api.Pagination{
+		Page:       page,
+		Limit:      limit,
+		Total:      int(total),
+		TotalPages: int(totalPages),
+	}
 }
 
-func returnErrorResponse(ctx *gin.Context, statusCode int, err error) {
+func serverErrorMessage(err error, fallback string) string {
 	if serverErr, ok := errors.AsType[ServerError](err); ok {
-		ctx.JSON(statusCode, gin.H{"error": serverErr.Message})
-		return
+		return serverErr.Message
 	}
 
-	ctx.JSON(http.StatusInternalServerError, gin.H{"error": http.StatusText(http.StatusInternalServerError)})
+	return fallback
 }

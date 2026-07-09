@@ -1,79 +1,57 @@
 package analytics
 
 import (
+	"context"
 	"errors"
-	"net/http"
-	"strings"
 
-	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
+	"github.com/svetlyopet/heimdallr/internal/analytics/api"
 )
 
 type Handler interface {
-	GetAutomationOverview(ctx *gin.Context)
-	GetAutomationOverviewByID(ctx *gin.Context)
-	GetComplianceOverview(ctx *gin.Context)
+	api.StrictServerInterface
 }
 
 type handler struct {
 	service Service
 }
 
-func (h handler) GetAutomationOverview(ctx *gin.Context) {
-	response, err := h.service.GetAutomationOverview(ctx.Request.Context())
+func (h handler) GetAutomationAnalyticsOverview(ctx context.Context, _ api.GetAutomationAnalyticsOverviewRequestObject) (api.GetAutomationAnalyticsOverviewResponseObject, error) {
+	response, err := h.service.GetAutomationOverview(ctx)
 	if err != nil {
-		analyticsErr := NewGetAutomationAnalyticsError(err)
-		returnErrorResponse(ctx, http.StatusInternalServerError, analyticsErr)
-		return
+		return api.GetAutomationAnalyticsOverview500JSONResponse{
+			InternalServerErrorJSONResponse: api.InternalServerErrorJSONResponse{Error: analyticsErrorMessage(err, "failed to get automation analytics")},
+		}, nil
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"data": response,
-	})
+	return api.GetAutomationAnalyticsOverview200JSONResponse{Data: response}, nil
 }
 
-func (h handler) GetAutomationOverviewByID(ctx *gin.Context) {
-	automationID := strings.TrimSpace(ctx.Param("id"))
-	if automationID == "" {
-		analyticsErr := NewAnalyticsError("invalid automation id", errors.New("automation id is required"))
-		returnErrorResponse(ctx, http.StatusBadRequest, analyticsErr)
-		return
-	}
-
-	if _, err := uuid.Parse(automationID); err != nil {
-		analyticsErr := NewAnalyticsError("invalid automation id", err)
-		returnErrorResponse(ctx, http.StatusBadRequest, analyticsErr)
-		return
-	}
-
-	response, err := h.service.GetAutomationOverviewByID(ctx.Request.Context(), automationID)
+func (h handler) GetAutomationAnalyticsOverviewByID(ctx context.Context, request api.GetAutomationAnalyticsOverviewByIDRequestObject) (api.GetAutomationAnalyticsOverviewByIDResponseObject, error) {
+	response, err := h.service.GetAutomationOverviewByID(ctx, request.AutomationId.String())
 	if err != nil {
 		if errors.Is(err, ErrAutomationNotFound) {
-			analyticsErr := NewAnalyticsError("automation not found", err)
-			returnErrorResponse(ctx, http.StatusNotFound, analyticsErr)
-			return
+			return api.GetAutomationAnalyticsOverviewByID404JSONResponse{
+				NotFoundJSONResponse: api.NotFoundJSONResponse{Error: analyticsErrorMessage(err, "automation not found")},
+			}, nil
 		}
 
-		analyticsErr := NewGetAutomationAnalyticsError(err)
-		returnErrorResponse(ctx, http.StatusInternalServerError, analyticsErr)
-		return
+		return api.GetAutomationAnalyticsOverviewByID500JSONResponse{
+			InternalServerErrorJSONResponse: api.InternalServerErrorJSONResponse{Error: analyticsErrorMessage(err, "failed to get automation analytics")},
+		}, nil
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"data": response,
-	})
+	return api.GetAutomationAnalyticsOverviewByID200JSONResponse{Data: response}, nil
 }
 
-func (h handler) GetComplianceOverview(ctx *gin.Context) {
-	response, err := h.service.GetComplianceOverview(ctx.Request.Context())
+func (h handler) GetComplianceAnalyticsOverview(ctx context.Context, _ api.GetComplianceAnalyticsOverviewRequestObject) (api.GetComplianceAnalyticsOverviewResponseObject, error) {
+	response, err := h.service.GetComplianceOverview(ctx)
 	if err != nil {
-		returnErrorResponse(ctx, http.StatusInternalServerError, NewGetComplianceAnalyticsError(err))
-		return
+		return api.GetComplianceAnalyticsOverview500JSONResponse{
+			InternalServerErrorJSONResponse: api.InternalServerErrorJSONResponse{Error: analyticsErrorMessage(err, "failed to get compliance analytics")},
+		}, nil
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"data": response,
-	})
+	return api.GetComplianceAnalyticsOverview200JSONResponse{Data: response}, nil
 }
 
 func NewHandler(service Service) (Handler, error) {
@@ -81,20 +59,13 @@ func NewHandler(service Service) (Handler, error) {
 		return nil, errors.New("analytics service is required")
 	}
 
-	return &handler{
-		service: service,
-	}, nil
+	return &handler{service: service}, nil
 }
 
-func returnErrorResponse(ctx *gin.Context, statusCode int, err error) {
+func analyticsErrorMessage(err error, fallback string) string {
 	if analyticsErr, ok := errors.AsType[AnalyticsError](err); ok {
-		ctx.JSON(statusCode, gin.H{
-			"error": analyticsErr.Message,
-		})
-		return
+		return analyticsErr.Message
 	}
 
-	ctx.JSON(http.StatusInternalServerError, gin.H{
-		"error": http.StatusText(http.StatusInternalServerError),
-	})
+	return fallback
 }

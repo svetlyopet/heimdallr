@@ -10,26 +10,27 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"github.com/svetlyopet/heimdallr/internal/server/api"
 	"github.com/svetlyopet/heimdallr/internal/testutil"
 )
 
 type stubServerService struct {
-	getAllResponse      []ListItemResponse
+	getAllResponse      []api.ServerListItem
 	getAllTotal         int64
 	getAllError         error
-	getByIdResp         GetWithRelationsResponse
+	getByIdResp         api.ServerWithRelations
 	getByIdError        error
-	createResp          GetResponse
+	createResp          api.Server
 	createError         error
-	listJobsResp        []JobAssociationResponse
+	listJobsResp        []api.ServerJobAssociation
 	listJobsErr         error
 	associateJobErr     error
-	listReleasesResp    []ReleaseAssociationResponse
+	listReleasesResp    []api.ServerReleaseAssociation
 	listReleasesErr     error
 	associateReleaseErr error
 }
 
-func (s stubServerService) GetAll(_ context.Context, _ int, _ int) ([]ListItemResponse, int64, error) {
+func (s stubServerService) GetAll(_ context.Context, _ string, _ int, _ int) ([]api.ServerListItem, int64, error) {
 	if s.getAllError != nil {
 		return nil, 0, s.getAllError
 	}
@@ -37,27 +38,27 @@ func (s stubServerService) GetAll(_ context.Context, _ int, _ int) ([]ListItemRe
 	return s.getAllResponse, s.getAllTotal, nil
 }
 
-func (s stubServerService) GetById(_ context.Context, _ string) (GetWithRelationsResponse, error) {
+func (s stubServerService) GetById(_ context.Context, _ string) (api.ServerWithRelations, error) {
 	if s.getByIdError != nil {
-		return GetWithRelationsResponse{}, s.getByIdError
+		return api.ServerWithRelations{}, s.getByIdError
 	}
 
 	return s.getByIdResp, nil
 }
 
-func (s stubServerService) Create(_ context.Context, _ CreateRequest) (GetResponse, error) {
+func (s stubServerService) Create(_ context.Context, _ api.ServerCreateRequest) (api.Server, error) {
 	if s.createError != nil {
-		return GetResponse{}, s.createError
+		return api.Server{}, s.createError
 	}
 
 	return s.createResp, nil
 }
 
-func (s stubServerService) Update(_ context.Context, _ string, _ UpdateRequest) (GetWithRelationsResponse, error) {
-	return GetWithRelationsResponse{}, nil
+func (s stubServerService) Update(_ context.Context, _ string, _ api.ServerUpdateRequest) (api.ServerWithRelations, error) {
+	return api.ServerWithRelations{}, nil
 }
 
-func (s stubServerService) ListJobs(_ context.Context, _ string, _ int, _ int) ([]JobAssociationResponse, int64, error) {
+func (s stubServerService) ListJobs(_ context.Context, _ string, _ int, _ int) ([]api.ServerJobAssociation, int64, error) {
 	if s.listJobsErr != nil {
 		return nil, 0, s.listJobsErr
 	}
@@ -65,7 +66,7 @@ func (s stubServerService) ListJobs(_ context.Context, _ string, _ int, _ int) (
 	return s.listJobsResp, int64(len(s.listJobsResp)), nil
 }
 
-func (s stubServerService) AssociateJob(_ context.Context, _ string, _ JobAssociateRequest) error {
+func (s stubServerService) AssociateJob(_ context.Context, _ string, _ api.ServerJobAssociateRequest) error {
 	return s.associateJobErr
 }
 
@@ -73,7 +74,7 @@ func (s stubServerService) DissociateJob(_ context.Context, _ string, _ string, 
 	return nil
 }
 
-func (s stubServerService) ListReleases(_ context.Context, _ string, _ int, _ int) ([]ReleaseAssociationResponse, int64, error) {
+func (s stubServerService) ListReleases(_ context.Context, _ string, _ int, _ int) ([]api.ServerReleaseAssociation, int64, error) {
 	if s.listReleasesErr != nil {
 		return nil, 0, s.listReleasesErr
 	}
@@ -81,7 +82,7 @@ func (s stubServerService) ListReleases(_ context.Context, _ string, _ int, _ in
 	return s.listReleasesResp, int64(len(s.listReleasesResp)), nil
 }
 
-func (s stubServerService) AssociateRelease(_ context.Context, _ string, _ ReleaseAssociateRequest) error {
+func (s stubServerService) AssociateRelease(_ context.Context, _ string, _ api.ServerReleaseAssociateRequest) error {
 	return s.associateReleaseErr
 }
 
@@ -98,8 +99,8 @@ func newServerRouter(t *testing.T, svc Service) *gin.Engine {
 	require.NoError(t, err)
 
 	r := gin.New()
-	api := r.Group("/api")
-	RegisterRoutes(api, h)
+	apiGroup := r.Group("/api")
+	RegisterRoutes(apiGroup, h)
 
 	return r
 }
@@ -114,8 +115,9 @@ func TestHandlerListReturnsBadRequestForInvalidPage(t *testing.T) {
 func TestHandlerListReturnsServers(t *testing.T) {
 	serverID := uuid.New()
 	r := newServerRouter(t, stubServerService{
-		getAllResponse: []ListItemResponse{{
-			GetResponse: GetResponse{ID: serverID, Hostname: "web-01.example.com"},
+		getAllResponse: []api.ServerListItem{{
+			Id:       serverID,
+			Hostname: "web-01.example.com",
 		}},
 		getAllTotal: 1,
 	})
@@ -131,10 +133,10 @@ func TestHandlerListReturnsServers(t *testing.T) {
 func TestHandlerCreateReturnsCreated(t *testing.T) {
 	serverID := uuid.New()
 	r := newServerRouter(t, stubServerService{
-		createResp: GetResponse{ID: serverID, Hostname: "new-host.example.com"},
+		createResp: api.Server{Id: serverID, Hostname: "new-host.example.com"},
 	})
 
-	body := CreateRequest{Hostname: "new-host.example.com"}
+	body := api.ServerCreateRequest{Hostname: "new-host.example.com"}
 	rr := testutil.DoGinJSONRequest(t, r, http.MethodPost, "/api/v1/server", body, nil)
 	response := testutil.AssertJSONStatus(t, rr, http.StatusCreated)
 
@@ -146,7 +148,7 @@ func TestHandlerCreateReturnsCreated(t *testing.T) {
 func TestHandlerCreateReturnsConflict(t *testing.T) {
 	r := newServerRouter(t, stubServerService{createError: ErrServerAlreadyExists})
 
-	body := CreateRequest{Hostname: "dup-host.example.com"}
+	body := api.ServerCreateRequest{Hostname: "dup-host.example.com"}
 	rr := testutil.DoGinJSONRequest(t, r, http.MethodPost, "/api/v1/server", body, nil)
 	require.Equal(t, http.StatusConflict, rr.Code)
 }
@@ -172,7 +174,7 @@ func TestHandlerAssociateJobReturnsConflict(t *testing.T) {
 	r := newServerRouter(t, stubServerService{associateJobErr: ErrJobAlreadyAssociated})
 
 	path := "/api/v1/server/" + serverID.String() + "/job"
-	body := JobAssociateRequest{JobID: "1000", AutomationID: uuid.New()}
+	body := api.ServerJobAssociateRequest{JobId: "1000", AutomationId: uuid.New()}
 	rr := testutil.DoGinJSONRequest(t, r, http.MethodPost, path, body, nil)
 	require.Equal(t, http.StatusConflict, rr.Code)
 }
@@ -191,7 +193,7 @@ func TestHandlerAssociateReleaseReturnsNotFound(t *testing.T) {
 	r := newServerRouter(t, stubServerService{associateReleaseErr: ErrReleaseNotFound})
 
 	path := "/api/v1/server/" + serverID.String() + "/release"
-	body := ReleaseAssociateRequest{ReleaseID: uuid.New(), ApplicationID: uuid.New()}
+	body := api.ServerReleaseAssociateRequest{ReleaseId: uuid.New(), ApplicationId: uuid.New()}
 	rr := testutil.DoGinJSONRequest(t, r, http.MethodPost, path, body, nil)
 	require.Equal(t, http.StatusNotFound, rr.Code)
 }
@@ -206,9 +208,9 @@ func TestHandlerCreateReturnsBadRequestForInvalidBody(t *testing.T) {
 func TestHandlerListJobsReturnsData(t *testing.T) {
 	serverID := uuid.New()
 	r := newServerRouter(t, stubServerService{
-		listJobsResp: []JobAssociationResponse{{
-			JobID:  "1000",
-			Status: "success",
+		listJobsResp: []api.ServerJobAssociation{{
+			JobId:  "1000",
+			Status: api.Success,
 		}},
 	})
 

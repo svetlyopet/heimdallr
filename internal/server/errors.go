@@ -23,7 +23,8 @@ const (
 	ErrMsgDissociateRelease        = "failed to dissociate release"
 	ErrMsgListReleases             = "failed to list releases"
 	ErrMsgAttachAgents             = "failed to attach agents to server"
-	ErrMsgAgentAlreadyAssigned     = "agent is already assigned to a server"
+	ErrMsgAgentAlreadyLinked       = "agent is already linked to this server"
+	ErrMsgAgentAlreadyExists       = "agent already exists"
 	ErrMsgUpdateServer             = "failed to update server"
 )
 
@@ -45,7 +46,8 @@ var (
 	ErrDissociateRelease        = errors.New(ErrMsgDissociateRelease)
 	ErrListReleases             = errors.New(ErrMsgListReleases)
 	ErrAttachAgents             = errors.New(ErrMsgAttachAgents)
-	ErrAgentAlreadyAssigned     = errors.New(ErrMsgAgentAlreadyAssigned)
+	ErrAgentAlreadyLinked       = errors.New(ErrMsgAgentAlreadyLinked)
+	ErrAgentAlreadyExists       = errors.New(ErrMsgAgentAlreadyExists)
 	ErrUpdateServer             = errors.New(ErrMsgUpdateServer)
 )
 
@@ -145,8 +147,12 @@ func NewAttachAgentsError(err error) error {
 	return NewServerError(ErrAttachAgents.Error(), err)
 }
 
-func NewAgentAlreadyAssignedError(err error) error {
-	return NewServerError(ErrAgentAlreadyAssigned.Error(), err)
+func NewAgentAlreadyLinkedError(err error) error {
+	return NewServerError(ErrAgentAlreadyLinked.Error(), err)
+}
+
+func NewAgentAlreadyExistsError(err error) error {
+	return NewServerError(ErrAgentAlreadyExists.Error(), err)
 }
 
 func NewUpdateServerError(err error) error {

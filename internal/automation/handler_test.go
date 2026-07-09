@@ -9,19 +9,20 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"github.com/svetlyopet/heimdallr/internal/automation/api"
 	"github.com/svetlyopet/heimdallr/internal/testutil"
 )
 
 type stubAutomationService struct {
-	listResponse []GetResponse
+	listResponse []api.Automation
 	listTotal    int64
 	listError    error
 	getError     error
-	createResp   GetResponse
+	createResp   api.Automation
 	createError  error
 }
 
-func (s stubAutomationService) GetAll(_ context.Context, _ int, _ int) ([]GetResponse, int64, error) {
+func (s stubAutomationService) GetAll(_ context.Context, _ int, _ int) ([]api.Automation, int64, error) {
 	if s.listError != nil {
 		return nil, 0, s.listError
 	}
@@ -29,28 +30,28 @@ func (s stubAutomationService) GetAll(_ context.Context, _ int, _ int) ([]GetRes
 	return s.listResponse, s.listTotal, nil
 }
 
-func (s stubAutomationService) GetByName(_ context.Context, _ string) (GetResponse, error) {
-	return GetResponse{}, nil
+func (s stubAutomationService) GetByName(_ context.Context, _ string) (api.Automation, error) {
+	return api.Automation{}, nil
 }
 
-func (s stubAutomationService) GetById(_ context.Context, _ string) (GetResponse, error) {
+func (s stubAutomationService) GetById(_ context.Context, _ string) (api.Automation, error) {
 	if s.getError != nil {
-		return GetResponse{}, s.getError
+		return api.Automation{}, s.getError
 	}
 
-	return GetResponse{}, nil
+	return api.Automation{}, nil
 }
 
-func (s stubAutomationService) Create(_ context.Context, _ CreateRequest) (GetResponse, error) {
+func (s stubAutomationService) Create(_ context.Context, _ api.AutomationCreateRequest) (api.Automation, error) {
 	if s.createError != nil {
-		return GetResponse{}, s.createError
+		return api.Automation{}, s.createError
 	}
 
 	return s.createResp, nil
 }
 
-func (s stubAutomationService) Update(_ context.Context, _ UpdateRequest, _ string) (GetResponse, error) {
-	return GetResponse{}, nil
+func (s stubAutomationService) Update(_ context.Context, _ api.AutomationUpdateRequest, _ string) (api.Automation, error) {
+	return api.Automation{}, nil
 }
 
 func (s stubAutomationService) Delete(_ context.Context, _ string) error {
@@ -66,8 +67,8 @@ func newAutomationRouter(t *testing.T, svc Service) *gin.Engine {
 	require.NoError(t, err)
 
 	r := gin.New()
-	api := r.Group("/api")
-	RegisterRoutes(api, h)
+	apiGroup := r.Group("/api")
+	RegisterRoutes(apiGroup, h)
 
 	return r
 }
@@ -82,23 +83,25 @@ func TestHandlerListReturnsBadRequestForInvalidPage(t *testing.T) {
 func TestHandlerCreateReturnsInternalServerErrorForMissingProvider(t *testing.T) {
 	r := newAutomationRouter(t, stubAutomationService{createError: ErrCreateAutomation})
 
-	rr := testutil.DoGinJSONRequest(t, r, http.MethodPost, "/api/v1/automation", CreateRequest{
+	url := "https://awx.example.com/#/templates/job_template/1"
+	rr := testutil.DoGinJSONRequest(t, r, http.MethodPost, "/api/v1/automation", api.AutomationCreateRequest{
 		Name:       "deploy",
-		URL:        "https://awx.example.com/#/templates/job_template/1",
-		ProviderID: uuid.New(),
+		Url:        &url,
+		ProviderId: uuid.New(),
 	}, nil)
 	require.Equal(t, http.StatusInternalServerError, rr.Code)
 }
 
 func TestHandlerCreateReturnsCreated(t *testing.T) {
 	r := newAutomationRouter(t, stubAutomationService{
-		createResp: GetResponse{ID: uuid.New(), Name: "deploy", Provider: "awx"},
+		createResp: api.Automation{Id: uuid.New(), Name: "deploy", Provider: "awx"},
 	})
 
-	rr := testutil.DoGinJSONRequest(t, r, http.MethodPost, "/api/v1/automation", CreateRequest{
+	url := "https://awx.example.com/#/templates/job_template/1"
+	rr := testutil.DoGinJSONRequest(t, r, http.MethodPost, "/api/v1/automation", api.AutomationCreateRequest{
 		Name:       "deploy",
-		URL:        "https://awx.example.com/#/templates/job_template/1",
-		ProviderID: uuid.New(),
+		Url:        &url,
+		ProviderId: uuid.New(),
 	}, nil)
 	response := testutil.AssertJSONStatus(t, rr, http.StatusCreated)
 	data, ok := response["data"].(map[string]any)

@@ -5,8 +5,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"github.com/svetlyopet/heimdallr/internal/auth"
+	authapi "github.com/svetlyopet/heimdallr/internal/auth/api"
 	"github.com/svetlyopet/heimdallr/internal/testutil"
+	"github.com/svetlyopet/heimdallr/internal/token/api"
 )
 
 func newTokenService(t *testing.T) Service {
@@ -19,9 +20,9 @@ func newTokenService(t *testing.T) Service {
 func TestServiceCreateAndAuthenticateToken(t *testing.T) {
 	svc := newTokenService(t)
 
-	created, err := svc.Create(context.Background(), CreateRequest{
+	created, err := svc.Create(context.Background(), api.TokenCreateRequest{
 		Name:   "ci-token",
-		Scopes: []string{ScopeApplicationWrite},
+		Scopes: []api.TokenScope{api.ApplicationWrite},
 	}, nil)
 	require.NoError(t, err)
 	require.NotEmpty(t, created.Token)
@@ -36,9 +37,9 @@ func TestServiceCreateAndAuthenticateToken(t *testing.T) {
 func TestServiceCreateReturnsInvalidScopes(t *testing.T) {
 	svc := newTokenService(t)
 
-	_, err := svc.Create(context.Background(), CreateRequest{
+	_, err := svc.Create(context.Background(), api.TokenCreateRequest{
 		Name:   "bad-token",
-		Scopes: []string{"invalid:scope"},
+		Scopes: []api.TokenScope{"invalid:scope"},
 	}, nil)
 	require.ErrorIs(t, err, ErrInvalidScopes)
 }
@@ -60,6 +61,6 @@ func TestServiceDeleteReturnsNotFound(t *testing.T) {
 func TestServiceHasScopeAllowsAdmin(t *testing.T) {
 	svc := newTokenService(t)
 
-	user := auth.GetResponse{Roles: []string{auth.RoleAdmin}}
+	user := authapi.AuthUser{Roles: []authapi.AuthRole{authapi.Admin}}
 	require.True(t, svc.HasScope(user, ScopeApplicationWrite))
 }

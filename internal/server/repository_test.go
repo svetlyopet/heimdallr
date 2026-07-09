@@ -8,7 +8,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/svetlyopet/heimdallr/internal/application"
 	"github.com/svetlyopet/heimdallr/internal/automation"
-	"github.com/svetlyopet/heimdallr/internal/database/model"
 	"github.com/svetlyopet/heimdallr/internal/job"
 	"github.com/svetlyopet/heimdallr/internal/provider"
 	"github.com/svetlyopet/heimdallr/internal/release"
@@ -19,17 +18,23 @@ import (
 
 type testAgent struct {
 	ID       uuid.UUID      `gorm:"type:uuid;primary_key"`
-	Server   string         `gorm:"type:varchar(255);not null"`
-	ServerID *uuid.UUID     `gorm:"type:uuid;index"`
 	Name     string         `gorm:"type:varchar(255);not null"`
 	Type     string         `gorm:"type:varchar(255);not null"`
 	Version  string         `gorm:"type:varchar(255);not null"`
 	Metadata datatypes.JSON `gorm:"type:json;not null"`
-	model.Timestamp
 }
 
 func (testAgent) TableName() string {
 	return "agents"
+}
+
+type testServerAgent struct {
+	ServerID uuid.UUID `gorm:"type:uuid;primaryKey"`
+	AgentID  uuid.UUID `gorm:"type:uuid;primaryKey"`
+}
+
+func (testServerAgent) TableName() string {
+	return "server_agents"
 }
 
 func newServerTestDB(t *testing.T) *gorm.DB {
@@ -43,6 +48,7 @@ func newServerTestDB(t *testing.T) *gorm.DB {
 		&release.Release{},
 		&Server{},
 		&testAgent{},
+		&testServerAgent{},
 		&ServerJob{},
 		&ServerRelease{},
 	)
@@ -62,7 +68,7 @@ func TestRepositoryFindAllReturnsServers(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	servers, total, err := repo.FindAll(context.Background(), 10, 0)
+	servers, total, err := repo.FindAll(context.Background(), "", 10, 0)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), total)
 	require.Len(t, servers, 1)
@@ -92,14 +98,17 @@ func TestRepositoryGetRelationCountsIncludesAgents(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	agentID := uuid.New()
 	require.NoError(t, db.Create(&testAgent{
-		ID:       uuid.New(),
-		ServerID: uuidPtr(serverEntity.ID),
-		Server:   "db-01.example.com",
+		ID:       agentID,
 		Name:     "crowdstrike",
 		Type:     "security",
 		Version:  "1.0.0",
 		Metadata: datatypes.JSON([]byte(`{}`)),
+	}).Error)
+	require.NoError(t, db.Create(&testServerAgent{
+		ServerID: serverEntity.ID,
+		AgentID:  agentID,
 	}).Error)
 
 	counts, err := repo.GetRelationCounts(context.Background(), serverEntity.ID)

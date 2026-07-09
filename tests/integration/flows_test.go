@@ -11,7 +11,7 @@ import (
 
 func TestComplianceFlow(t *testing.T) {
 	ts := startTestServer(t)
-	headers := authHeaders("root", ts.RootPass)
+	headers := authHeaders(ts)
 
 	resp, appBody := doRequest(t, ts, http.MethodPost, "/api/v1/application", map[string]any{
 		"name":           "integration-app",
@@ -58,7 +58,7 @@ func TestComplianceFlow(t *testing.T) {
 
 func TestOperationsFlow(t *testing.T) {
 	ts := startTestServer(t)
-	headers := authHeaders("root", ts.RootPass)
+	headers := authHeaders(ts)
 
 	resp, providerBody := doRequest(t, ts, http.MethodPost, "/api/v1/provider", map[string]any{
 		"name": "awx",
@@ -101,13 +101,16 @@ func TestAuthEnforcement(t *testing.T) {
 	resp, _ := doRequest(t, ts, http.MethodGet, "/api/v1/application", nil, nil)
 	require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 
-	resp, _ = doRequest(t, ts, http.MethodGet, "/api/v1/application", nil, authHeaders("root", "wrong-password"))
-	require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+	loginResp, _ := doRequest(t, ts, http.MethodPost, "/api/v1/auth/login", map[string]string{
+		"username": "root",
+		"password": "wrong-password",
+	}, nil)
+	require.Equal(t, http.StatusUnauthorized, loginResp.StatusCode)
 
 	resp, _ = doRequest(t, ts, http.MethodGet, "/api/v1/application", nil, bearerHeader("invalid-token"))
 	require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 
-	resp, _ = doRequest(t, ts, http.MethodGet, "/api/v1/application", nil, authHeaders("root", ts.RootPass))
+	resp, _ = doRequest(t, ts, http.MethodGet, "/api/v1/application", nil, authHeaders(ts))
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 }
 
@@ -121,7 +124,7 @@ func TestHealthEndpoint(t *testing.T) {
 
 func TestServerAgentComplianceFlow(t *testing.T) {
 	ts := startTestServer(t)
-	headers := authHeaders("root", ts.RootPass)
+	headers := authHeaders(ts)
 
 	resp, orphanBody := doRequest(t, ts, http.MethodPost, "/api/v1/agent", map[string]any{
 		"name":    "datadog",
@@ -131,8 +134,7 @@ func TestServerAgentComplianceFlow(t *testing.T) {
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
 	orphanData := dataField(t, orphanBody)
 	orphanID := orphanData["id"].(string)
-	_, hasServerID := orphanData["server_id"]
-	require.False(t, hasServerID)
+	require.Equal(t, float64(0), orphanData["server_count"])
 
 	resp, serverBody := doRequest(t, ts, http.MethodPost, "/api/v1/server", map[string]any{
 		"hostname":         "compliance-host.example.com",
@@ -180,18 +182,71 @@ func TestServerAgentComplianceFlow(t *testing.T) {
 	agentPath := "/api/v1/server/" + serverID + "/agent"
 	resp, getAgentBody := doRequest(t, ts, http.MethodGet, agentPath+"/"+orphanID, nil, headers)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
-	require.Equal(t, "compliance-host.example.com", dataField(t, getAgentBody)["server"])
+	require.Equal(t, "datadog", dataField(t, getAgentBody)["name"])
 
 	resp, globalAgentBody := doRequest(t, ts, http.MethodGet, "/api/v1/agent/"+orphanID, nil, headers)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
-	require.Equal(t, "datadog", dataField(t, globalAgentBody)["name"])
+	globalAgent := dataField(t, globalAgentBody)
+	require.Equal(t, "datadog", globalAgent["name"])
+	servers, ok := globalAgent["servers"].([]any)
+	require.True(t, ok)
+	require.Len(t, servers, 1)
+
+	resp, secondServerBody := doRequest(t, ts, http.MethodPost, "/api/v1/server", map[string]any{
+		"hostname":         "compliance-host-2.example.com",
+		"operating_system": "linux",
+		"agent_ids":        []string{orphanID},
+	}, headers)
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
+	secondServerID := dataField(t, secondServerBody)["id"].(string)
+
+	resp, globalAgentBody = doRequest(t, ts, http.MethodGet, "/api/v1/agent/"+orphanID, nil, headers)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	servers, ok = dataField(t, globalAgentBody)["servers"].([]any)
+	require.True(t, ok)
+	require.Len(t, servers, 2)
+
+	resp, filteredServersBody := doRequest(t, ts, http.MethodGet, "/api/v1/server?agent_id="+orphanID, nil, headers)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	filteredServers, ok := filteredServersBody["data"].([]any)
+	require.True(t, ok)
+	require.Len(t, filteredServers, 2)
 
 	resp, _ = doRequest(t, ts, http.MethodDelete, agentPath+"/"+orphanID, nil, headers)
 	require.Equal(t, http.StatusNoContent, resp.StatusCode)
 
-	resp, serverAfterDelete := doRequest(t, ts, http.MethodGet, "/api/v1/server/"+serverID, nil, headers)
+	resp, serverAfterDetach := doRequest(t, ts, http.MethodGet, "/api/v1/server/"+serverID, nil, headers)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
-	relationsAfter, ok := dataField(t, serverAfterDelete)["relations"].(map[string]any)
+	relationsAfter, ok := dataField(t, serverAfterDetach)["relations"].(map[string]any)
 	require.True(t, ok)
 	require.Equal(t, float64(2), relationsAfter["agent_count"])
+
+	resp, globalAfterDetach := doRequest(t, ts, http.MethodGet, "/api/v1/agent/"+orphanID, nil, headers)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.Equal(t, "datadog", dataField(t, globalAfterDetach)["name"])
+
+	resp, secondServerAfterDetach := doRequest(t, ts, http.MethodGet, "/api/v1/server/"+secondServerID, nil, headers)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	secondRelations, ok := dataField(t, secondServerAfterDetach)["relations"].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, float64(1), secondRelations["agent_count"])
+}
+
+func TestAgentNameMustBeUnique(t *testing.T) {
+	ts := startTestServer(t)
+	headers := authHeaders(ts)
+
+	resp, _ := doRequest(t, ts, http.MethodPost, "/api/v1/agent", map[string]any{
+		"name":    "unique-agent",
+		"type":    "monitoring",
+		"version": "1.0.0",
+	}, headers)
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
+
+	resp, _ = doRequest(t, ts, http.MethodPost, "/api/v1/agent", map[string]any{
+		"name":    "unique-agent",
+		"type":    "monitoring",
+		"version": "2.0.0",
+	}, headers)
+	require.Equal(t, http.StatusConflict, resp.StatusCode)
 }

@@ -8,15 +8,16 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/svetlyopet/heimdallr/internal/automation"
+	"github.com/svetlyopet/heimdallr/internal/job/api"
 	"github.com/svetlyopet/heimdallr/internal/logger"
 	"gorm.io/gorm"
 )
 
 type Service interface {
-	GetAll(ctx context.Context, automationId string, page int, limit int) ([]GetResponse, int64, error)
-	GetById(ctx context.Context, jobId string, automationId string) (GetResponse, error)
-	Create(ctx context.Context, automationId string, req CreateRequest) (GetResponse, error)
-	Update(ctx context.Context, automationId string, jobId string, req UpdateRequest) (GetResponse, error)
+	GetAll(ctx context.Context, automationId string, page int, limit int) ([]api.Job, int64, error)
+	GetById(ctx context.Context, jobId string, automationId string) (api.Job, error)
+	Create(ctx context.Context, automationId string, req api.JobCreateRequest) (api.Job, error)
+	Update(ctx context.Context, automationId string, jobId string, req api.JobUpdateRequest) (api.Job, error)
 }
 
 type service struct {
@@ -25,7 +26,7 @@ type service struct {
 	logger                  *logger.Logger
 }
 
-func (s service) GetAll(ctx context.Context, automationId string, page int, limit int) ([]GetResponse, int64, error) {
+func (s service) GetAll(ctx context.Context, automationId string, page int, limit int) ([]api.Job, int64, error) {
 	offset := (page - 1) * limit
 
 	jobs, total, err := s.repository.FindAll(ctx, automationId, limit, offset)
@@ -42,7 +43,7 @@ func (s service) GetAll(ctx context.Context, automationId string, page int, limi
 		return nil, 0, ErrListJobs
 	}
 
-	responses := make([]GetResponse, 0, len(jobs))
+	responses := make([]api.Job, 0, len(jobs))
 	for _, job := range jobs {
 		jobResponse, err := mapEntityToResponse(job)
 		if err != nil {
@@ -61,11 +62,11 @@ func (s service) GetAll(ctx context.Context, automationId string, page int, limi
 	return responses, total, nil
 }
 
-func (s service) GetById(ctx context.Context, jobId string, automationId string) (GetResponse, error) {
+func (s service) GetById(ctx context.Context, jobId string, automationId string) (api.Job, error) {
 	job, err := s.repository.FindById(ctx, jobId, automationId)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return GetResponse{}, ErrJobNotFound
+			return api.Job{}, ErrJobNotFound
 		}
 
 		s.logger.ErrorWithStack(
@@ -75,7 +76,7 @@ func (s service) GetById(ctx context.Context, jobId string, automationId string)
 			slog.String("job_id", jobId),
 			slog.String("automation_id", automationId),
 		)
-		return GetResponse{}, ErrGetJob
+		return api.Job{}, ErrGetJob
 	}
 
 	jobResponse, err := mapEntityToResponse(job)
@@ -87,15 +88,15 @@ func (s service) GetById(ctx context.Context, jobId string, automationId string)
 			slog.String("job_id", job.ID),
 			slog.String("automation_id", automationId),
 		)
-		return GetResponse{}, ErrGetJob
+		return api.Job{}, ErrGetJob
 	}
 	return jobResponse, nil
 }
 
-func (s service) Create(ctx context.Context, automationId string, req CreateRequest) (GetResponse, error) {
+func (s service) Create(ctx context.Context, automationId string, req api.JobCreateRequest) (api.Job, error) {
 	parsedAutomationID, err := uuid.Parse(automationId)
 	if err != nil {
-		return GetResponse{}, ErrInvalidAutomationID
+		return api.Job{}, ErrInvalidAutomationID
 	}
 
 	if _, err := s.automationLookupService.GetById(ctx, automationId); err != nil {
@@ -104,28 +105,33 @@ func (s service) Create(ctx context.Context, automationId string, req CreateRequ
 			"failed to find automation before creating job",
 			err,
 			slog.String("automation_id", automationId),
-			slog.String("job_id", req.ID),
+			slog.String("job_id", req.Id),
 		)
-		return GetResponse{}, ErrCreateJob
+		return api.Job{}, ErrCreateJob
 	}
 
-	if !isValidBase64(req.Output) {
-		return GetResponse{}, NewInvalidOutputError(errors.New("not valid encoding"))
+	output := ""
+	if req.Output != nil {
+		output = *req.Output
 	}
 
-	metadata, err := json.Marshal(req.Metadata)
+	if !isValidBase64(output) {
+		return api.Job{}, NewInvalidOutputError(errors.New("not valid encoding"))
+	}
+
+	metadata, err := marshalMetadata(req.Metadata)
 	if err != nil {
-		return GetResponse{}, NewInvalidOutputError(err)
+		return api.Job{}, NewInvalidMetadataError(err)
 	}
 
 	job := Job{
-		ID:           req.ID,
+		ID:           req.Id,
 		AutomationID: parsedAutomationID,
-		Status:       req.Status,
+		Status:       string(req.Status),
 		Location:     req.Location,
-		Url:          req.URL,
+		Url:          req.Url,
 		Metadata:     metadata,
-		Output:       req.Output,
+		Output:       output,
 	}
 
 	createdJob, err := s.repository.Create(ctx, job)
@@ -134,10 +140,10 @@ func (s service) Create(ctx context.Context, automationId string, req CreateRequ
 			ctx,
 			"failed to create job",
 			err,
-			slog.String("job_id", req.ID),
+			slog.String("job_id", req.Id),
 			slog.String("automation_id", automationId),
 		)
-		return GetResponse{}, ErrCreateJob
+		return api.Job{}, ErrCreateJob
 	}
 
 	jobResponse, err := mapEntityToResponse(createdJob)
@@ -149,38 +155,43 @@ func (s service) Create(ctx context.Context, automationId string, req CreateRequ
 			slog.String("job_id", createdJob.ID),
 			slog.String("automation_id", automationId),
 		)
-		return GetResponse{}, ErrCreateJob
+		return api.Job{}, ErrCreateJob
 	}
 	return jobResponse, nil
 }
 
-func (s service) Update(ctx context.Context, automationId string, jobId string, req UpdateRequest) (GetResponse, error) {
+func (s service) Update(ctx context.Context, automationId string, jobId string, req api.JobUpdateRequest) (api.Job, error) {
 	parsedAutomationID, err := uuid.Parse(automationId)
 	if err != nil {
-		return GetResponse{}, ErrInvalidAutomationID
+		return api.Job{}, ErrInvalidAutomationID
 	}
 
-	if !isValidBase64(req.Output) {
-		return GetResponse{}, NewInvalidOutputError(errors.New("not valid encoding"))
+	output := ""
+	if req.Output != nil {
+		output = *req.Output
 	}
 
-	metadata, err := json.Marshal(req.Metadata)
+	if !isValidBase64(output) {
+		return api.Job{}, NewInvalidOutputError(errors.New("not valid encoding"))
+	}
+
+	metadata, err := marshalMetadata(req.Metadata)
 	if err != nil {
-		return GetResponse{}, NewInvalidOutputError(err)
+		return api.Job{}, NewInvalidMetadataError(err)
 	}
 
 	job := Job{
 		ID:           jobId,
 		AutomationID: parsedAutomationID,
-		Status:       req.Status,
+		Status:       string(req.Status),
 		Metadata:     metadata,
-		Output:       req.Output,
+		Output:       output,
 	}
 
 	updatedJob, err := s.repository.Update(ctx, job)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return GetResponse{}, ErrJobNotFound
+			return api.Job{}, ErrJobNotFound
 		}
 
 		s.logger.ErrorWithStack(
@@ -190,7 +201,7 @@ func (s service) Update(ctx context.Context, automationId string, jobId string, 
 			slog.String("job_id", jobId),
 			slog.String("automation_id", automationId),
 		)
-		return GetResponse{}, ErrUpdateJob
+		return api.Job{}, ErrUpdateJob
 	}
 
 	jobResponse, err := mapEntityToResponse(updatedJob)
@@ -202,7 +213,7 @@ func (s service) Update(ctx context.Context, automationId string, jobId string, 
 			slog.String("job_id", updatedJob.ID),
 			slog.String("automation_id", automationId),
 		)
-		return GetResponse{}, ErrUpdateJob
+		return api.Job{}, ErrUpdateJob
 	}
 	return jobResponse, nil
 }
@@ -221,20 +232,38 @@ func NewService(repository Repository,
 	}
 }
 
-func mapEntityToResponse(job Job) (GetResponse, error) {
-	metadata, err := json.Marshal(job.Metadata)
-	if err != nil {
-		return GetResponse{}, err
+func mapEntityToResponse(job Job) (api.Job, error) {
+	var metadataPtr *api.JobMetadata
+	if len(job.Metadata) > 0 && string(job.Metadata) != "null" {
+		var metadata api.JobMetadata
+		if err := json.Unmarshal(job.Metadata, &metadata); err != nil {
+			return api.Job{}, err
+		}
+		metadataPtr = &metadata
 	}
 
-	return GetResponse{
-		ID:         job.ID,
+	var outputPtr *api.JobOutput
+	if job.Output != "" {
+		output := api.JobOutput(job.Output)
+		outputPtr = &output
+	}
+
+	return api.Job{
+		Id:         job.ID,
 		Automation: job.Automation,
 		Provider:   job.Provider,
-		Status:     job.Status,
+		Status:     api.JobStatus(job.Status),
 		Location:   job.Location,
-		URL:        job.Url,
-		Metadata:   metadata,
-		Output:     job.Output,
+		Url:        job.Url,
+		Metadata:   metadataPtr,
+		Output:     outputPtr,
 	}, nil
+}
+
+func marshalMetadata(metadata *api.JobMetadata) ([]byte, error) {
+	if metadata == nil {
+		return []byte("null"), nil
+	}
+
+	return json.Marshal(metadata)
 }

@@ -2,7 +2,6 @@ package middleware
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -10,72 +9,50 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
-	"github.com/svetlyopet/heimdallr/internal/auth"
+	authapi "github.com/svetlyopet/heimdallr/internal/auth/api"
 	"github.com/svetlyopet/heimdallr/internal/token"
+	"github.com/svetlyopet/heimdallr/internal/token/api"
 )
 
-type authServiceStub struct{}
-
-func (authServiceStub) Authenticate(_ context.Context, username string, password string) (auth.GetResponse, error) {
-	if username != "admin" || password != "AdminPassword123!" {
-		return auth.GetResponse{}, auth.ErrInvalidCredentials
-	}
-
-	return auth.GetResponse{Username: username, Roles: []string{auth.RoleAdmin}}, nil
+type tokenServiceStub struct {
+	token string
+	err   error
 }
 
-func (authServiceStub) List(context.Context) ([]auth.GetResponse, error) {
-	return nil, errors.New("not implemented")
-}
-
-func (authServiceStub) Create(context.Context, auth.CreateRequest) (auth.GetResponse, error) {
-	return auth.GetResponse{}, errors.New("not implemented")
-}
-
-func (authServiceStub) Update(context.Context, string, auth.UpdateRequest) (auth.GetResponse, error) {
-	return auth.GetResponse{}, errors.New("not implemented")
-}
-
-func (authServiceStub) Delete(context.Context, string) error {
-	return errors.New("not implemented")
-}
-
-func (authServiceStub) EnsureRootUser(context.Context) (string, error) {
-	return "", errors.New("not implemented")
-}
-
-func (authServiceStub) HasAnyRole(_ auth.GetResponse, _ ...string) bool {
-	return false
-}
-
-type tokenServiceStub struct{}
-
-func (tokenServiceStub) List(context.Context) ([]token.GetResponse, error) {
+func (s tokenServiceStub) List(context.Context) ([]api.Token, error) {
 	return nil, token.ErrInvalidToken
 }
 
-func (tokenServiceStub) Create(context.Context, token.CreateRequest, *uuid.UUID) (token.CreateResponse, error) {
-	return token.CreateResponse{}, token.ErrInvalidToken
+func (s tokenServiceStub) Create(context.Context, api.TokenCreateRequest, *uuid.UUID) (api.TokenCreateResponse, error) {
+	return api.TokenCreateResponse{}, token.ErrInvalidToken
 }
 
-func (tokenServiceStub) Delete(context.Context, string) error {
+func (s tokenServiceStub) Delete(context.Context, string) error {
 	return token.ErrInvalidToken
 }
 
-func (tokenServiceStub) Authenticate(context.Context, string) (auth.GetResponse, error) {
-	return auth.GetResponse{}, token.ErrInvalidToken
+func (s tokenServiceStub) Authenticate(_ context.Context, plainToken string) (authapi.AuthUser, error) {
+	if s.err != nil {
+		return authapi.AuthUser{}, s.err
+	}
+
+	if plainToken != s.token {
+		return authapi.AuthUser{}, token.ErrInvalidToken
+	}
+
+	return authapi.AuthUser{Username: "token-user", Roles: []authapi.AuthRole{authapi.Admin}}, nil
 }
 
-func (tokenServiceStub) HasScope(auth.GetResponse, string) bool {
-	return false
+func (tokenServiceStub) HasScope(authapi.AuthUser, string) bool {
+	return true
 }
 
-func TestAuthenticationRejectsMissingHeaders(t *testing.T) {
+func TestAuthenticationRejectsMissingBearerToken(t *testing.T) {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 
 	r := gin.New()
-	r.Use(Authentication(authServiceStub{}, tokenServiceStub{}))
+	r.Use(Authentication(tokenServiceStub{token: "valid-token"}))
 	r.GET("/secure", func(ctx *gin.Context) {
 		ctx.Status(http.StatusOK)
 	})
@@ -87,19 +64,18 @@ func TestAuthenticationRejectsMissingHeaders(t *testing.T) {
 	require.Equal(t, http.StatusUnauthorized, rr.Code)
 }
 
-func TestAuthenticationRejectsInvalidCredentials(t *testing.T) {
+func TestAuthenticationRejectsInvalidBearerToken(t *testing.T) {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 
 	r := gin.New()
-	r.Use(Authentication(authServiceStub{}, tokenServiceStub{}))
+	r.Use(Authentication(tokenServiceStub{token: "valid-token"}))
 	r.GET("/secure", func(ctx *gin.Context) {
 		ctx.Status(http.StatusOK)
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/secure", nil)
-	req.Header.Set(authHeaderUsername, "ghost")
-	req.Header.Set(authHeaderPassword, "wrong")
+	req.Header.Set(authHeaderBearer, "Bearer wrong-token")
 
 	rr := httptest.NewRecorder()
 	r.ServeHTTP(rr, req)
@@ -107,29 +83,47 @@ func TestAuthenticationRejectsInvalidCredentials(t *testing.T) {
 	require.Equal(t, http.StatusUnauthorized, rr.Code)
 }
 
-func TestAuthenticationAcceptsValidCredentials(t *testing.T) {
+func TestAuthenticationAcceptsValidBearerToken(t *testing.T) {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 
 	r := gin.New()
-	r.Use(Authentication(authServiceStub{}, tokenServiceStub{}))
+	r.Use(Authentication(tokenServiceStub{token: "valid-token"}))
 	r.GET("/secure", func(ctx *gin.Context) {
 		user, exists := ctx.Get("auth.user")
 		require.True(t, exists)
 
-		authUser, ok := user.(auth.GetResponse)
+		authUser, ok := user.(authapi.AuthUser)
 		require.True(t, ok)
-		require.Equal(t, "admin", authUser.Username)
+		require.Equal(t, "token-user", authUser.Username)
 
 		ctx.Status(http.StatusOK)
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/secure", nil)
-	req.Header.Set(authHeaderUsername, "admin")
-	req.Header.Set(authHeaderPassword, "AdminPassword123!")
+	req.Header.Set(authHeaderBearer, "Bearer valid-token")
 
 	rr := httptest.NewRecorder()
 	r.ServeHTTP(rr, req)
 
 	require.Equal(t, http.StatusOK, rr.Code)
+}
+
+func TestAuthenticationRejectsMalformedAuthorizationHeader(t *testing.T) {
+	t.Helper()
+	gin.SetMode(gin.TestMode)
+
+	r := gin.New()
+	r.Use(Authentication(tokenServiceStub{token: "valid-token"}))
+	r.GET("/secure", func(ctx *gin.Context) {
+		ctx.Status(http.StatusOK)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/secure", nil)
+	req.Header.Set(authHeaderBearer, "Token valid-token")
+
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+
+	require.Equal(t, http.StatusUnauthorized, rr.Code)
 }

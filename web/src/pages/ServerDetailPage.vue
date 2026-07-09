@@ -2,40 +2,45 @@
   <section>
     <header class="topbar">
       <div>
-        <p class="eyebrow">Compliance</p>
+        <p class="eyebrow">Fleet</p>
         <h2>{{ server?.hostname || "Server" }}</h2>
       </div>
 
       <div class="topbar-actions">
         <RouterLink class="button button-secondary" to="/servers">Back</RouterLink>
+        <RouterLink
+          class="button button-secondary"
+          :to="{ name: 'server-jobs', params: { serverId } }"
+        >
+          View jobs
+        </RouterLink>
         <button class="button button-secondary" type="button" @click="loadData">Refresh</button>
-        <button class="button" type="button" @click="openCreateDialog">Register agent</button>
+        <button class="button button-secondary" type="button" @click="openAttachDialog">
+          Attach agent
+        </button>
       </div>
     </header>
 
     <AppAlert :message="errorMessage" @dismiss="errorMessage = ''" />
 
     <FormDialog
-      :open="showCreateDialog"
-      eyebrow="Create"
-      title="New agent"
-      @close="closeCreateDialog"
+      :open="showAttachDialog"
+      eyebrow="Attach"
+      title="Attach existing agent"
+      @close="closeAttachDialog"
     >
-      <form class="form" @submit.prevent="submitAgent">
+      <form class="form" @submit.prevent="submitAttach">
         <label>
-          Name
-          <input v-model.trim="form.name" type="text" required minlength="1" maxlength="255" />
+          Agent
+          <select v-model="attachAgentId" required>
+            <option value="" disabled>Select agent</option>
+            <option v-for="agent in availableAgents" :key="agent.id" :value="agent.id">
+              {{ agent.name }} ({{ agent.server_count }} servers)
+            </option>
+          </select>
         </label>
-        <label>
-          Type
-          <input v-model.trim="form.type" type="text" maxlength="255" />
-        </label>
-        <label>
-          Version
-          <input v-model.trim="form.version" type="text" maxlength="255" />
-        </label>
-        <button class="button button-full" type="submit" :disabled="submitting">
-          Register agent
+        <button class="button button-full" type="submit" :disabled="submitting || !attachAgentId">
+          Attach agent
         </button>
       </form>
     </FormDialog>
@@ -71,7 +76,7 @@
         <div v-if="loading" class="empty-state">Loading agents...</div>
         <div v-else-if="agents.length === 0" class="empty-state">
           <strong>No agents yet</strong>
-          <span>Register an agent to track compliance tooling on this server.</span>
+          <span>Attach an agent to track compliance tooling on this server.</span>
         </div>
         <div v-else class="table-wrapper">
           <table>
@@ -91,15 +96,25 @@
                 <td>{{ agent.version || "—" }}</td>
                 <td><code>{{ agent.id }}</code></td>
                 <td>
-                  <RouterLink
-                    class="button button-secondary"
-                    :to="{
-                      name: 'agent-detail',
-                      params: { serverId, agentId: agent.id },
-                    }"
-                  >
-                    View
-                  </RouterLink>
+                  <div class="row-actions">
+                    <RouterLink
+                      class="button button-small button-secondary"
+                      :to="{
+                        name: 'agent-detail-global',
+                        params: { agentId: agent.id },
+                      }"
+                    >
+                      View
+                    </RouterLink>
+                    <button
+                      class="button button-small button-secondary"
+                      type="button"
+                      :disabled="detaching"
+                      @click="removeAgent(agent.id)"
+                    >
+                      Detach
+                    </button>
+                  </div>
                 </td>
               </tr>
             </tbody>
@@ -122,7 +137,12 @@
 import { onMounted, reactive, ref } from "vue";
 import "../stylesheets/dialog.css";
 import { RouterLink, useRoute } from "vue-router";
-import { createAgent, listAgents } from "../api/agents";
+import {
+  attachAgent,
+  detachAgent,
+  listAgents,
+  listAgentsForServer,
+} from "../api/agents";
 import { getServer } from "../api/servers";
 import AppAlert from "../components/AppAlert.vue";
 import FormDialog from "../components/FormDialog.vue";
@@ -133,16 +153,13 @@ const serverId = route.params.serverId;
 
 const server = ref(null);
 const agents = ref([]);
+const availableAgents = ref([]);
 const loading = ref(false);
 const submitting = ref(false);
+const detaching = ref(false);
 const errorMessage = ref("");
-const showCreateDialog = ref(false);
-
-const form = reactive({
-  name: "",
-  type: "",
-  version: "",
-});
+const showAttachDialog = ref(false);
+const attachAgentId = ref("");
 
 const pagination = reactive({
   page: 1,
@@ -160,7 +177,7 @@ async function loadData() {
   try {
     const [serverResponse, agentResponse] = await Promise.all([
       getServer(serverId),
-      listAgents(serverId, { page: pagination.page, limit: pagination.limit }),
+      listAgentsForServer(serverId, { page: pagination.page, limit: pagination.limit }),
     ]);
 
     server.value = serverResponse.data || null;
@@ -173,19 +190,26 @@ async function loadData() {
   }
 }
 
-async function submitAgent() {
+async function loadAvailableAgents() {
+  try {
+    const response = await listAgents({ page: 1, limit: 100 });
+    availableAgents.value = response.data || [];
+  } catch (error) {
+    errorMessage.value = error.message;
+  }
+}
+
+async function submitAttach() {
+  if (!attachAgentId.value) {
+    return;
+  }
+
   submitting.value = true;
   errorMessage.value = "";
 
   try {
-    await createAgent(serverId, {
-      name: form.name,
-      type: form.type,
-      version: form.version,
-      metadata: {},
-    });
-
-    closeCreateDialog();
+    await attachAgent(serverId, attachAgentId.value);
+    closeAttachDialog();
     pagination.page = 1;
     await loadData();
   } catch (error) {
@@ -195,20 +219,33 @@ async function submitAgent() {
   }
 }
 
-function openCreateDialog() {
-  resetForm();
-  showCreateDialog.value = true;
+async function removeAgent(agentId) {
+  if (!window.confirm("Detach this agent from the server?")) {
+    return;
+  }
+
+  detaching.value = true;
+  errorMessage.value = "";
+
+  try {
+    await detachAgent(serverId, agentId);
+    await loadData();
+  } catch (error) {
+    errorMessage.value = error.message;
+  } finally {
+    detaching.value = false;
+  }
 }
 
-function closeCreateDialog() {
-  resetForm();
-  showCreateDialog.value = false;
+async function openAttachDialog() {
+  attachAgentId.value = "";
+  await loadAvailableAgents();
+  showAttachDialog.value = true;
 }
 
-function resetForm() {
-  form.name = "";
-  form.type = "";
-  form.version = "";
+function closeAttachDialog() {
+  attachAgentId.value = "";
+  showAttachDialog.value = false;
 }
 
 async function previousPage() {

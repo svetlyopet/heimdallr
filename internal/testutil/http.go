@@ -56,15 +56,28 @@ func AssertJSONStatus(t *testing.T, rr *httptest.ResponseRecorder, status int) m
 	return response
 }
 
-func AuthHeaders(username, password string) map[string]string {
-	return map[string]string{
-		"X-Auth-Username": username,
-		"X-Auth-Password": password,
-	}
-}
-
 func BearerHeader(token string) map[string]string {
 	return map[string]string{
 		"Authorization": "Bearer " + token,
 	}
+}
+
+func LoginBearerHeader(t *testing.T, router http.Handler, username, password string) map[string]string {
+	t.Helper()
+
+	rr := DoJSONRequest(t, router, http.MethodPost, "/api/v1/auth/login", map[string]string{
+		"username": username,
+		"password": password,
+	}, nil)
+	require.Equal(t, http.StatusOK, rr.Code)
+
+	var response struct {
+		Data struct {
+			Token string `json:"token"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &response))
+	require.NotEmpty(t, response.Data.Token)
+
+	return BearerHeader(response.Data.Token)
 }
