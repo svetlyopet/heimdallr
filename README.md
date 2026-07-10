@@ -172,7 +172,9 @@ make generate-api
 make generate-api         # Regenerate OpenAPI handlers (automation, job, application, release, report, provider, analytics)
 make test                 # Go unit tests
 make test-integration     # In-process API integration tests
-make lint-api             # fmt + golangci-lint
+make lint-api             # golangci-lint
+make check-fmt            # verify gofmt/goimports (CI)
+make check-generated      # verify OpenAPI codegen is up to date (CI)
 make govulncheck          # vulnerability scan (also in CI)
 make build                # Web + API binary
 make e2e                  # All E2E suites (operations + compliance + fleet)
@@ -186,7 +188,7 @@ E2E prerequisites: Docker and Ansible (operations flow only). Go E2E tests live 
 
 ## CI
 
-GitHub Actions (push/PR to `main`/`master`) runs unit tests, `lint-api` + `govulncheck`, integration tests, then three parallel Docker E2E jobs: operations, compliance, and fleet.
+GitHub Actions (push/PR to `main`/`master`) runs unit tests, lint/format/generated checks, SAST (govulncheck + gosec), integration tests, then parallel Docker E2E jobs (operations, compliance, fleet) and authenticated OWASP ZAP DAST.
 
 ## Project layout
 

@@ -39,11 +39,16 @@ tidy: ## Cleans up go.mod and go.sum
 .PHONY: fmt
 fmt: ## Formats code with go fmt and goimports
 	@go fmt ./...
-	@go run golang.org/x/tools/cmd/goimports@latest -w .
+	@go tool goimports -w .
+
+.PHONY: check-fmt
+check-fmt: ## Verifies code is gofmt/goimports clean (CI)
+	@test -z "$$(gofmt -l . | grep -v '^vendor/' || true)"
+	@test -z "$$(go tool goimports -l . | grep -v '^vendor/' || true)"
 
 .PHONY: govulncheck
 govulncheck: ## Vulnerability detection using govulncheck
-	@go run golang.org/x/vuln/cmd/govulncheck ./...
+	@go tool govulncheck ./...
 
 coverage: out-reports $(REPORTS_DIR)/report.json ## Displays coverage per func on cli
 	@go tool cover -func=$(REPORTS_DIR)/cover.out
@@ -61,7 +66,7 @@ $(REPORTS_DIR)/report.json: out-reports test-web-stub
 web-install-deps: ## Install web dependencies
 	cd $(WEB_DIR) && npm install
 
-OAPI_CODEGEN := go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@$(shell go list -m -f '{{.Version}}' github.com/oapi-codegen/oapi-codegen/v2 2>/dev/null || echo latest)
+OAPI_CODEGEN := go tool oapi-codegen
 OPENAPI_SPEC := api/docs/openapi.yaml
 
 .PHONY: generate-automation-api
@@ -111,12 +116,16 @@ generate-token-api: ## Generate token API from OpenAPI
 .PHONY: generate-api
 generate-api: generate-automation-api generate-job-api generate-application-api generate-release-api generate-report-api generate-provider-api generate-analytics-api generate-server-api generate-agent-api generate-auth-api generate-token-api ## Generate all OpenAPI server code
 
+.PHONY: check-generated
+check-generated: generate-api ## Verifies generated OpenAPI code is up to date (CI)
+	@git diff --exit-code -- internal/*/api/api.gen.go
+
 .PHONY: lint-api
-lint-api: fmt download generate-api test-web-stub ## Lints all code with golangci-lint
-	@go run github.com/golangci/golangci-lint/cmd/golangci-lint run
+lint-api: test-web-stub ## Lints all code with golangci-lint
+	@go tool golangci-lint run
 
 test: test-web-stub ## Run unit tests
-	@go test -v -covermode=atomic ./...
+	@go test -race -shuffle=on -count=1 -v -covermode=atomic ./...
 
 .PHONY: test-integration
 test-integration: test-web-stub ## Run integration tests
@@ -128,9 +137,19 @@ e2e-up: ## Start docker-compose stack and wait for health
 	@docker compose up --build -d
 	@HEIMDALLR_PASSWORD=e2e-test-password ./scripts/wait-for-health.sh
 
+.PHONY: e2e-up-ci
+e2e-up-ci: ## Start pre-built CI image (no rebuild)
+	@docker compose -f docker-compose.yml -f docker-compose.ci.yml down -v --remove-orphans 2>/dev/null || true
+	@docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d
+	@HEIMDALLR_PASSWORD=e2e-test-password ./scripts/wait-for-health.sh
+
 .PHONY: e2e-down
 e2e-down: ## Stop docker-compose stack
 	@docker compose down -v
+
+.PHONY: e2e-down-ci
+e2e-down-ci: ## Stop CI docker-compose stack
+	@docker compose -f docker-compose.yml -f docker-compose.ci.yml down -v
 
 .PHONY: e2e-operations-run
 e2e-operations-run: ## Run operations E2E scripts (stack must already be up)

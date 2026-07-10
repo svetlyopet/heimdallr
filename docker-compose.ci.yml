@@ -1,0 +1,4 @@
+# CI overlay: use a pre-built image from GitHub Actions instead of rebuilding.
+services:
+  heimdallr:
+    image: heimdallr:ci

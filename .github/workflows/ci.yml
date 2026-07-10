@@ -5,6 +5,13 @@ on:
     branches: [main, master]
   pull_request:
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
 jobs:
   unit-tests:
     runs-on: ubuntu-latest
@@ -13,6 +20,14 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+          cache: true
+          cache-dependency-path: go.sum
+      - name: Verify go mod tidy
+        run: |
+          go mod tidy
+          git diff --exit-code go.mod go.sum
+      - name: Download modules
+        run: go mod download
       - name: Run unit tests
         run: make test
 
@@ -23,68 +38,188 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - name: Lint API
-        run: make lint-api
-      - name: Run govulncheck
-        run: make govulncheck
+          cache: true
+          cache-dependency-path: go.sum
+      - name: Download modules
+        run: go mod download
+      - name: Check formatting
+        run: make check-fmt
+      - name: Check generated code
+        run: make check-generated
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v1.64.8
+          args: --timeout=5m
 
-  integration-tests:
+  security-sast:
     runs-on: ubuntu-latest
-    needs: [unit-tests]
+    permissions:
+      contents: read
+      security-events: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+          cache: true
+          cache-dependency-path: go.sum
+      - name: govulncheck
+        uses: golang/govulncheck-action@v1
+        with:
+          go-version-input: go.mod
+          go-package-file: go.mod
+      - name: Run gosec
+        uses: securego/gosec@master
+        with:
+          args: -no-fail -fmt sarif -out gosec.sarif ./...
+      - name: Upload gosec SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: gosec.sarif
+
+  integration-tests:
+    runs-on: ubuntu-latest
+    needs: [unit-tests, lint-api, security-sast]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: go.sum
       - name: Run integration tests
         run: make test-integration
 
-  e2e-operations:
+  e2e-docker-build:
     runs-on: ubuntu-latest
     needs: [integration-tests]
     steps:
       - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build Heimdallr image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          push: false
+          load: true
+          tags: heimdallr:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  e2e-operations:
+    runs-on: ubuntu-latest
+    needs: [e2e-docker-build]
+    steps:
+      - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+          cache: true
+          cache-dependency-path: go.sum
+      - uses: docker/setup-buildx-action@v3
+      - name: Load Heimdallr image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          push: false
+          load: true
+          tags: heimdallr:ci
+          cache-from: type=gha
       - name: Install Ansible
         run: pip install ansible
       - name: Start stack
-        run: make e2e-up
+        run: make e2e-up-ci
       - name: Run operations E2E
         run: make e2e-operations-run
       - name: Stop stack
         if: always()
-        run: make e2e-down
+        run: make e2e-down-ci
 
   e2e-compliance:
     runs-on: ubuntu-latest
-    needs: [integration-tests]
+    needs: [e2e-docker-build]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+          cache: true
+          cache-dependency-path: go.sum
+      - uses: docker/setup-buildx-action@v3
+      - name: Load Heimdallr image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          push: false
+          load: true
+          tags: heimdallr:ci
+          cache-from: type=gha
       - name: Start stack
-        run: make e2e-up
+        run: make e2e-up-ci
       - name: Run compliance E2E
         run: make e2e-compliance-run
       - name: Stop stack
         if: always()
-        run: make e2e-down
+        run: make e2e-down-ci
 
   e2e-fleet:
     runs-on: ubuntu-latest
-    needs: [integration-tests]
+    needs: [e2e-docker-build]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+          cache: true
+          cache-dependency-path: go.sum
+      - uses: docker/setup-buildx-action@v3
+      - name: Load Heimdallr image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          push: false
+          load: true
+          tags: heimdallr:ci
+          cache-from: type=gha
       - name: Start stack
-        run: make e2e-up
+        run: make e2e-up-ci
       - name: Run fleet E2E
         run: make e2e-fleet-run
       - name: Stop stack
         if: always()
-        run: make e2e-down
+        run: make e2e-down-ci
+
+  security-dast:
+    runs-on: ubuntu-latest
+    needs: [e2e-docker-build]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Load Heimdallr image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          push: false
+          load: true
+          tags: heimdallr:ci
+          cache-from: type=gha
+      - name: Start stack
+        run: make e2e-up-ci
+      - name: Run OWASP ZAP DAST
+        run: ./scripts/zap-dast.sh
+      - name: Upload ZAP report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zap-dast-report
+          path: /tmp/heimdallr-zap/zap-report.html
+      - name: Stop stack
+        if: always()
+        run: make e2e-down-ci

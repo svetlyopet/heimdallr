@@ -11,11 +11,19 @@ require (
 	github.com/oapi-codegen/runtime v1.4.2
 	github.com/samber/do/v2 v2.0.0
 	github.com/stretchr/testify v1.11.1
+	golang.org/x/tools v0.48.0
 	golang.org/x/vuln v1.6.0
 	gorm.io/datatypes v1.2.7
 	gorm.io/driver/postgres v1.6.0
 	gorm.io/driver/sqlite v1.6.0
 	gorm.io/gorm v1.31.2
+)
+
+tool (
+	github.com/golangci/golangci-lint/cmd/golangci-lint
+	github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen
+	golang.org/x/tools/cmd/goimports
+	golang.org/x/vuln/cmd/govulncheck
 )
 
 require (
@@ -248,7 +256,6 @@ require (
 	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/telemetry v0.0.0-20260708182218-49f421fb7959 // indirect
 	golang.org/x/text v0.40.0 // indirect
-	golang.org/x/tools v0.48.0 // indirect
 	google.golang.org/protobuf v1.36.10 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect

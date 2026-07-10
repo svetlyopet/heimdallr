@@ -10,4 +10,6 @@ import (
 	_ "github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen"
 	// https://go.dev/blog/vuln
 	_ "golang.org/x/vuln/cmd/govulncheck"
+	// https://pkg.go.dev/golang.org/x/tools/cmd/goimports
+	_ "golang.org/x/tools/cmd/goimports"
 )
