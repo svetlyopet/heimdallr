@@ -16,7 +16,7 @@ jobs:
   unit-tests:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
@@ -34,7 +34,7 @@ jobs:
   lint-api:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
@@ -57,7 +57,7 @@ jobs:
       contents: read
       security-events: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
@@ -82,7 +82,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [unit-tests, lint-api, security-sast]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
@@ -95,7 +95,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [integration-tests]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: docker/setup-buildx-action@v3
       - name: Build Heimdallr image
         uses: docker/build-push-action@v6
@@ -112,7 +112,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [e2e-docker-build]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
@@ -142,7 +142,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [e2e-docker-build]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
@@ -170,7 +170,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [e2e-docker-build]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
@@ -198,7 +198,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [e2e-docker-build]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: docker/setup-buildx-action@v3
       - name: Load Heimdallr image
         uses: docker/build-push-action@v6
