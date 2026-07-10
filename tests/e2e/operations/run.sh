@@ -18,6 +18,8 @@ ansible-playbook "${PLAYBOOK_DIR}/seed.yaml"
 ansible-playbook "${PLAYBOOK_DIR}/job-success.yaml" -e "job_id=${JOB_ID_SUCCESS}"
 ansible-playbook "${PLAYBOOK_DIR}/job-failure.yaml" -e "job_id=${JOB_ID_FAILURE}"
 
-AUTOMATION_ID="$(cat "${PLAYBOOK_DIR}/.automation_id")"
-export AUTOMATION_ID JOB_ID_SUCCESS JOB_ID_FAILURE
-"${PLAYBOOK_DIR}/verify.sh"
+export AUTOMATION_ID="$(cat "${PLAYBOOK_DIR}/.automation_id")"
+export JOB_ID_SUCCESS JOB_ID_FAILURE
+
+cd "${ROOT_DIR}"
+go test -tags=e2e -v -count=1 ./tests/e2e/operations/...

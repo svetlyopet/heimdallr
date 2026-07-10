@@ -144,7 +144,7 @@ See [`tests/awx-output-job.yaml`](tests/awx-output-job.yaml).
 3. `PUT /api/v1/server/{id}` — attach additional orphan agents
 4. Nested routes: `GET` / `DELETE /api/v1/server/{id}/agent/{agent_id}`; global list/create: `GET` / `POST /api/v1/agent`; filter unassigned: `GET /api/v1/agent?unassigned=true`
 
-Shell E2E: [`tests/e2e/server-agent/`](tests/e2e/server-agent/).
+Go E2E: [`tests/e2e/fleet/`](tests/e2e/fleet/).
 
 ## Web UI
 
@@ -175,18 +175,18 @@ make test-integration     # In-process API integration tests
 make lint-api             # fmt + golangci-lint
 make govulncheck          # vulnerability scan (also in CI)
 make build                # Web + API binary
-make e2e                  # All E2E suites (operations + compliance + server-agent)
+make e2e                  # All E2E suites (operations + compliance + fleet)
 make e2e-operations       # Ansible job lifecycle
 make e2e-compliance       # Release/report push
-make e2e-server-agent     # Server–agent attach/detach flow
+make e2e-fleet            # Server–agent attach/detach flow
 make help                 # Full target list
 ```
 
-E2E prerequisites: Docker, `jq`, and Ansible (operations flow only). Shell-based suites live under [`tests/e2e/`](tests/e2e/); external CI and Ansible templates under [`tests/`](tests/).
+E2E prerequisites: Docker and Ansible (operations flow only). Go E2E tests live under [`tests/e2e/`](tests/e2e/) with shared flows in [`tests/flows/`](tests/flows/); external CI and Ansible templates under [`tests/`](tests/).
 
 ## CI
 
-GitHub Actions (push/PR to `main`/`master`) runs unit tests, `lint-api` + `govulncheck`, integration tests, then three parallel Docker E2E jobs: operations, compliance, and server-agent.
+GitHub Actions (push/PR to `main`/`master`) runs unit tests, `lint-api` + `govulncheck`, integration tests, then three parallel Docker E2E jobs: operations, compliance, and fleet.
 
 ## Project layout
 

@@ -137,12 +137,12 @@ e2e-operations-run: ## Run operations E2E scripts (stack must already be up)
 	@HEIMDALLR_PASSWORD=e2e-test-password ./tests/e2e/operations/run.sh
 
 .PHONY: e2e-compliance-run
-e2e-compliance-run: ## Run compliance E2E scripts (stack must already be up)
-	@HEIMDALLR_PASSWORD=e2e-test-password ./tests/e2e/compliance/run.sh
+e2e-compliance-run: ## Run compliance E2E tests (stack must already be up)
+	@HEIMDALLR_PASSWORD=e2e-test-password go test -tags=e2e -v -count=1 ./tests/e2e/compliance/...
 
-.PHONY: e2e-server-agent-run
-e2e-server-agent-run: ## Run server-agent E2E scripts (stack must already be up)
-	@HEIMDALLR_PASSWORD=e2e-test-password ./tests/e2e/server-agent/run.sh
+.PHONY: e2e-fleet-run
+e2e-fleet-run: ## Run fleet E2E tests (stack must already be up)
+	@HEIMDALLR_PASSWORD=e2e-test-password go test -tags=e2e -v -count=1 ./tests/e2e/fleet/...
 
 .PHONY: e2e-operations
 e2e-operations: e2e-up e2e-operations-run ## Run operations E2E (Ansible job flow)
@@ -150,11 +150,11 @@ e2e-operations: e2e-up e2e-operations-run ## Run operations E2E (Ansible job flo
 .PHONY: e2e-compliance
 e2e-compliance: e2e-up e2e-compliance-run ## Run compliance E2E (release/report flow)
 
-.PHONY: e2e-server-agent
-e2e-server-agent: e2e-up e2e-server-agent-run ## Run server-agent E2E
+.PHONY: e2e-fleet
+e2e-fleet: e2e-up e2e-fleet-run ## Run fleet E2E
 
 .PHONY: e2e
-e2e: e2e-operations e2e-compliance e2e-server-agent e2e-down ## Run all E2E suites
+e2e: e2e-operations e2e-compliance e2e-fleet e2e-down ## Run all E2E suites
 
 .PHONY: build-web
 build-web: out-web ## Build web assets

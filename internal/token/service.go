@@ -116,8 +116,13 @@ func (s service) Authenticate(ctx context.Context, plainToken string) (authapi.A
 		authRoles = append(authRoles, authapi.AuthRole(role))
 	}
 
+	userID := apiToken.ID.String()
+	if apiToken.CreatedBy != nil {
+		userID = apiToken.CreatedBy.String()
+	}
+
 	return authapi.AuthUser{
-		Id:       apiToken.ID.String(),
+		Id:       userID,
 		Username: "token:" + apiToken.Name,
 		Email:    "token@heimdallr.local",
 		Roles:    authRoles,
