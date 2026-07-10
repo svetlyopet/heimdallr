@@ -10,6 +10,8 @@ ZAP_IMAGE="${ZAP_IMAGE:-ghcr.io/zaproxy/zaproxy:stable}"
 ZAP_FAIL_ON_WARN="${ZAP_FAIL_ON_WARN:-false}"
 
 mkdir -p "${ZAP_WORKDIR}"
+chmod a+rwx "${ZAP_WORKDIR}"
+rm -f "${ZAP_WORKDIR}/zap-report.html" "${ZAP_WORKDIR}/zap-report.json"
 
 echo "Waiting for Heimdallr at ${HEIMDALLR_URL}..."
 "${BASH_SOURCE%/*}/wait-for-health.sh"
