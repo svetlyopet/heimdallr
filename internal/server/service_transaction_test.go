@@ -6,10 +6,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
-	"github.com/svetlyopet/heimdallr/internal/agent"
 	"github.com/svetlyopet/heimdallr/internal/server"
 	"github.com/svetlyopet/heimdallr/internal/server/api"
 	"github.com/svetlyopet/heimdallr/internal/testutil"
+	"github.com/svetlyopet/heimdallr/modules/agent"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )

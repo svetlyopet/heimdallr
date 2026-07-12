@@ -3,7 +3,7 @@ generate:
   models: true
   gin-server: true
   strict-server: true
-output: internal/application/api/api.gen.go
+output: modules/application/api/api.gen.go
 output-options:
   user-templates:
     strict/strict-gin.tmpl: ./api/oapi-codegen/templates/strict-gin.tmpl

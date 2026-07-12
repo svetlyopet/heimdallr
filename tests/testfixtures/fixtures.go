@@ -6,11 +6,11 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
-	"github.com/svetlyopet/heimdallr/internal/application"
-	"github.com/svetlyopet/heimdallr/internal/automation"
 	"github.com/svetlyopet/heimdallr/internal/database/model"
-	"github.com/svetlyopet/heimdallr/internal/provider"
-	"github.com/svetlyopet/heimdallr/internal/release"
+	"github.com/svetlyopet/heimdallr/modules/application"
+	"github.com/svetlyopet/heimdallr/modules/automation"
+	"github.com/svetlyopet/heimdallr/modules/provider"
+	"github.com/svetlyopet/heimdallr/modules/release"
 	"gorm.io/gorm"
 )
 
