@@ -53,6 +53,22 @@ func (h handler) Login(ctx context.Context, request api.LoginRequestObject) (api
 	}, nil
 }
 
+func (h handler) Logout(ctx context.Context, _ api.LogoutRequestObject) (api.LogoutResponseObject, error) {
+	_, credential, err := AuthenticationFromContext(ctx)
+	if err != nil {
+		return api.Logout204Response{}, nil
+	}
+
+	err = h.tokenService.RevokeSessionToken(ctx, credential)
+	if err != nil {
+		return api.Logout500JSONResponse{
+			InternalServerErrorJSONResponse: api.InternalServerErrorJSONResponse{Error: "failed to revoke session token"},
+		}, nil
+	}
+
+	return api.Logout204Response{}, nil
+}
+
 func (h handler) ListUsers(ctx context.Context, _ api.ListUsersRequestObject) (api.ListUsersResponseObject, error) {
 	users, err := h.service.List(ctx)
 	if err != nil {

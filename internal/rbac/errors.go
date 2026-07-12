@@ -3,18 +3,24 @@ package rbac
 import "errors"
 
 var (
-	ErrInsufficientScope = errors.New("insufficient scope")
-	ErrInsufficientRole  = errors.New("insufficient role")
-	ErrUnauthorized      = errors.New("invalid credentials")
+	ErrInsufficientScope   = errors.New("insufficient scope")
+	ErrInsufficientRole    = errors.New("insufficient role")
+	ErrUnauthorized        = errors.New("invalid credentials")
+	ErrPolicyNotConfigured = errors.New("authorization policy not configured")
 )
 
 type HTTPError struct {
 	Status  int
 	Message string
+	Err     error
 }
 
 func (e *HTTPError) Error() string {
 	return e.Message
+}
+
+func (e *HTTPError) Unwrap() error {
+	return e.Err
 }
 
 func unauthorizedError() error {

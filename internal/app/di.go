@@ -42,6 +42,12 @@ func provideLoginRateLimiter(i do.Injector) (*auth.LoginRateLimiter, error) {
 }
 
 func provideApp(i do.Injector) (*App, error) {
+	if err := ValidatePolicies(); err != nil {
+		return nil, err
+	}
+
+	cfg := do.MustInvoke[*config.AppConfig](i)
+
 	return &App{
 		db:     do.MustInvoke[*gorm.DB](i),
 		logger: do.MustInvoke[*logger.Logger](i),
@@ -70,7 +76,13 @@ func provideApp(i do.Injector) (*App, error) {
 		authService:      do.MustInvoke[auth.Service](i),
 		authHandler:      do.MustInvoke[auth.Handler](i),
 		loginRateLimiter: do.MustInvoke[*auth.LoginRateLimiter](i),
-		authorizer:       do.MustInvoke[rbac.Authorizer](i),
+		authCookieConfig: auth.CookieConfig{
+			SessionCookieName: cfg.Auth.SessionCookieName,
+			CSRFCookieName:    cfg.Auth.CSRFCookieName,
+			Secure:            cfg.Auth.CookieSecure,
+			SessionTTL:        cfg.Auth.SessionTokenTTL,
+		},
+		authorizer: do.MustInvoke[rbac.Authorizer](i),
 
 		tokenService: do.MustInvoke[token.Service](i),
 		tokenHandler: do.MustInvoke[token.Handler](i),

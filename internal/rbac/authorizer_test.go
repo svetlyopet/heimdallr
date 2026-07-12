@@ -1,8 +1,10 @@
 package rbac_test
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -77,6 +79,82 @@ func TestStrictScopeMiddleware(t *testing.T) {
 	var httpErr *rbac.HTTPError
 	require.ErrorAs(t, err, &httpErr)
 	require.Equal(t, 403, httpErr.Status)
+}
+
+func TestStrictScopeMiddlewareAllowsKnownOperationWithScope(t *testing.T) {
+	t.Parallel()
+	gin.SetMode(gin.TestMode)
+
+	called := false
+	handler := func(_ *gin.Context, _ any) (any, error) {
+		called = true
+		return "ok", nil
+	}
+	wrapped := rbac.StrictScopeMiddleware(
+		rbac.NewAuthorizer(),
+		map[string]string{"CreateApplication": rbac.ScopeApplicationWrite},
+	)(handler, "CreateApplication")
+
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Set("auth.user", authapi.AuthUser{
+		Roles: []authapi.AuthRole{authapi.AuthRole(rbac.ScopeApplicationWrite)},
+	})
+
+	response, err := wrapped(ctx, nil)
+
+	require.NoError(t, err)
+	require.True(t, called)
+	require.Equal(t, "ok", response)
+}
+
+func TestStrictScopeMiddlewareRejectsUnknownOperation(t *testing.T) {
+	t.Parallel()
+	gin.SetMode(gin.TestMode)
+
+	called := false
+	handler := func(_ *gin.Context, _ any) (any, error) {
+		called = true
+		return "ok", nil
+	}
+	wrapped := rbac.StrictScopeMiddleware(rbac.NewAuthorizer(), nil)(handler, "UnknownOperation")
+
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/", nil)
+	_, err := wrapped(ctx, nil)
+
+	require.ErrorIs(t, err, rbac.ErrPolicyNotConfigured)
+	require.False(t, called)
+	var httpErr *rbac.HTTPError
+	require.ErrorAs(t, err, &httpErr)
+	require.Equal(t, http.StatusInternalServerError, httpErr.Status)
+	require.Equal(t, http.StatusText(http.StatusInternalServerError), httpErr.Message)
+}
+
+func TestValidatePolicyCompleteness(t *testing.T) {
+	t.Parallel()
+
+	type strictInterface interface {
+		Protected()
+		Public()
+	}
+	interfaceType := reflect.TypeFor[strictInterface]()
+
+	require.NoError(t, rbac.ValidatePolicyCompleteness(
+		interfaceType,
+		map[string]string{"Protected": rbac.ScopeRead},
+		"Public",
+	))
+
+	err := rbac.ValidatePolicyCompleteness(interfaceType, nil, "Public")
+	require.ErrorIs(t, err, rbac.ErrPolicyNotConfigured)
+
+	err = rbac.ValidatePolicyCompleteness(
+		interfaceType,
+		map[string]string{"Protected": rbac.ScopeRead, "Stale": rbac.ScopeRead},
+		"Public",
+	)
+	require.Error(t, err)
+	require.False(t, errors.Is(err, rbac.ErrPolicyNotConfigured))
 }
 
 func TestScopesToRoles(t *testing.T) {

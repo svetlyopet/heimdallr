@@ -17,7 +17,8 @@ import (
 )
 
 const (
-	BearerAuthScopes bearerAuthContextKey = "BearerAuth.Scopes"
+	BearerAuthScopes    bearerAuthContextKey    = "BearerAuth.Scopes"
+	SessionCookieScopes sessionCookieContextKey = "SessionCookie.Scopes"
 )
 
 // Agent defines model for Agent.
@@ -132,6 +133,9 @@ type NotFound = ErrorResponse
 // bearerAuthContextKey is the context key for BearerAuth security scheme
 type bearerAuthContextKey string
 
+// sessionCookieContextKey is the context key for SessionCookie security scheme
+type sessionCookieContextKey string
+
 // ListGlobalAgentsParams defines parameters for ListGlobalAgents.
 type ListGlobalAgentsParams struct {
 	Page  *Page  `form:"page,omitempty" json:"page,omitempty"`
@@ -213,6 +217,8 @@ func (siw *ServerInterfaceWrapper) ListGlobalAgents(c *gin.Context) {
 
 	c.Set(string(BearerAuthScopes), []string{})
 
+	c.Set(string(SessionCookieScopes), []string{})
+
 	// Parameter object where we will unmarshal all parameters from the context
 	var params ListGlobalAgentsParams
 
@@ -271,6 +277,8 @@ func (siw *ServerInterfaceWrapper) CreateUnassignedAgent(c *gin.Context) {
 
 	c.Set(string(BearerAuthScopes), []string{})
 
+	c.Set(string(SessionCookieScopes), []string{})
+
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 		if c.IsAborted() {
@@ -297,6 +305,8 @@ func (siw *ServerInterfaceWrapper) DeleteGlobalAgent(c *gin.Context) {
 	}
 
 	c.Set(string(BearerAuthScopes), []string{})
+
+	c.Set(string(SessionCookieScopes), []string{})
 
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
@@ -325,6 +335,8 @@ func (siw *ServerInterfaceWrapper) GetGlobalAgent(c *gin.Context) {
 
 	c.Set(string(BearerAuthScopes), []string{})
 
+	c.Set(string(SessionCookieScopes), []string{})
+
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 		if c.IsAborted() {
@@ -351,6 +363,8 @@ func (siw *ServerInterfaceWrapper) ListAgentServers(c *gin.Context) {
 	}
 
 	c.Set(string(BearerAuthScopes), []string{})
+
+	c.Set(string(SessionCookieScopes), []string{})
 
 	// Parameter object where we will unmarshal all parameters from the context
 	var params ListAgentServersParams
@@ -398,6 +412,8 @@ func (siw *ServerInterfaceWrapper) ListAgents(c *gin.Context) {
 
 	c.Set(string(BearerAuthScopes), []string{})
 
+	c.Set(string(SessionCookieScopes), []string{})
+
 	// Parameter object where we will unmarshal all parameters from the context
 	var params ListAgentsParams
 
@@ -444,6 +460,8 @@ func (siw *ServerInterfaceWrapper) CreateAgent(c *gin.Context) {
 
 	c.Set(string(BearerAuthScopes), []string{})
 
+	c.Set(string(SessionCookieScopes), []string{})
+
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 		if c.IsAborted() {
@@ -480,6 +498,8 @@ func (siw *ServerInterfaceWrapper) DetachAgent(c *gin.Context) {
 
 	c.Set(string(BearerAuthScopes), []string{})
 
+	c.Set(string(SessionCookieScopes), []string{})
+
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 		if c.IsAborted() {
@@ -515,6 +535,8 @@ func (siw *ServerInterfaceWrapper) GetAgent(c *gin.Context) {
 	}
 
 	c.Set(string(BearerAuthScopes), []string{})
+
+	c.Set(string(SessionCookieScopes), []string{})
 
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
@@ -1208,34 +1230,38 @@ type StrictGinServerOptions struct {
 	ResponseErrorHandlerFunc func(ctx *gin.Context, err error)
 }
 
+func defaultStrictGinRequestErrorHandler(ctx *gin.Context, err error) {
+	if _, ok := err.(*http.MaxBytesError); ok {
+		ctx.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "request body too large"})
+		return
+	}
+	ctx.JSON(http.StatusBadRequest, gin.H{"msg": err.Error()})
+}
+
 func NewStrictHandler(ssi StrictServerInterface, middlewares []StrictMiddlewareFunc) ServerInterface {
 	return &strictHandler{ssi: ssi, middlewares: middlewares, options: StrictGinServerOptions{
-		RequestErrorHandlerFunc: func(ctx *gin.Context, err error) {
-			ctx.JSON(http.StatusBadRequest, gin.H{"msg": err.Error()})
-		},
+		RequestErrorHandlerFunc: defaultStrictGinRequestErrorHandler,
 		HandlerErrorFunc: func(ctx *gin.Context, err error) {
-			ctx.JSON(http.StatusInternalServerError, gin.H{"msg": err.Error()})
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": http.StatusText(http.StatusInternalServerError)})
 		},
 		ResponseErrorHandlerFunc: func(ctx *gin.Context, err error) {
-			ctx.JSON(http.StatusInternalServerError, gin.H{"msg": err.Error()})
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": http.StatusText(http.StatusInternalServerError)})
 		},
 	}}
 }
 
 func NewStrictHandlerWithOptions(ssi StrictServerInterface, middlewares []StrictMiddlewareFunc, options StrictGinServerOptions) ServerInterface {
 	if options.RequestErrorHandlerFunc == nil {
-		options.RequestErrorHandlerFunc = func(ctx *gin.Context, err error) {
-			ctx.JSON(http.StatusBadRequest, gin.H{"msg": err.Error()})
-		}
+		options.RequestErrorHandlerFunc = defaultStrictGinRequestErrorHandler
 	}
 	if options.HandlerErrorFunc == nil {
 		options.HandlerErrorFunc = func(ctx *gin.Context, err error) {
-			ctx.JSON(http.StatusInternalServerError, gin.H{"msg": err.Error()})
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": http.StatusText(http.StatusInternalServerError)})
 		}
 	}
 	if options.ResponseErrorHandlerFunc == nil {
 		options.ResponseErrorHandlerFunc = func(ctx *gin.Context, err error) {
-			ctx.JSON(http.StatusInternalServerError, gin.H{"msg": err.Error()})
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": http.StatusText(http.StatusInternalServerError)})
 		}
 	}
 	return &strictHandler{ssi: ssi, middlewares: middlewares, options: options}
@@ -1254,7 +1280,7 @@ func (sh *strictHandler) ListGlobalAgents(ctx *gin.Context, params ListGlobalAge
 	request.Params = params
 
 	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
-		return sh.ssi.ListGlobalAgents(ctx, request.(ListGlobalAgentsRequestObject))
+		return sh.ssi.ListGlobalAgents(ctx.Request.Context(), request.(ListGlobalAgentsRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
 		handler = middleware(handler, "ListGlobalAgents")
@@ -1285,7 +1311,7 @@ func (sh *strictHandler) CreateUnassignedAgent(ctx *gin.Context) {
 	request.Body = &body
 
 	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
-		return sh.ssi.CreateUnassignedAgent(ctx, request.(CreateUnassignedAgentRequestObject))
+		return sh.ssi.CreateUnassignedAgent(ctx.Request.Context(), request.(CreateUnassignedAgentRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
 		handler = middleware(handler, "CreateUnassignedAgent")
@@ -1311,7 +1337,7 @@ func (sh *strictHandler) DeleteGlobalAgent(ctx *gin.Context, agentId AgentIDPath
 	request.AgentId = agentId
 
 	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
-		return sh.ssi.DeleteGlobalAgent(ctx, request.(DeleteGlobalAgentRequestObject))
+		return sh.ssi.DeleteGlobalAgent(ctx.Request.Context(), request.(DeleteGlobalAgentRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
 		handler = middleware(handler, "DeleteGlobalAgent")
@@ -1337,7 +1363,7 @@ func (sh *strictHandler) GetGlobalAgent(ctx *gin.Context, agentId AgentIDPath) {
 	request.AgentId = agentId
 
 	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
-		return sh.ssi.GetGlobalAgent(ctx, request.(GetGlobalAgentRequestObject))
+		return sh.ssi.GetGlobalAgent(ctx.Request.Context(), request.(GetGlobalAgentRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
 		handler = middleware(handler, "GetGlobalAgent")
@@ -1364,7 +1390,7 @@ func (sh *strictHandler) ListAgentServers(ctx *gin.Context, agentId AgentIDPath,
 	request.Params = params
 
 	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
-		return sh.ssi.ListAgentServers(ctx, request.(ListAgentServersRequestObject))
+		return sh.ssi.ListAgentServers(ctx.Request.Context(), request.(ListAgentServersRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
 		handler = middleware(handler, "ListAgentServers")
@@ -1391,7 +1417,7 @@ func (sh *strictHandler) ListAgents(ctx *gin.Context, serverId ServerIDPath, par
 	request.Params = params
 
 	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
-		return sh.ssi.ListAgents(ctx, request.(ListAgentsRequestObject))
+		return sh.ssi.ListAgents(ctx.Request.Context(), request.(ListAgentsRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
 		handler = middleware(handler, "ListAgents")
@@ -1424,7 +1450,7 @@ func (sh *strictHandler) CreateAgent(ctx *gin.Context, serverId ServerIDPath) {
 	request.Body = &body
 
 	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
-		return sh.ssi.CreateAgent(ctx, request.(CreateAgentRequestObject))
+		return sh.ssi.CreateAgent(ctx.Request.Context(), request.(CreateAgentRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
 		handler = middleware(handler, "CreateAgent")
@@ -1451,7 +1477,7 @@ func (sh *strictHandler) DetachAgent(ctx *gin.Context, serverId ServerIDPath, ag
 	request.AgentId = agentId
 
 	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
-		return sh.ssi.DetachAgent(ctx, request.(DetachAgentRequestObject))
+		return sh.ssi.DetachAgent(ctx.Request.Context(), request.(DetachAgentRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
 		handler = middleware(handler, "DetachAgent")
@@ -1478,7 +1504,7 @@ func (sh *strictHandler) GetAgent(ctx *gin.Context, serverId ServerIDPath, agent
 	request.AgentId = agentId
 
 	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
-		return sh.ssi.GetAgent(ctx, request.(GetAgentRequestObject))
+		return sh.ssi.GetAgent(ctx.Request.Context(), request.(GetAgentRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
 		handler = middleware(handler, "GetAgent")

@@ -16,7 +16,8 @@ import (
 )
 
 const (
-	BearerAuthScopes bearerAuthContextKey = "BearerAuth.Scopes"
+	BearerAuthScopes    bearerAuthContextKey    = "BearerAuth.Scopes"
+	SessionCookieScopes sessionCookieContextKey = "SessionCookie.Scopes"
 )
 
 // AnalyticsAutomationDataResponse defines model for AnalyticsAutomationDataResponse.
@@ -111,6 +112,9 @@ type Unauthorized = ErrorResponse
 // bearerAuthContextKey is the context key for BearerAuth security scheme
 type bearerAuthContextKey string
 
+// sessionCookieContextKey is the context key for SessionCookie security scheme
+type sessionCookieContextKey string
+
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
 	// Get automation analytics overview
@@ -137,6 +141,8 @@ type MiddlewareFunc func(c *gin.Context)
 func (siw *ServerInterfaceWrapper) GetAutomationAnalyticsOverview(c *gin.Context) {
 
 	c.Set(string(BearerAuthScopes), []string{})
+
+	c.Set(string(SessionCookieScopes), []string{})
 
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
@@ -165,6 +171,8 @@ func (siw *ServerInterfaceWrapper) GetAutomationAnalyticsOverviewByID(c *gin.Con
 
 	c.Set(string(BearerAuthScopes), []string{})
 
+	c.Set(string(SessionCookieScopes), []string{})
+
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 		if c.IsAborted() {
@@ -179,6 +187,8 @@ func (siw *ServerInterfaceWrapper) GetAutomationAnalyticsOverviewByID(c *gin.Con
 func (siw *ServerInterfaceWrapper) GetComplianceAnalyticsOverview(c *gin.Context) {
 
 	c.Set(string(BearerAuthScopes), []string{})
+
+	c.Set(string(SessionCookieScopes), []string{})
 
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
@@ -415,34 +425,38 @@ type StrictGinServerOptions struct {
 	ResponseErrorHandlerFunc func(ctx *gin.Context, err error)
 }
 
+func defaultStrictGinRequestErrorHandler(ctx *gin.Context, err error) {
+	if _, ok := err.(*http.MaxBytesError); ok {
+		ctx.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "request body too large"})
+		return
+	}
+	ctx.JSON(http.StatusBadRequest, gin.H{"msg": err.Error()})
+}
+
 func NewStrictHandler(ssi StrictServerInterface, middlewares []StrictMiddlewareFunc) ServerInterface {
 	return &strictHandler{ssi: ssi, middlewares: middlewares, options: StrictGinServerOptions{
-		RequestErrorHandlerFunc: func(ctx *gin.Context, err error) {
-			ctx.JSON(http.StatusBadRequest, gin.H{"msg": err.Error()})
-		},
+		RequestErrorHandlerFunc: defaultStrictGinRequestErrorHandler,
 		HandlerErrorFunc: func(ctx *gin.Context, err error) {
-			ctx.JSON(http.StatusInternalServerError, gin.H{"msg": err.Error()})
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": http.StatusText(http.StatusInternalServerError)})
 		},
 		ResponseErrorHandlerFunc: func(ctx *gin.Context, err error) {
-			ctx.JSON(http.StatusInternalServerError, gin.H{"msg": err.Error()})
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": http.StatusText(http.StatusInternalServerError)})
 		},
 	}}
 }
 
 func NewStrictHandlerWithOptions(ssi StrictServerInterface, middlewares []StrictMiddlewareFunc, options StrictGinServerOptions) ServerInterface {
 	if options.RequestErrorHandlerFunc == nil {
-		options.RequestErrorHandlerFunc = func(ctx *gin.Context, err error) {
-			ctx.JSON(http.StatusBadRequest, gin.H{"msg": err.Error()})
-		}
+		options.RequestErrorHandlerFunc = defaultStrictGinRequestErrorHandler
 	}
 	if options.HandlerErrorFunc == nil {
 		options.HandlerErrorFunc = func(ctx *gin.Context, err error) {
-			ctx.JSON(http.StatusInternalServerError, gin.H{"msg": err.Error()})
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": http.StatusText(http.StatusInternalServerError)})
 		}
 	}
 	if options.ResponseErrorHandlerFunc == nil {
 		options.ResponseErrorHandlerFunc = func(ctx *gin.Context, err error) {
-			ctx.JSON(http.StatusInternalServerError, gin.H{"msg": err.Error()})
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": http.StatusText(http.StatusInternalServerError)})
 		}
 	}
 	return &strictHandler{ssi: ssi, middlewares: middlewares, options: options}
@@ -459,7 +473,7 @@ func (sh *strictHandler) GetAutomationAnalyticsOverview(ctx *gin.Context) {
 	var request GetAutomationAnalyticsOverviewRequestObject
 
 	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
-		return sh.ssi.GetAutomationAnalyticsOverview(ctx, request.(GetAutomationAnalyticsOverviewRequestObject))
+		return sh.ssi.GetAutomationAnalyticsOverview(ctx.Request.Context(), request.(GetAutomationAnalyticsOverviewRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
 		handler = middleware(handler, "GetAutomationAnalyticsOverview")
@@ -485,7 +499,7 @@ func (sh *strictHandler) GetAutomationAnalyticsOverviewByID(ctx *gin.Context, au
 	request.AutomationId = automationId
 
 	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
-		return sh.ssi.GetAutomationAnalyticsOverviewByID(ctx, request.(GetAutomationAnalyticsOverviewByIDRequestObject))
+		return sh.ssi.GetAutomationAnalyticsOverviewByID(ctx.Request.Context(), request.(GetAutomationAnalyticsOverviewByIDRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
 		handler = middleware(handler, "GetAutomationAnalyticsOverviewByID")
@@ -509,7 +523,7 @@ func (sh *strictHandler) GetComplianceAnalyticsOverview(ctx *gin.Context) {
 	var request GetComplianceAnalyticsOverviewRequestObject
 
 	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
-		return sh.ssi.GetComplianceAnalyticsOverview(ctx, request.(GetComplianceAnalyticsOverviewRequestObject))
+		return sh.ssi.GetComplianceAnalyticsOverview(ctx.Request.Context(), request.(GetComplianceAnalyticsOverviewRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
 		handler = middleware(handler, "GetComplianceAnalyticsOverview")

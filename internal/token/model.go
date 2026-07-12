@@ -19,7 +19,7 @@ type APIToken struct {
 	TokenHash string     `gorm:"type:char(64);not null;uniqueIndex" json:"-"`
 	Scopes    []string   `gorm:"serializer:json;type:text;not null" json:"scopes"`
 	Kind      string     `gorm:"type:varchar(32);not null;default:api" json:"kind"`
-	ExpiresAt *time.Time `json:"expires_at,omitempty"`
+	ExpiresAt *time.Time `gorm:"not null" json:"expires_at,omitempty"`
 	CreatedBy *uuid.UUID `gorm:"type:uuid" json:"created_by"`
 	model.Timestamp
 }

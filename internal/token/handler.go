@@ -36,17 +36,15 @@ func (h handler) CreateToken(ctx context.Context, request api.CreateTokenRequest
 	}
 
 	var createdBy *uuid.UUID
-	if gctx, ok := auth.GinContextFrom(ctx); ok {
-		if user, err := auth.UserFromGinContext(gctx); err == nil {
-			if parsed, parseErr := uuid.Parse(user.Id); parseErr == nil {
-				createdBy = &parsed
-			}
+	if user, userErr := auth.UserFromContext(ctx); userErr == nil {
+		if parsed, parseErr := uuid.Parse(user.Id); parseErr == nil {
+			createdBy = &parsed
 		}
 	}
 
 	token, err := h.service.Create(ctx, *request.Body, createdBy)
 	if err != nil {
-		if errors.Is(err, ErrInvalidScopes) {
+		if errors.Is(err, ErrInvalidScopes) || errors.Is(err, ErrInvalidTTL) {
 			return api.CreateToken400JSONResponse{
 				BadRequestJSONResponse: api.BadRequestJSONResponse{Error: tokenErrorMessage(err, "invalid scopes")},
 			}, nil

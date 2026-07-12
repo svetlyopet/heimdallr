@@ -16,7 +16,8 @@ import (
 )
 
 const (
-	BearerAuthScopes bearerAuthContextKey = "BearerAuth.Scopes"
+	BearerAuthScopes    bearerAuthContextKey    = "BearerAuth.Scopes"
+	SessionCookieScopes sessionCookieContextKey = "SessionCookie.Scopes"
 )
 
 // Defines values for JobStatus.
@@ -54,10 +55,12 @@ type Job struct {
 	Id         string       `json:"id"`
 	Location   string       `json:"location"`
 	Metadata   *JobMetadata `json:"metadata,omitempty"`
-	Output     *JobOutput   `json:"output,omitempty"`
-	Provider   string       `json:"provider"`
-	Status     JobStatus    `json:"status"`
-	Url        URL          `json:"url"`
+
+	// Output Base64-encoded output. Decoded content is limited to 4 MiB by default.
+	Output   *JobOutput `json:"output,omitempty"`
+	Provider string     `json:"provider"`
+	Status   JobStatus  `json:"status"`
+	Url      URL        `json:"url"`
 }
 
 // JobCreateRequest defines model for JobCreateRequest.
@@ -65,9 +68,11 @@ type JobCreateRequest struct {
 	Id       string       `json:"id"`
 	Location string       `json:"location"`
 	Metadata *JobMetadata `json:"metadata,omitempty"`
-	Output   *JobOutput   `json:"output,omitempty"`
-	Status   JobStatus    `json:"status"`
-	Url      URL          `json:"url"`
+
+	// Output Base64-encoded output. Decoded content is limited to 4 MiB by default.
+	Output *JobOutput `json:"output,omitempty"`
+	Status JobStatus  `json:"status"`
+	Url    URL        `json:"url"`
 }
 
 // JobDataResponse defines model for JobDataResponse.
@@ -84,7 +89,7 @@ type JobListResponse struct {
 // JobMetadata defines model for JobMetadata.
 type JobMetadata map[string]interface{}
 
-// JobOutput defines model for JobOutput.
+// JobOutput Base64-encoded output. Decoded content is limited to 4 MiB by default.
 type JobOutput = string
 
 // JobStatus defines model for JobStatus.
@@ -93,8 +98,10 @@ type JobStatus string
 // JobUpdateRequest defines model for JobUpdateRequest.
 type JobUpdateRequest struct {
 	Metadata *JobMetadata `json:"metadata,omitempty"`
-	Output   *JobOutput   `json:"output,omitempty"`
-	Status   JobStatus    `json:"status"`
+
+	// Output Base64-encoded output. Decoded content is limited to 4 MiB by default.
+	Output *JobOutput `json:"output,omitempty"`
+	Status JobStatus  `json:"status"`
 }
 
 // Pagination defines model for Pagination.
@@ -131,6 +138,9 @@ type NotFound = ErrorResponse
 
 // bearerAuthContextKey is the context key for BearerAuth security scheme
 type bearerAuthContextKey string
+
+// sessionCookieContextKey is the context key for SessionCookie security scheme
+type sessionCookieContextKey string
 
 // ListAutomationJobsParams defines parameters for ListAutomationJobs.
 type ListAutomationJobsParams struct {
@@ -186,6 +196,8 @@ func (siw *ServerInterfaceWrapper) ListAutomationJobs(c *gin.Context) {
 
 	c.Set(string(BearerAuthScopes), []string{})
 
+	c.Set(string(SessionCookieScopes), []string{})
+
 	// Parameter object where we will unmarshal all parameters from the context
 	var params ListAutomationJobsParams
 
@@ -232,6 +244,8 @@ func (siw *ServerInterfaceWrapper) CreateAutomationJob(c *gin.Context) {
 
 	c.Set(string(BearerAuthScopes), []string{})
 
+	c.Set(string(SessionCookieScopes), []string{})
+
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 		if c.IsAborted() {
@@ -268,6 +282,8 @@ func (siw *ServerInterfaceWrapper) GetAutomationJob(c *gin.Context) {
 
 	c.Set(string(BearerAuthScopes), []string{})
 
+	c.Set(string(SessionCookieScopes), []string{})
+
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 		if c.IsAborted() {
@@ -303,6 +319,8 @@ func (siw *ServerInterfaceWrapper) UpdateAutomationJob(c *gin.Context) {
 	}
 
 	c.Set(string(BearerAuthScopes), []string{})
+
+	c.Set(string(SessionCookieScopes), []string{})
 
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
@@ -656,34 +674,38 @@ type StrictGinServerOptions struct {
 	ResponseErrorHandlerFunc func(ctx *gin.Context, err error)
 }
 
+func defaultStrictGinRequestErrorHandler(ctx *gin.Context, err error) {
+	if _, ok := err.(*http.MaxBytesError); ok {
+		ctx.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "request body too large"})
+		return
+	}
+	ctx.JSON(http.StatusBadRequest, gin.H{"msg": err.Error()})
+}
+
 func NewStrictHandler(ssi StrictServerInterface, middlewares []StrictMiddlewareFunc) ServerInterface {
 	return &strictHandler{ssi: ssi, middlewares: middlewares, options: StrictGinServerOptions{
-		RequestErrorHandlerFunc: func(ctx *gin.Context, err error) {
-			ctx.JSON(http.StatusBadRequest, gin.H{"msg": err.Error()})
-		},
+		RequestErrorHandlerFunc: defaultStrictGinRequestErrorHandler,
 		HandlerErrorFunc: func(ctx *gin.Context, err error) {
-			ctx.JSON(http.StatusInternalServerError, gin.H{"msg": err.Error()})
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": http.StatusText(http.StatusInternalServerError)})
 		},
 		ResponseErrorHandlerFunc: func(ctx *gin.Context, err error) {
-			ctx.JSON(http.StatusInternalServerError, gin.H{"msg": err.Error()})
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": http.StatusText(http.StatusInternalServerError)})
 		},
 	}}
 }
 
 func NewStrictHandlerWithOptions(ssi StrictServerInterface, middlewares []StrictMiddlewareFunc, options StrictGinServerOptions) ServerInterface {
 	if options.RequestErrorHandlerFunc == nil {
-		options.RequestErrorHandlerFunc = func(ctx *gin.Context, err error) {
-			ctx.JSON(http.StatusBadRequest, gin.H{"msg": err.Error()})
-		}
+		options.RequestErrorHandlerFunc = defaultStrictGinRequestErrorHandler
 	}
 	if options.HandlerErrorFunc == nil {
 		options.HandlerErrorFunc = func(ctx *gin.Context, err error) {
-			ctx.JSON(http.StatusInternalServerError, gin.H{"msg": err.Error()})
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": http.StatusText(http.StatusInternalServerError)})
 		}
 	}
 	if options.ResponseErrorHandlerFunc == nil {
 		options.ResponseErrorHandlerFunc = func(ctx *gin.Context, err error) {
-			ctx.JSON(http.StatusInternalServerError, gin.H{"msg": err.Error()})
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": http.StatusText(http.StatusInternalServerError)})
 		}
 	}
 	return &strictHandler{ssi: ssi, middlewares: middlewares, options: options}
@@ -703,7 +725,7 @@ func (sh *strictHandler) ListAutomationJobs(ctx *gin.Context, automationId Autom
 	request.Params = params
 
 	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
-		return sh.ssi.ListAutomationJobs(ctx, request.(ListAutomationJobsRequestObject))
+		return sh.ssi.ListAutomationJobs(ctx.Request.Context(), request.(ListAutomationJobsRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
 		handler = middleware(handler, "ListAutomationJobs")
@@ -736,7 +758,7 @@ func (sh *strictHandler) CreateAutomationJob(ctx *gin.Context, automationId Auto
 	request.Body = &body
 
 	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
-		return sh.ssi.CreateAutomationJob(ctx, request.(CreateAutomationJobRequestObject))
+		return sh.ssi.CreateAutomationJob(ctx.Request.Context(), request.(CreateAutomationJobRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
 		handler = middleware(handler, "CreateAutomationJob")
@@ -763,7 +785,7 @@ func (sh *strictHandler) GetAutomationJob(ctx *gin.Context, automationId Automat
 	request.JobId = jobId
 
 	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
-		return sh.ssi.GetAutomationJob(ctx, request.(GetAutomationJobRequestObject))
+		return sh.ssi.GetAutomationJob(ctx.Request.Context(), request.(GetAutomationJobRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
 		handler = middleware(handler, "GetAutomationJob")
@@ -797,7 +819,7 @@ func (sh *strictHandler) UpdateAutomationJob(ctx *gin.Context, automationId Auto
 	request.Body = &body
 
 	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
-		return sh.ssi.UpdateAutomationJob(ctx, request.(UpdateAutomationJobRequestObject))
+		return sh.ssi.UpdateAutomationJob(ctx.Request.Context(), request.(UpdateAutomationJobRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
 		handler = middleware(handler, "UpdateAutomationJob")

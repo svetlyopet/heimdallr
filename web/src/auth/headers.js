@@ -1,20 +1,5 @@
-const TOKEN_STORAGE_KEY = "heimdallr.auth.token";
 const USERNAME_STORAGE_KEY = "heimdallr.auth.username";
-
-// Tokens are stored in localStorage and are readable to any same-origin script.
-// The API CSP reduces XSS risk; httpOnly cookies would be a stronger future option.
-
-export function getStoredToken() {
-    return localStorage.getItem(TOKEN_STORAGE_KEY) ?? "";
-}
-
-export function setStoredToken(token) {
-    localStorage.setItem(TOKEN_STORAGE_KEY, token);
-}
-
-export function clearStoredToken() {
-    localStorage.removeItem(TOKEN_STORAGE_KEY);
-}
+const CSRF_COOKIE_NAME = import.meta.env?.VITE_CSRF_COOKIE_NAME || "heimdallr_csrf";
 
 export function getStoredUsername() {
     return localStorage.getItem(USERNAME_STORAGE_KEY) ?? "";
@@ -28,13 +13,12 @@ export function clearStoredUsername() {
     localStorage.removeItem(USERNAME_STORAGE_KEY);
 }
 
-export function getAuthHeaders() {
-    const token = getStoredToken();
-    if (!token) {
-        return {};
-    }
+export function getCSRFToken() {
+    const prefix = `${encodeURIComponent(CSRF_COOKIE_NAME)}=`;
+    const cookie = document.cookie
+        .split(";")
+        .map((part) => part.trim())
+        .find((part) => part.startsWith(prefix));
 
-    return {
-        Authorization: `Bearer ${token}`,
-    };
+    return cookie ? decodeURIComponent(cookie.slice(prefix.length)) : "";
 }

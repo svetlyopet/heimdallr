@@ -51,6 +51,7 @@ type App struct {
 	authService      auth.Service
 	authHandler      auth.Handler
 	loginRateLimiter *auth.LoginRateLimiter
+	authCookieConfig auth.CookieConfig
 	authorizer       rbac.Authorizer
 
 	tokenService token.Service
@@ -77,11 +78,11 @@ func (a *App) RegisterRoutes(rg *gin.RouterGroup) {
 }
 
 func (a *App) RegisterPublicRoutes(rg *gin.RouterGroup) {
-	auth.RegisterPublicRoutes(rg, a.authHandler, a.loginRateLimiter)
+	auth.RegisterPublicRoutes(rg, a.authHandler, a.loginRateLimiter, a.authCookieConfig)
 }
 
 func (a *App) RegisterProtectedAuthRoutes(rg *gin.RouterGroup) {
-	auth.RegisterProtectedRoutes(rg, a.authHandler, a.authorizer)
+	auth.RegisterProtectedRoutes(rg, a.authHandler, a.authorizer, a.authCookieConfig)
 }
 
 func (a *App) AuthService() auth.Service {

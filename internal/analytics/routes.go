@@ -6,15 +6,15 @@ import (
 	"github.com/svetlyopet/heimdallr/internal/rbac"
 )
 
-func RegisterRoutes(rg *gin.RouterGroup, handler Handler, authorizer rbac.Authorizer) {
-	policies := map[string]string{
-		"GetAutomationAnalyticsOverview":     rbac.ScopeRead,
-		"GetAutomationAnalyticsOverviewByID": rbac.ScopeRead,
-		"GetComplianceAnalyticsOverview":     rbac.ScopeRead,
-	}
+var Policies = map[string]string{
+	"GetAutomationAnalyticsOverview":     rbac.ScopeRead,
+	"GetAutomationAnalyticsOverviewByID": rbac.ScopeRead,
+	"GetComplianceAnalyticsOverview":     rbac.ScopeRead,
+}
 
+func RegisterRoutes(rg *gin.RouterGroup, handler Handler, authorizer rbac.Authorizer) {
 	scopeMiddleware := func(next api.StrictHandlerFunc, operationID string) api.StrictHandlerFunc {
-		return rbac.StrictScopeMiddleware(authorizer, policies)(next, operationID)
+		return rbac.StrictScopeMiddleware(authorizer, Policies)(next, operationID)
 	}
 
 	strictHandler := api.NewStrictHandlerWithOptions(handler, []api.StrictMiddlewareFunc{scopeMiddleware}, api.StrictGinServerOptions{

@@ -17,7 +17,8 @@ import (
 )
 
 const (
-	BearerAuthScopes bearerAuthContextKey = "BearerAuth.Scopes"
+	BearerAuthScopes    bearerAuthContextKey    = "BearerAuth.Scopes"
+	SessionCookieScopes sessionCookieContextKey = "SessionCookie.Scopes"
 )
 
 // Application defines model for Application.
@@ -92,6 +93,9 @@ type Unauthorized = ErrorResponse
 // bearerAuthContextKey is the context key for BearerAuth security scheme
 type bearerAuthContextKey string
 
+// sessionCookieContextKey is the context key for SessionCookie security scheme
+type sessionCookieContextKey string
+
 // ListApplicationsParams defines parameters for ListApplications.
 type ListApplicationsParams struct {
 	Page  *Page  `form:"page,omitempty" json:"page,omitempty"`
@@ -131,6 +135,8 @@ func (siw *ServerInterfaceWrapper) ListApplications(c *gin.Context) {
 
 	c.Set(string(BearerAuthScopes), []string{})
 
+	c.Set(string(SessionCookieScopes), []string{})
+
 	// Parameter object where we will unmarshal all parameters from the context
 	var params ListApplicationsParams
 
@@ -165,6 +171,8 @@ func (siw *ServerInterfaceWrapper) CreateApplication(c *gin.Context) {
 
 	c.Set(string(BearerAuthScopes), []string{})
 
+	c.Set(string(SessionCookieScopes), []string{})
+
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 		if c.IsAborted() {
@@ -191,6 +199,8 @@ func (siw *ServerInterfaceWrapper) GetApplication(c *gin.Context) {
 	}
 
 	c.Set(string(BearerAuthScopes), []string{})
+
+	c.Set(string(SessionCookieScopes), []string{})
 
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
@@ -501,34 +511,38 @@ type StrictGinServerOptions struct {
 	ResponseErrorHandlerFunc func(ctx *gin.Context, err error)
 }
 
+func defaultStrictGinRequestErrorHandler(ctx *gin.Context, err error) {
+	if _, ok := err.(*http.MaxBytesError); ok {
+		ctx.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "request body too large"})
+		return
+	}
+	ctx.JSON(http.StatusBadRequest, gin.H{"msg": err.Error()})
+}
+
 func NewStrictHandler(ssi StrictServerInterface, middlewares []StrictMiddlewareFunc) ServerInterface {
 	return &strictHandler{ssi: ssi, middlewares: middlewares, options: StrictGinServerOptions{
-		RequestErrorHandlerFunc: func(ctx *gin.Context, err error) {
-			ctx.JSON(http.StatusBadRequest, gin.H{"msg": err.Error()})
-		},
+		RequestErrorHandlerFunc: defaultStrictGinRequestErrorHandler,
 		HandlerErrorFunc: func(ctx *gin.Context, err error) {
-			ctx.JSON(http.StatusInternalServerError, gin.H{"msg": err.Error()})
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": http.StatusText(http.StatusInternalServerError)})
 		},
 		ResponseErrorHandlerFunc: func(ctx *gin.Context, err error) {
-			ctx.JSON(http.StatusInternalServerError, gin.H{"msg": err.Error()})
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": http.StatusText(http.StatusInternalServerError)})
 		},
 	}}
 }
 
 func NewStrictHandlerWithOptions(ssi StrictServerInterface, middlewares []StrictMiddlewareFunc, options StrictGinServerOptions) ServerInterface {
 	if options.RequestErrorHandlerFunc == nil {
-		options.RequestErrorHandlerFunc = func(ctx *gin.Context, err error) {
-			ctx.JSON(http.StatusBadRequest, gin.H{"msg": err.Error()})
-		}
+		options.RequestErrorHandlerFunc = defaultStrictGinRequestErrorHandler
 	}
 	if options.HandlerErrorFunc == nil {
 		options.HandlerErrorFunc = func(ctx *gin.Context, err error) {
-			ctx.JSON(http.StatusInternalServerError, gin.H{"msg": err.Error()})
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": http.StatusText(http.StatusInternalServerError)})
 		}
 	}
 	if options.ResponseErrorHandlerFunc == nil {
 		options.ResponseErrorHandlerFunc = func(ctx *gin.Context, err error) {
-			ctx.JSON(http.StatusInternalServerError, gin.H{"msg": err.Error()})
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": http.StatusText(http.StatusInternalServerError)})
 		}
 	}
 	return &strictHandler{ssi: ssi, middlewares: middlewares, options: options}
@@ -547,7 +561,7 @@ func (sh *strictHandler) ListApplications(ctx *gin.Context, params ListApplicati
 	request.Params = params
 
 	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
-		return sh.ssi.ListApplications(ctx, request.(ListApplicationsRequestObject))
+		return sh.ssi.ListApplications(ctx.Request.Context(), request.(ListApplicationsRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
 		handler = middleware(handler, "ListApplications")
@@ -578,7 +592,7 @@ func (sh *strictHandler) CreateApplication(ctx *gin.Context) {
 	request.Body = &body
 
 	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
-		return sh.ssi.CreateApplication(ctx, request.(CreateApplicationRequestObject))
+		return sh.ssi.CreateApplication(ctx.Request.Context(), request.(CreateApplicationRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
 		handler = middleware(handler, "CreateApplication")
@@ -604,7 +618,7 @@ func (sh *strictHandler) GetApplication(ctx *gin.Context, applicationId Applicat
 	request.ApplicationId = applicationId
 
 	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
-		return sh.ssi.GetApplication(ctx, request.(GetApplicationRequestObject))
+		return sh.ssi.GetApplication(ctx.Request.Context(), request.(GetApplicationRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
 		handler = middleware(handler, "GetApplication")

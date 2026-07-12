@@ -5,5 +5,7 @@ generate:
   strict-server: true
 output: internal/analytics/api/api.gen.go
 output-options:
+  user-templates:
+    strict/strict-gin.tmpl: ./api/oapi-codegen/templates/strict-gin.tmpl
   include-tags:
     - Analytics

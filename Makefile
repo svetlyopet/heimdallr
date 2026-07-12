@@ -133,7 +133,7 @@ test: test-web-stub ## Run unit tests
 
 .PHONY: test-integration
 test-integration: test-web-stub ## Run integration tests
-	@go test -tags=integration -v -count=1 ./tests/integration/...
+	@go test -tags=integration -race -shuffle=on -v -count=1 ./tests/integration/...
 
 .PHONY: e2e-up
 e2e-up: ## Start docker-compose stack and wait for health

@@ -163,6 +163,22 @@ Example API and integration material:
 - `-database-path` — SQLite database path; defaults to `heimdallr.db`.
 - `-server-name` and `-server-port` — bind address; defaults to
   `localhost:8080`.
+- HTTP resource limits default to a 5s read-header timeout, 15s read timeout,
+  30s write timeout, 60s idle timeout, 1 MiB of headers, 5 MiB request bodies,
+  4 MiB of decoded job/report output, and 100 rows per page. Override them with
+  `HEIMDALLR_READ_HEADER_TIMEOUT`, `HEIMDALLR_READ_TIMEOUT`,
+  `HEIMDALLR_WRITE_TIMEOUT`, `HEIMDALLR_IDLE_TIMEOUT`,
+  `HEIMDALLR_MAX_HEADER_BYTES`, `HEIMDALLR_MAX_REQUEST_BODY_BYTES`,
+  `HEIMDALLR_MAX_DECODED_OUTPUT_BYTES`, and
+  `HEIMDALLR_MAX_PAGINATION_LIMIT`.
+- API tokens expire after 90 days by default and may not exceed 365 days.
+  Configure shorter periods with `HEIMDALLR_API_TOKEN_DEFAULT_TTL` and
+  `HEIMDALLR_API_TOKEN_MAX_TTL`; rotate migrated tokens before their assigned
+  deadline.
+- Browser sessions use HttpOnly cookies and CSRF tokens. Set
+  `HEIMDALLR_COOKIE_SECURE=true` when serving over HTTPS; release/production
+  mode refuses an insecure cookie setting. If `HEIMDALLR_CSRF_COOKIE_NAME` is
+  customized, build the SPA with the same value in `VITE_CSRF_COOKIE_NAME`.
 - `-log-format` — `text` or `json`.
 - `-log-level` — `debug`, `info`, `warn`, or `error`.
 

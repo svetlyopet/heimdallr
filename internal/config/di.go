@@ -44,11 +44,11 @@ func provideAuthServiceConfig(i do.Injector) (auth.ServiceConfig, error) {
 
 func provideTokenServiceConfig(i do.Injector) (token.ServiceConfig, error) {
 	cfg := do.MustInvoke[*AppConfig](i)
-	if cfg.Auth.SessionTokenTTL <= 0 {
-		return token.DefaultServiceConfig(), nil
-	}
-
-	return token.ServiceConfig{SessionTokenTTL: cfg.Auth.SessionTokenTTL}, nil
+	return token.ServiceConfig{
+		SessionTokenTTL:    cfg.Auth.SessionTokenTTL,
+		DefaultAPITokenTTL: cfg.Auth.DefaultAPITokenTTL,
+		MaxAPITokenTTL:     cfg.Auth.MaxAPITokenTTL,
+	}, nil
 }
 
 func provideLogger(i do.Injector) (*logger.Logger, error) {

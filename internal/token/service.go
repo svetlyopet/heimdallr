@@ -25,8 +25,10 @@ type Service interface {
 	CreateSession(ctx context.Context, name string, scopes []string, createdBy uuid.UUID) (api.TokenCreateResponse, error)
 	Delete(ctx context.Context, tokenID string) error
 	Authenticate(ctx context.Context, plainToken string) (authapi.AuthUser, error)
+	AuthenticateSession(ctx context.Context, plainToken string) (authapi.AuthUser, error)
 	RevokeSessionTokens(ctx context.Context, userID string) error
 	RevokeAllUserTokens(ctx context.Context, userID string) error
+	RevokeSessionToken(ctx context.Context, plainToken string) error
 }
 
 type service struct {
@@ -34,6 +36,8 @@ type service struct {
 	userRepository auth.Repository
 	logger         *logger.Logger
 	sessionTTL     time.Duration
+	defaultAPITTL  time.Duration
+	maxAPITTL      time.Duration
 }
 
 func (s service) List(ctx context.Context) ([]api.Token, error) {
@@ -57,18 +61,28 @@ func (s service) Create(ctx context.Context, req api.TokenCreateRequest, created
 		return api.TokenCreateResponse{}, ErrInvalidScopes
 	}
 
+	ttl := s.defaultAPITTL
+	if req.TtlSeconds != nil {
+		ttl = time.Duration(*req.TtlSeconds) * time.Second
+	}
+	if ttl <= 0 || ttl > s.maxAPITTL {
+		return api.TokenCreateResponse{}, ErrInvalidTTL
+	}
+
 	plainToken, tokenHash, err := generateToken()
 	if err != nil {
 		s.logger.ErrorWithStack(ctx, "failed to generate api token", err)
 		return api.TokenCreateResponse{}, ErrCreateToken
 	}
 
+	expiresAt := time.Now().UTC().Add(ttl)
 	token := APIToken{
 		ID:        uuid.New(),
 		Name:      req.Name,
 		TokenHash: tokenHash,
 		Scopes:    scopes,
 		Kind:      TokenKindAPI,
+		ExpiresAt: &expiresAt,
 		CreatedBy: createdBy,
 	}
 
@@ -84,6 +98,7 @@ func (s service) Create(ctx context.Context, req api.TokenCreateRequest, created
 		Id:        response.Id,
 		Name:      response.Name,
 		Scopes:    scopesToAPI(scopes),
+		ExpiresAt: response.ExpiresAt,
 		Token:     plainToken,
 	}, nil
 }
@@ -123,6 +138,7 @@ func (s service) CreateSession(ctx context.Context, name string, scopes []string
 		Id:        response.Id,
 		Name:      response.Name,
 		Scopes:    scopesToAPI(normalizedScopes),
+		ExpiresAt: response.ExpiresAt,
 		Token:     plainToken,
 	}, nil
 }
@@ -158,7 +174,28 @@ func (s service) RevokeAllUserTokens(ctx context.Context, userID string) error {
 	return nil
 }
 
+func (s service) RevokeSessionToken(ctx context.Context, plainToken string) error {
+	if plainToken == "" {
+		return nil
+	}
+
+	if err := s.repository.DeleteSessionByHash(ctx, hashToken(plainToken)); err != nil {
+		s.logger.ErrorWithStack(ctx, "failed to revoke session token", err)
+		return ErrDeleteToken
+	}
+
+	return nil
+}
+
 func (s service) Authenticate(ctx context.Context, plainToken string) (authapi.AuthUser, error) {
+	return s.authenticate(ctx, plainToken, "")
+}
+
+func (s service) AuthenticateSession(ctx context.Context, plainToken string) (authapi.AuthUser, error) {
+	return s.authenticate(ctx, plainToken, TokenKindSession)
+}
+
+func (s service) authenticate(ctx context.Context, plainToken string, requiredKind string) (authapi.AuthUser, error) {
 	if plainToken == "" {
 		return authapi.AuthUser{}, ErrInvalidToken
 	}
@@ -174,7 +211,10 @@ func (s service) Authenticate(ctx context.Context, plainToken string) (authapi.A
 		return authapi.AuthUser{}, ErrInvalidToken
 	}
 
-	if apiToken.ExpiresAt != nil && apiToken.ExpiresAt.Before(time.Now().UTC()) {
+	if apiToken.ExpiresAt == nil || !apiToken.ExpiresAt.After(time.Now().UTC()) {
+		return authapi.AuthUser{}, ErrInvalidToken
+	}
+	if requiredKind != "" && apiToken.Kind != requiredKind {
 		return authapi.AuthUser{}, ErrInvalidToken
 	}
 
@@ -226,8 +266,18 @@ func NewService(repository Repository, userRepository auth.Repository, appLogger
 		appLogger = logger.Default()
 	}
 
+	defaults := DefaultServiceConfig()
 	if cfg.SessionTokenTTL <= 0 {
-		cfg = DefaultServiceConfig()
+		cfg.SessionTokenTTL = defaults.SessionTokenTTL
+	}
+	if cfg.DefaultAPITokenTTL <= 0 {
+		cfg.DefaultAPITokenTTL = defaults.DefaultAPITokenTTL
+	}
+	if cfg.MaxAPITokenTTL <= 0 {
+		cfg.MaxAPITokenTTL = defaults.MaxAPITokenTTL
+	}
+	if cfg.DefaultAPITokenTTL > cfg.MaxAPITokenTTL {
+		cfg.DefaultAPITokenTTL = cfg.MaxAPITokenTTL
 	}
 
 	return &service{
@@ -235,6 +285,8 @@ func NewService(repository Repository, userRepository auth.Repository, appLogger
 		userRepository: userRepository,
 		logger:         appLogger,
 		sessionTTL:     cfg.SessionTokenTTL,
+		defaultAPITTL:  cfg.DefaultAPITokenTTL,
+		maxAPITTL:      cfg.MaxAPITokenTTL,
 	}
 }
 
@@ -244,6 +296,7 @@ func mapEntityToResponse(token APIToken) api.Token {
 		Name:      token.Name,
 		Scopes:    scopesToAPI(token.Scopes),
 		CreatedBy: token.CreatedBy,
+		ExpiresAt: token.ExpiresAt,
 	}
 }
 

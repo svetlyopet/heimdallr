@@ -17,7 +17,8 @@ import (
 )
 
 const (
-	BearerAuthScopes bearerAuthContextKey = "BearerAuth.Scopes"
+	BearerAuthScopes    bearerAuthContextKey    = "BearerAuth.Scopes"
+	SessionCookieScopes sessionCookieContextKey = "SessionCookie.Scopes"
 )
 
 // Defines values for JobStatus.
@@ -221,6 +222,9 @@ type NotFound = ErrorResponse
 // bearerAuthContextKey is the context key for BearerAuth security scheme
 type bearerAuthContextKey string
 
+// sessionCookieContextKey is the context key for SessionCookie security scheme
+type sessionCookieContextKey string
+
 // ListServersParams defines parameters for ListServers.
 type ListServersParams struct {
 	Page  *Page  `form:"page,omitempty" json:"page,omitempty"`
@@ -310,6 +314,8 @@ func (siw *ServerInterfaceWrapper) ListServers(c *gin.Context) {
 
 	c.Set(string(BearerAuthScopes), []string{})
 
+	c.Set(string(SessionCookieScopes), []string{})
+
 	// Parameter object where we will unmarshal all parameters from the context
 	var params ListServersParams
 
@@ -352,6 +358,8 @@ func (siw *ServerInterfaceWrapper) CreateServer(c *gin.Context) {
 
 	c.Set(string(BearerAuthScopes), []string{})
 
+	c.Set(string(SessionCookieScopes), []string{})
+
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 		if c.IsAborted() {
@@ -378,6 +386,8 @@ func (siw *ServerInterfaceWrapper) GetServer(c *gin.Context) {
 	}
 
 	c.Set(string(BearerAuthScopes), []string{})
+
+	c.Set(string(SessionCookieScopes), []string{})
 
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
@@ -406,6 +416,8 @@ func (siw *ServerInterfaceWrapper) UpdateServer(c *gin.Context) {
 
 	c.Set(string(BearerAuthScopes), []string{})
 
+	c.Set(string(SessionCookieScopes), []string{})
+
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 		if c.IsAborted() {
@@ -432,6 +444,8 @@ func (siw *ServerInterfaceWrapper) ListServerJobs(c *gin.Context) {
 	}
 
 	c.Set(string(BearerAuthScopes), []string{})
+
+	c.Set(string(SessionCookieScopes), []string{})
 
 	// Parameter object where we will unmarshal all parameters from the context
 	var params ListServerJobsParams
@@ -479,6 +493,8 @@ func (siw *ServerInterfaceWrapper) AssociateServerJob(c *gin.Context) {
 
 	c.Set(string(BearerAuthScopes), []string{})
 
+	c.Set(string(SessionCookieScopes), []string{})
+
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 		if c.IsAborted() {
@@ -514,6 +530,8 @@ func (siw *ServerInterfaceWrapper) DissociateServerJob(c *gin.Context) {
 	}
 
 	c.Set(string(BearerAuthScopes), []string{})
+
+	c.Set(string(SessionCookieScopes), []string{})
 
 	// Parameter object where we will unmarshal all parameters from the context
 	var params DissociateServerJobParams
@@ -552,6 +570,8 @@ func (siw *ServerInterfaceWrapper) ListServerReleases(c *gin.Context) {
 	}
 
 	c.Set(string(BearerAuthScopes), []string{})
+
+	c.Set(string(SessionCookieScopes), []string{})
 
 	// Parameter object where we will unmarshal all parameters from the context
 	var params ListServerReleasesParams
@@ -599,6 +619,8 @@ func (siw *ServerInterfaceWrapper) AssociateServerRelease(c *gin.Context) {
 
 	c.Set(string(BearerAuthScopes), []string{})
 
+	c.Set(string(SessionCookieScopes), []string{})
+
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 		if c.IsAborted() {
@@ -634,6 +656,8 @@ func (siw *ServerInterfaceWrapper) DissociateServerRelease(c *gin.Context) {
 	}
 
 	c.Set(string(BearerAuthScopes), []string{})
+
+	c.Set(string(SessionCookieScopes), []string{})
 
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
@@ -1416,34 +1440,38 @@ type StrictGinServerOptions struct {
 	ResponseErrorHandlerFunc func(ctx *gin.Context, err error)
 }
 
+func defaultStrictGinRequestErrorHandler(ctx *gin.Context, err error) {
+	if _, ok := err.(*http.MaxBytesError); ok {
+		ctx.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "request body too large"})
+		return
+	}
+	ctx.JSON(http.StatusBadRequest, gin.H{"msg": err.Error()})
+}
+
 func NewStrictHandler(ssi StrictServerInterface, middlewares []StrictMiddlewareFunc) ServerInterface {
 	return &strictHandler{ssi: ssi, middlewares: middlewares, options: StrictGinServerOptions{
-		RequestErrorHandlerFunc: func(ctx *gin.Context, err error) {
-			ctx.JSON(http.StatusBadRequest, gin.H{"msg": err.Error()})
-		},
+		RequestErrorHandlerFunc: defaultStrictGinRequestErrorHandler,
 		HandlerErrorFunc: func(ctx *gin.Context, err error) {
-			ctx.JSON(http.StatusInternalServerError, gin.H{"msg": err.Error()})
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": http.StatusText(http.StatusInternalServerError)})
 		},
 		ResponseErrorHandlerFunc: func(ctx *gin.Context, err error) {
-			ctx.JSON(http.StatusInternalServerError, gin.H{"msg": err.Error()})
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": http.StatusText(http.StatusInternalServerError)})
 		},
 	}}
 }
 
 func NewStrictHandlerWithOptions(ssi StrictServerInterface, middlewares []StrictMiddlewareFunc, options StrictGinServerOptions) ServerInterface {
 	if options.RequestErrorHandlerFunc == nil {
-		options.RequestErrorHandlerFunc = func(ctx *gin.Context, err error) {
-			ctx.JSON(http.StatusBadRequest, gin.H{"msg": err.Error()})
-		}
+		options.RequestErrorHandlerFunc = defaultStrictGinRequestErrorHandler
 	}
 	if options.HandlerErrorFunc == nil {
 		options.HandlerErrorFunc = func(ctx *gin.Context, err error) {
-			ctx.JSON(http.StatusInternalServerError, gin.H{"msg": err.Error()})
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": http.StatusText(http.StatusInternalServerError)})
 		}
 	}
 	if options.ResponseErrorHandlerFunc == nil {
 		options.ResponseErrorHandlerFunc = func(ctx *gin.Context, err error) {
-			ctx.JSON(http.StatusInternalServerError, gin.H{"msg": err.Error()})
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": http.StatusText(http.StatusInternalServerError)})
 		}
 	}
 	return &strictHandler{ssi: ssi, middlewares: middlewares, options: options}
@@ -1462,7 +1490,7 @@ func (sh *strictHandler) ListServers(ctx *gin.Context, params ListServersParams)
 	request.Params = params
 
 	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
-		return sh.ssi.ListServers(ctx, request.(ListServersRequestObject))
+		return sh.ssi.ListServers(ctx.Request.Context(), request.(ListServersRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
 		handler = middleware(handler, "ListServers")
@@ -1493,7 +1521,7 @@ func (sh *strictHandler) CreateServer(ctx *gin.Context) {
 	request.Body = &body
 
 	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
-		return sh.ssi.CreateServer(ctx, request.(CreateServerRequestObject))
+		return sh.ssi.CreateServer(ctx.Request.Context(), request.(CreateServerRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
 		handler = middleware(handler, "CreateServer")
@@ -1519,7 +1547,7 @@ func (sh *strictHandler) GetServer(ctx *gin.Context, serverId ServerIDPath) {
 	request.ServerId = serverId
 
 	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
-		return sh.ssi.GetServer(ctx, request.(GetServerRequestObject))
+		return sh.ssi.GetServer(ctx.Request.Context(), request.(GetServerRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
 		handler = middleware(handler, "GetServer")
@@ -1552,7 +1580,7 @@ func (sh *strictHandler) UpdateServer(ctx *gin.Context, serverId ServerIDPath) {
 	request.Body = &body
 
 	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
-		return sh.ssi.UpdateServer(ctx, request.(UpdateServerRequestObject))
+		return sh.ssi.UpdateServer(ctx.Request.Context(), request.(UpdateServerRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
 		handler = middleware(handler, "UpdateServer")
@@ -1579,7 +1607,7 @@ func (sh *strictHandler) ListServerJobs(ctx *gin.Context, serverId ServerIDPath,
 	request.Params = params
 
 	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
-		return sh.ssi.ListServerJobs(ctx, request.(ListServerJobsRequestObject))
+		return sh.ssi.ListServerJobs(ctx.Request.Context(), request.(ListServerJobsRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
 		handler = middleware(handler, "ListServerJobs")
@@ -1612,7 +1640,7 @@ func (sh *strictHandler) AssociateServerJob(ctx *gin.Context, serverId ServerIDP
 	request.Body = &body
 
 	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
-		return sh.ssi.AssociateServerJob(ctx, request.(AssociateServerJobRequestObject))
+		return sh.ssi.AssociateServerJob(ctx.Request.Context(), request.(AssociateServerJobRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
 		handler = middleware(handler, "AssociateServerJob")
@@ -1640,7 +1668,7 @@ func (sh *strictHandler) DissociateServerJob(ctx *gin.Context, serverId ServerID
 	request.Params = params
 
 	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
-		return sh.ssi.DissociateServerJob(ctx, request.(DissociateServerJobRequestObject))
+		return sh.ssi.DissociateServerJob(ctx.Request.Context(), request.(DissociateServerJobRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
 		handler = middleware(handler, "DissociateServerJob")
@@ -1667,7 +1695,7 @@ func (sh *strictHandler) ListServerReleases(ctx *gin.Context, serverId ServerIDP
 	request.Params = params
 
 	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
-		return sh.ssi.ListServerReleases(ctx, request.(ListServerReleasesRequestObject))
+		return sh.ssi.ListServerReleases(ctx.Request.Context(), request.(ListServerReleasesRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
 		handler = middleware(handler, "ListServerReleases")
@@ -1700,7 +1728,7 @@ func (sh *strictHandler) AssociateServerRelease(ctx *gin.Context, serverId Serve
 	request.Body = &body
 
 	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
-		return sh.ssi.AssociateServerRelease(ctx, request.(AssociateServerReleaseRequestObject))
+		return sh.ssi.AssociateServerRelease(ctx.Request.Context(), request.(AssociateServerReleaseRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
 		handler = middleware(handler, "AssociateServerRelease")
@@ -1727,7 +1755,7 @@ func (sh *strictHandler) DissociateServerRelease(ctx *gin.Context, serverId Serv
 	request.ReleaseId = releaseId
 
 	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
-		return sh.ssi.DissociateServerRelease(ctx, request.(DissociateServerReleaseRequestObject))
+		return sh.ssi.DissociateServerRelease(ctx.Request.Context(), request.(DissociateServerReleaseRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
 		handler = middleware(handler, "DissociateServerRelease")

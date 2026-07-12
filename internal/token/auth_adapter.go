@@ -34,6 +34,10 @@ func (a authTokenServiceAdapter) RevokeAllUserTokens(ctx context.Context, userID
 	return a.service.RevokeAllUserTokens(ctx, userID)
 }
 
+func (a authTokenServiceAdapter) RevokeSessionToken(ctx context.Context, plainToken string) error {
+	return a.service.RevokeSessionToken(ctx, plainToken)
+}
+
 func provideAuthTokenService(i do.Injector) (auth.APITokenService, error) {
 	return authTokenServiceAdapter{service: do.MustInvoke[Service](i)}, nil
 }

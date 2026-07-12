@@ -93,6 +93,10 @@ func openSQLite(databasePath string, migrator Migrator) (*gorm.DB, error) {
 }
 
 func autoMigrateSQLite(db *gorm.DB) error {
+	if err := prepareSQLiteTokenExpiration(db); err != nil {
+		return err
+	}
+
 	return db.AutoMigrate(
 		&auth.User{},
 		&provider.Provider{},
@@ -108,6 +112,46 @@ func autoMigrateSQLite(db *gorm.DB) error {
 		&server.ServerJob{},
 		&server.ServerRelease{},
 	)
+}
+
+func prepareSQLiteTokenExpiration(db *gorm.DB) error {
+	migrator := db.Migrator()
+	if !migrator.HasTable(&token.APIToken{}) {
+		return nil
+	}
+
+	if !migrator.HasColumn(&token.APIToken{}, "Kind") {
+		if err := db.Exec(
+			"ALTER TABLE api_tokens ADD COLUMN kind VARCHAR(32) NOT NULL DEFAULT 'api'",
+		).Error; err != nil {
+			return fmt.Errorf("add sqlite api token kind: %w", err)
+		}
+	}
+	if !migrator.HasColumn(&token.APIToken{}, "ExpiresAt") {
+		if err := db.Exec(
+			"ALTER TABLE api_tokens ADD COLUMN expires_at DATETIME NULL",
+		).Error; err != nil {
+			return fmt.Errorf("add sqlite api token expiration: %w", err)
+		}
+	}
+
+	if err := db.Exec(
+		"UPDATE api_tokens SET kind = 'session' WHERE name LIKE 'session-%' AND kind = 'api'",
+	).Error; err != nil {
+		return fmt.Errorf("classify sqlite session tokens: %w", err)
+	}
+	if err := db.Exec(`
+		UPDATE api_tokens
+		SET expires_at = CASE
+			WHEN kind = 'session' THEN datetime('now', '+24 hours')
+			ELSE datetime('now', '+90 days')
+		END
+		WHERE expires_at IS NULL
+	`).Error; err != nil {
+		return fmt.Errorf("backfill sqlite api token expiration: %w", err)
+	}
+
+	return nil
 }
 
 // NewSQLiteDatabase keeps backward compatibility for tests.

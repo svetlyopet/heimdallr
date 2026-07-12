@@ -2,6 +2,7 @@ package rbac
 
 import (
 	"errors"
+	"log/slog"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -48,5 +49,12 @@ func StrictHandlerErrorFunc(ctx *gin.Context, err error) {
 		return
 	}
 
-	ctx.JSON(http.StatusInternalServerError, gin.H{"msg": err.Error()})
+	slog.ErrorContext(
+		ctx.Request.Context(),
+		"strict handler failed",
+		slog.Any("error", err),
+		slog.String("method", ctx.Request.Method),
+		slog.String("route", ctx.FullPath()),
+	)
+	ctx.JSON(http.StatusInternalServerError, gin.H{"error": http.StatusText(http.StatusInternalServerError)})
 }

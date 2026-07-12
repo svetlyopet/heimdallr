@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	uuid "github.com/google/uuid"
@@ -17,7 +18,8 @@ import (
 )
 
 const (
-	BearerAuthScopes bearerAuthContextKey = "BearerAuth.Scopes"
+	BearerAuthScopes    bearerAuthContextKey    = "BearerAuth.Scopes"
+	SessionCookieScopes sessionCookieContextKey = "SessionCookie.Scopes"
 )
 
 // Defines values for TokenScope.
@@ -51,7 +53,10 @@ type ErrorResponse struct {
 
 // Token defines model for Token.
 type Token struct {
-	CreatedBy *UUID        `json:"created_by,omitempty"`
+	CreatedBy *UUID `json:"created_by,omitempty"`
+
+	// ExpiresAt Absolute token expiration time.
+	ExpiresAt *time.Time   `json:"expires_at,omitempty"`
 	Id        UUID         `json:"id"`
 	Name      string       `json:"name"`
 	Scopes    []TokenScope `json:"scopes"`
@@ -66,11 +71,17 @@ type TokenCreateDataResponse struct {
 type TokenCreateRequest struct {
 	Name   string       `json:"name"`
 	Scopes []TokenScope `json:"scopes"`
+
+	// TtlSeconds Optional token lifetime in seconds. Defaults to 90 days and cannot exceed the configured maximum.
+	TtlSeconds *int `json:"ttl_seconds,omitempty"`
 }
 
 // TokenCreateResponse defines model for TokenCreateResponse.
 type TokenCreateResponse struct {
-	CreatedBy *UUID        `json:"created_by,omitempty"`
+	CreatedBy *UUID `json:"created_by,omitempty"`
+
+	// ExpiresAt Absolute token expiration time.
+	ExpiresAt *time.Time   `json:"expires_at,omitempty"`
 	Id        UUID         `json:"id"`
 	Name      string       `json:"name"`
 	Scopes    []TokenScope `json:"scopes"`
@@ -109,6 +120,9 @@ type Unauthorized = ErrorResponse
 // bearerAuthContextKey is the context key for BearerAuth security scheme
 type bearerAuthContextKey string
 
+// sessionCookieContextKey is the context key for SessionCookie security scheme
+type sessionCookieContextKey string
+
 // CreateTokenJSONRequestBody defines body for CreateToken for application/json ContentType.
 type CreateTokenJSONRequestBody = TokenCreateRequest
 
@@ -139,6 +153,8 @@ func (siw *ServerInterfaceWrapper) ListTokens(c *gin.Context) {
 
 	c.Set(string(BearerAuthScopes), []string{})
 
+	c.Set(string(SessionCookieScopes), []string{})
+
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 		if c.IsAborted() {
@@ -153,6 +169,8 @@ func (siw *ServerInterfaceWrapper) ListTokens(c *gin.Context) {
 func (siw *ServerInterfaceWrapper) CreateToken(c *gin.Context) {
 
 	c.Set(string(BearerAuthScopes), []string{})
+
+	c.Set(string(SessionCookieScopes), []string{})
 
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
@@ -180,6 +198,8 @@ func (siw *ServerInterfaceWrapper) DeleteToken(c *gin.Context) {
 	}
 
 	c.Set(string(BearerAuthScopes), []string{})
+
+	c.Set(string(SessionCookieScopes), []string{})
 
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
@@ -497,34 +517,38 @@ type StrictGinServerOptions struct {
 	ResponseErrorHandlerFunc func(ctx *gin.Context, err error)
 }
 
+func defaultStrictGinRequestErrorHandler(ctx *gin.Context, err error) {
+	if _, ok := err.(*http.MaxBytesError); ok {
+		ctx.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "request body too large"})
+		return
+	}
+	ctx.JSON(http.StatusBadRequest, gin.H{"msg": err.Error()})
+}
+
 func NewStrictHandler(ssi StrictServerInterface, middlewares []StrictMiddlewareFunc) ServerInterface {
 	return &strictHandler{ssi: ssi, middlewares: middlewares, options: StrictGinServerOptions{
-		RequestErrorHandlerFunc: func(ctx *gin.Context, err error) {
-			ctx.JSON(http.StatusBadRequest, gin.H{"msg": err.Error()})
-		},
+		RequestErrorHandlerFunc: defaultStrictGinRequestErrorHandler,
 		HandlerErrorFunc: func(ctx *gin.Context, err error) {
-			ctx.JSON(http.StatusInternalServerError, gin.H{"msg": err.Error()})
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": http.StatusText(http.StatusInternalServerError)})
 		},
 		ResponseErrorHandlerFunc: func(ctx *gin.Context, err error) {
-			ctx.JSON(http.StatusInternalServerError, gin.H{"msg": err.Error()})
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": http.StatusText(http.StatusInternalServerError)})
 		},
 	}}
 }
 
 func NewStrictHandlerWithOptions(ssi StrictServerInterface, middlewares []StrictMiddlewareFunc, options StrictGinServerOptions) ServerInterface {
 	if options.RequestErrorHandlerFunc == nil {
-		options.RequestErrorHandlerFunc = func(ctx *gin.Context, err error) {
-			ctx.JSON(http.StatusBadRequest, gin.H{"msg": err.Error()})
-		}
+		options.RequestErrorHandlerFunc = defaultStrictGinRequestErrorHandler
 	}
 	if options.HandlerErrorFunc == nil {
 		options.HandlerErrorFunc = func(ctx *gin.Context, err error) {
-			ctx.JSON(http.StatusInternalServerError, gin.H{"msg": err.Error()})
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": http.StatusText(http.StatusInternalServerError)})
 		}
 	}
 	if options.ResponseErrorHandlerFunc == nil {
 		options.ResponseErrorHandlerFunc = func(ctx *gin.Context, err error) {
-			ctx.JSON(http.StatusInternalServerError, gin.H{"msg": err.Error()})
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": http.StatusText(http.StatusInternalServerError)})
 		}
 	}
 	return &strictHandler{ssi: ssi, middlewares: middlewares, options: options}
@@ -541,7 +565,7 @@ func (sh *strictHandler) ListTokens(ctx *gin.Context) {
 	var request ListTokensRequestObject
 
 	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
-		return sh.ssi.ListTokens(ctx, request.(ListTokensRequestObject))
+		return sh.ssi.ListTokens(ctx.Request.Context(), request.(ListTokensRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
 		handler = middleware(handler, "ListTokens")
@@ -572,7 +596,7 @@ func (sh *strictHandler) CreateToken(ctx *gin.Context) {
 	request.Body = &body
 
 	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
-		return sh.ssi.CreateToken(ctx, request.(CreateTokenRequestObject))
+		return sh.ssi.CreateToken(ctx.Request.Context(), request.(CreateTokenRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
 		handler = middleware(handler, "CreateToken")
@@ -598,7 +622,7 @@ func (sh *strictHandler) DeleteToken(ctx *gin.Context, tokenId TokenIDPath) {
 	request.TokenId = tokenId
 
 	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
-		return sh.ssi.DeleteToken(ctx, request.(DeleteTokenRequestObject))
+		return sh.ssi.DeleteToken(ctx.Request.Context(), request.(DeleteTokenRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
 		handler = middleware(handler, "DeleteToken")

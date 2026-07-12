@@ -11,6 +11,7 @@ import (
 	"github.com/svetlyopet/heimdallr/internal/release"
 	releaseapi "github.com/svetlyopet/heimdallr/internal/release/api"
 	"github.com/svetlyopet/heimdallr/internal/report/api"
+	"github.com/svetlyopet/heimdallr/internal/requestlimits"
 	"github.com/svetlyopet/heimdallr/internal/testutil"
 )
 
@@ -93,6 +94,68 @@ func TestServiceCreateReturnsNotFoundForMissingRelease(t *testing.T) {
 		Id: "sast-1", Type: api.ReportTypeSast, Status: api.JobStatusStarted,
 	})
 	require.ErrorIs(t, err, ErrReportNotFound)
+}
+
+func TestServiceCreateRejectsInvalidOutputBeforeReleaseLookup(t *testing.T) {
+	testCases := []struct {
+		name       string
+		output     string
+		maxDecoded int64
+	}{
+		{name: "invalid encoding", output: "not-base64!", maxDecoded: 1024},
+		{name: "decoded output too large", output: "dGVzdA==", maxDecoded: 3},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			lookupCalls := 0
+			reportSvc := NewService(stubReportRepository{}, stubReleaseLookup{getByIDCalls: &lookupCalls}, nil)
+			ctx := requestlimits.WithContext(context.Background(), requestlimits.Values{
+				MaxDecodedOutputBytes: testCase.maxDecoded,
+			})
+
+			_, err := reportSvc.Create(ctx, uuid.NewString(), uuid.NewString(), api.ReportCreateRequest{
+				Id: "sast-1", Type: api.ReportTypeSast, Status: api.JobStatusStarted, Output: &testCase.output,
+			})
+
+			require.Error(t, err)
+			require.Zero(t, lookupCalls)
+		})
+	}
+}
+
+type stubReleaseLookup struct {
+	getByIDCalls *int
+}
+
+func (s stubReleaseLookup) GetById(context.Context, string, string) (releaseapi.ReleaseWithCompliance, error) {
+	if s.getByIDCalls != nil {
+		(*s.getByIDCalls)++
+	}
+
+	return releaseapi.ReleaseWithCompliance{}, nil
+}
+
+type stubReportRepository struct{}
+
+func (stubReportRepository) FindAll(context.Context, string, string, int, int) ([]Report, int64, error) {
+	return nil, 0, nil
+}
+
+func (stubReportRepository) FindAllGlobal(context.Context, ListFilters, int, int) ([]Report, int64, error) {
+	return nil, 0, nil
+}
+
+func (stubReportRepository) FindById(context.Context, string, string, string) (Report, error) {
+	return Report{}, nil
+}
+
+func (stubReportRepository) Create(context.Context, Report) (Report, error) {
+	return Report{}, nil
+}
+
+func (stubReportRepository) Update(context.Context, Report) (Report, error) {
+	return Report{}, nil
 }
 
 func ptr(s string) *string {

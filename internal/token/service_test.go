@@ -29,14 +29,41 @@ func TestServiceCreateAndAuthenticateToken(t *testing.T) {
 	}, nil)
 	require.NoError(t, err)
 	require.NotEmpty(t, created.Token)
+	require.NotNil(t, created.ExpiresAt)
+	require.WithinDuration(t, time.Now().UTC().Add(90*24*time.Hour), *created.ExpiresAt, time.Second)
 
 	user, err := svc.Authenticate(context.Background(), created.Token)
 	require.NoError(t, err)
 	require.Equal(t, "token:ci-token", user.Username)
 
+	_, err = svc.AuthenticateSession(context.Background(), created.Token)
+	require.ErrorIs(t, err, ErrInvalidToken)
+
 	authorizer := rbac.NewAuthorizer()
 	require.True(t, authorizer.HasScope(user, rbac.ScopeApplicationWrite))
 	require.False(t, authorizer.HasScope(user, rbac.ScopeAutomationWrite))
+}
+
+func TestServiceCreateHonorsBoundedTTL(t *testing.T) {
+	svc := newTokenService(t)
+	ttlSeconds := 60
+
+	created, err := svc.Create(context.Background(), api.TokenCreateRequest{
+		Name:       "short-lived",
+		Scopes:     []api.TokenScope{api.Read},
+		TtlSeconds: &ttlSeconds,
+	}, nil)
+	require.NoError(t, err)
+	require.NotNil(t, created.ExpiresAt)
+	require.WithinDuration(t, time.Now().UTC().Add(time.Minute), *created.ExpiresAt, time.Second)
+
+	tooLong := 365*24*60*60 + 1
+	_, err = svc.Create(context.Background(), api.TokenCreateRequest{
+		Name:       "too-long",
+		Scopes:     []api.TokenScope{api.Read},
+		TtlSeconds: &tooLong,
+	}, nil)
+	require.ErrorIs(t, err, ErrInvalidTTL)
 }
 
 func TestServiceCreateSessionUsesLiveUserRoles(t *testing.T) {
@@ -57,7 +84,7 @@ func TestServiceCreateSessionUsesLiveUserRoles(t *testing.T) {
 	session, err := svc.CreateSession(context.Background(), "session-reader-user", []string{rbac.ScopeAdmin}, createdUser.ID)
 	require.NoError(t, err)
 
-	user, err := svc.Authenticate(context.Background(), session.Token)
+	user, err := svc.AuthenticateSession(context.Background(), session.Token)
 	require.NoError(t, err)
 	require.Equal(t, createdUser.Username, user.Username)
 
@@ -100,6 +127,32 @@ func TestServiceAuthenticateRejectsExpiredToken(t *testing.T) {
 
 	_, err = svc.Authenticate(context.Background(), plain)
 	require.ErrorIs(t, err, ErrInvalidToken)
+}
+
+func TestDatabaseRejectsTokenWithoutExpiration(t *testing.T) {
+	svc := newTokenService(t).(*service)
+	_, hash, err := generateToken()
+	require.NoError(t, err)
+
+	err = svc.repository.(*repository).db.Exec(
+		`INSERT INTO api_tokens (id, name, token_hash, scopes, kind, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		uuid.New(), "legacy", hash, `["read"]`, TokenKindAPI, time.Now().UTC(), time.Now().UTC(),
+	).Error
+	require.Error(t, err)
+}
+
+func TestServiceRevokeSessionTokenDoesNotRevokeAPIToken(t *testing.T) {
+	svc := newTokenService(t).(*service)
+	apiToken, err := svc.Create(context.Background(), api.TokenCreateRequest{
+		Name:   "api-token",
+		Scopes: []api.TokenScope{api.Read},
+	}, nil)
+	require.NoError(t, err)
+
+	require.NoError(t, svc.RevokeSessionToken(context.Background(), apiToken.Token))
+	_, err = svc.Authenticate(context.Background(), apiToken.Token)
+	require.NoError(t, err)
 }
 
 func TestServiceDeleteReturnsNotFound(t *testing.T) {

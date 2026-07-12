@@ -10,6 +10,8 @@ import (
 	"github.com/svetlyopet/heimdallr/internal/automation"
 	"github.com/svetlyopet/heimdallr/internal/job/api"
 	"github.com/svetlyopet/heimdallr/internal/logger"
+	"github.com/svetlyopet/heimdallr/internal/requestlimits"
+	"github.com/svetlyopet/heimdallr/internal/validation"
 	"gorm.io/gorm"
 )
 
@@ -99,6 +101,14 @@ func (s service) Create(ctx context.Context, automationId string, req api.JobCre
 		return api.Job{}, ErrInvalidAutomationID
 	}
 
+	output := ""
+	if req.Output != nil {
+		output = *req.Output
+	}
+	if outputErr := validation.ValidateBase64Output(output, requestlimits.MaxDecodedOutputBytes(ctx)); outputErr != nil {
+		return api.Job{}, NewInvalidOutputError(outputErr)
+	}
+
 	if _, err := s.automationLookupService.GetById(ctx, automationId); err != nil {
 		s.logger.ErrorWithStack(
 			ctx,
@@ -108,15 +118,6 @@ func (s service) Create(ctx context.Context, automationId string, req api.JobCre
 			slog.String("job_id", req.Id),
 		)
 		return api.Job{}, ErrCreateJob
-	}
-
-	output := ""
-	if req.Output != nil {
-		output = *req.Output
-	}
-
-	if !isValidBase64(output) {
-		return api.Job{}, NewInvalidOutputError(errors.New("not valid encoding"))
 	}
 
 	metadata, err := marshalMetadata(req.Metadata)
@@ -171,8 +172,8 @@ func (s service) Update(ctx context.Context, automationId string, jobId string, 
 		output = *req.Output
 	}
 
-	if !isValidBase64(output) {
-		return api.Job{}, NewInvalidOutputError(errors.New("not valid encoding"))
+	if outputErr := validation.ValidateBase64Output(output, requestlimits.MaxDecodedOutputBytes(ctx)); outputErr != nil {
+		return api.Job{}, NewInvalidOutputError(outputErr)
 	}
 
 	metadata, err := marshalMetadata(req.Metadata)

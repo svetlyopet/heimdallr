@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/svetlyopet/heimdallr/internal/pagination"
 	"github.com/svetlyopet/heimdallr/internal/provider/api"
 )
 
@@ -95,16 +96,13 @@ func paginationParams(pagePtr, limitPtr *api.Page) (page int, limit int, ok bool
 }
 
 func buildPagination(page, limit int, total int64) api.Pagination {
-	totalPages := int64(0)
-	if total > 0 {
-		totalPages = (total + int64(limit) - 1) / int64(limit)
-	}
+	safeTotal, totalPages := pagination.SafeTotals(total, limit)
 
 	return api.Pagination{
 		Page:       page,
 		Limit:      limit,
-		Total:      int(total),
-		TotalPages: int(totalPages),
+		Total:      safeTotal,
+		TotalPages: totalPages,
 	}
 }
 

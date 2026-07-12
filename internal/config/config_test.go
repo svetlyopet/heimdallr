@@ -1,9 +1,9 @@
 package config_test
 
 import (
-	"testing"
-
 	"log/slog"
+	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/svetlyopet/heimdallr/internal/config"
@@ -21,6 +21,29 @@ func TestLoadFromFlagsDefaults(t *testing.T) {
 	require.Equal(t, logger.FormatText, cfg.Logger.Format)
 	require.Equal(t, slog.LevelInfo, cfg.Logger.Level)
 	require.Empty(t, cfg.Auth.BootstrapRootPassword)
+	require.Equal(t, 5*time.Second, cfg.Server.ReadHeaderTimeout)
+	require.Equal(t, 5<<20, int(cfg.Server.MaxRequestBodyBytes))
+	require.Equal(t, 4<<20, int(cfg.Server.MaxDecodedOutputBytes))
+	require.Equal(t, 100, cfg.Server.MaxPaginationLimit)
+	require.Equal(t, 90*24*time.Hour, cfg.Auth.DefaultAPITokenTTL)
+	require.Equal(t, 365*24*time.Hour, cfg.Auth.MaxAPITokenTTL)
+	require.False(t, cfg.Auth.CookieSecure)
+}
+
+func TestLoadFromFlagsRequiresSecureCookiesInReleaseMode(t *testing.T) {
+	env := func(key string) string {
+		switch key {
+		case "GIN_MODE":
+			return "release"
+		case "HEIMDALLR_COOKIE_SECURE":
+			return "false"
+		default:
+			return ""
+		}
+	}
+
+	_, err := config.LoadFromFlags(nil, env)
+	require.Error(t, err)
 }
 
 func TestLoadFromFlagsReadsEnvironment(t *testing.T) {

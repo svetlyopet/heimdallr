@@ -12,6 +12,7 @@ var (
 	ErrListTokens    = errors.New("failed to list api tokens")
 	ErrDeleteToken   = errors.New("failed to delete api token")
 	ErrInvalidScopes = errors.New("invalid token scopes")
+	ErrInvalidTTL    = errors.New("invalid token ttl")
 )
 
 type TokenError struct {

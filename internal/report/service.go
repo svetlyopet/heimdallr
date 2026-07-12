@@ -10,6 +10,8 @@ import (
 	"github.com/svetlyopet/heimdallr/internal/logger"
 	"github.com/svetlyopet/heimdallr/internal/release"
 	"github.com/svetlyopet/heimdallr/internal/report/api"
+	"github.com/svetlyopet/heimdallr/internal/requestlimits"
+	"github.com/svetlyopet/heimdallr/internal/validation"
 	"gorm.io/gorm"
 )
 
@@ -122,6 +124,14 @@ func (s service) Create(ctx context.Context, applicationID string, releaseID str
 		return api.Report{}, ErrInvalidApplicationID
 	}
 
+	output := ""
+	if req.Output != nil {
+		output = *req.Output
+	}
+	if outputErr := validation.ValidateBase64Output(output, requestlimits.MaxDecodedOutputBytes(ctx)); outputErr != nil {
+		return api.Report{}, NewInvalidOutputError(outputErr)
+	}
+
 	if _, err := s.releaseLookupService.GetById(ctx, releaseID, applicationID); err != nil {
 		if errors.Is(err, release.ErrReleaseNotFound) {
 			return api.Report{}, ErrReportNotFound
@@ -143,11 +153,6 @@ func (s service) Create(ctx context.Context, applicationID string, releaseID str
 	url := ""
 	if req.Url != nil {
 		url = string(*req.Url)
-	}
-
-	output := ""
-	if req.Output != nil {
-		output = *req.Output
 	}
 
 	report := Report{
@@ -193,6 +198,9 @@ func (s service) Update(ctx context.Context, applicationID string, releaseID str
 	output := ""
 	if req.Output != nil {
 		output = *req.Output
+	}
+	if outputErr := validation.ValidateBase64Output(output, requestlimits.MaxDecodedOutputBytes(ctx)); outputErr != nil {
+		return api.Report{}, NewInvalidOutputError(outputErr)
 	}
 
 	report := Report{

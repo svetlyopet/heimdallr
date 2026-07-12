@@ -71,7 +71,7 @@ import { computed, onMounted, reactive, watch } from "vue";
 import "./stylesheets/app-shell.css";
 import { RouterLink, RouterView, useRoute, useRouter } from "vue-router";
 import SidebarNavGroup from "./components/SidebarNavGroup.vue";
-import { clearSession, ensureSessionAccess, sessionState } from "./auth/session";
+import { ensureSessionAccess, logoutSession, sessionState } from "./auth/session";
 
 const route = useRoute();
 const router = useRouter();
@@ -145,9 +145,9 @@ function toggleGroup(groupId) {
   expandedGroups[groupId] = !expandedGroups[groupId];
 }
 
-function logout() {
-  clearSession();
-  router.push({ name: "login" });
+async function logout() {
+  await logoutSession();
+  await router.push({ name: "login" });
 }
 
 watch(

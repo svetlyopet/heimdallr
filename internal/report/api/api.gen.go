@@ -18,7 +18,8 @@ import (
 )
 
 const (
-	BearerAuthScopes bearerAuthContextKey = "BearerAuth.Scopes"
+	BearerAuthScopes    bearerAuthContextKey    = "BearerAuth.Scopes"
+	SessionCookieScopes sessionCookieContextKey = "SessionCookie.Scopes"
 )
 
 // Defines values for JobStatus.
@@ -147,12 +148,14 @@ type Report struct {
 	Id            string          `json:"id"`
 	Location      *string         `json:"location,omitempty"`
 	Metadata      *ReportMetadata `json:"metadata,omitempty"`
-	Output        *string         `json:"output,omitempty"`
-	ReleaseId     UUID            `json:"release_id"`
-	Status        JobStatus       `json:"status"`
-	Type          ReportType      `json:"type"`
-	Url           *string         `json:"url,omitempty"`
-	Version       string          `json:"version"`
+
+	// Output Base64-encoded output. Decoded content is limited to 4 MiB by default.
+	Output    *string    `json:"output,omitempty"`
+	ReleaseId UUID       `json:"release_id"`
+	Status    JobStatus  `json:"status"`
+	Type      ReportType `json:"type"`
+	Url       *string    `json:"url,omitempty"`
+	Version   string     `json:"version"`
 }
 
 // ReportCreateRequest defines model for ReportCreateRequest.
@@ -160,10 +163,12 @@ type ReportCreateRequest struct {
 	Id       string          `json:"id"`
 	Location *string         `json:"location,omitempty"`
 	Metadata *ReportMetadata `json:"metadata,omitempty"`
-	Output   *string         `json:"output,omitempty"`
-	Status   JobStatus       `json:"status"`
-	Type     ReportType      `json:"type"`
-	Url      *URL            `json:"url,omitempty"`
+
+	// Output Base64-encoded output. Decoded content is limited to 4 MiB by default.
+	Output *string    `json:"output,omitempty"`
+	Status JobStatus  `json:"status"`
+	Type   ReportType `json:"type"`
+	Url    *URL       `json:"url,omitempty"`
 }
 
 // ReportDataResponse defines model for ReportDataResponse.
@@ -186,8 +191,10 @@ type ReportType string
 // ReportUpdateRequest defines model for ReportUpdateRequest.
 type ReportUpdateRequest struct {
 	Metadata *ReportMetadata `json:"metadata,omitempty"`
-	Output   *string         `json:"output,omitempty"`
-	Status   JobStatus       `json:"status"`
+
+	// Output Base64-encoded output. Decoded content is limited to 4 MiB by default.
+	Output *string   `json:"output,omitempty"`
+	Status JobStatus `json:"status"`
 }
 
 // URL defines model for URL.
@@ -228,6 +235,9 @@ type Unauthorized = ErrorResponse
 
 // bearerAuthContextKey is the context key for BearerAuth security scheme
 type bearerAuthContextKey string
+
+// sessionCookieContextKey is the context key for SessionCookie security scheme
+type sessionCookieContextKey string
 
 // ListReleaseReportsParams defines parameters for ListReleaseReports.
 type ListReleaseReportsParams struct {
@@ -311,6 +321,8 @@ func (siw *ServerInterfaceWrapper) ListReleaseReports(c *gin.Context) {
 
 	c.Set(string(BearerAuthScopes), []string{})
 
+	c.Set(string(SessionCookieScopes), []string{})
+
 	// Parameter object where we will unmarshal all parameters from the context
 	var params ListReleaseReportsParams
 
@@ -366,6 +378,8 @@ func (siw *ServerInterfaceWrapper) CreateReleaseReport(c *gin.Context) {
 
 	c.Set(string(BearerAuthScopes), []string{})
 
+	c.Set(string(SessionCookieScopes), []string{})
+
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 		if c.IsAborted() {
@@ -410,6 +424,8 @@ func (siw *ServerInterfaceWrapper) GetReleaseReport(c *gin.Context) {
 	}
 
 	c.Set(string(BearerAuthScopes), []string{})
+
+	c.Set(string(SessionCookieScopes), []string{})
 
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
@@ -456,6 +472,8 @@ func (siw *ServerInterfaceWrapper) UpdateReleaseReport(c *gin.Context) {
 
 	c.Set(string(BearerAuthScopes), []string{})
 
+	c.Set(string(SessionCookieScopes), []string{})
+
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 		if c.IsAborted() {
@@ -473,6 +491,8 @@ func (siw *ServerInterfaceWrapper) ListReportsGlobal(c *gin.Context) {
 	_ = err
 
 	c.Set(string(BearerAuthScopes), []string{})
+
+	c.Set(string(SessionCookieScopes), []string{})
 
 	// Parameter object where we will unmarshal all parameters from the context
 	var params ListReportsGlobalParams
@@ -1011,34 +1031,38 @@ type StrictGinServerOptions struct {
 	ResponseErrorHandlerFunc func(ctx *gin.Context, err error)
 }
 
+func defaultStrictGinRequestErrorHandler(ctx *gin.Context, err error) {
+	if _, ok := err.(*http.MaxBytesError); ok {
+		ctx.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "request body too large"})
+		return
+	}
+	ctx.JSON(http.StatusBadRequest, gin.H{"msg": err.Error()})
+}
+
 func NewStrictHandler(ssi StrictServerInterface, middlewares []StrictMiddlewareFunc) ServerInterface {
 	return &strictHandler{ssi: ssi, middlewares: middlewares, options: StrictGinServerOptions{
-		RequestErrorHandlerFunc: func(ctx *gin.Context, err error) {
-			ctx.JSON(http.StatusBadRequest, gin.H{"msg": err.Error()})
-		},
+		RequestErrorHandlerFunc: defaultStrictGinRequestErrorHandler,
 		HandlerErrorFunc: func(ctx *gin.Context, err error) {
-			ctx.JSON(http.StatusInternalServerError, gin.H{"msg": err.Error()})
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": http.StatusText(http.StatusInternalServerError)})
 		},
 		ResponseErrorHandlerFunc: func(ctx *gin.Context, err error) {
-			ctx.JSON(http.StatusInternalServerError, gin.H{"msg": err.Error()})
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": http.StatusText(http.StatusInternalServerError)})
 		},
 	}}
 }
 
 func NewStrictHandlerWithOptions(ssi StrictServerInterface, middlewares []StrictMiddlewareFunc, options StrictGinServerOptions) ServerInterface {
 	if options.RequestErrorHandlerFunc == nil {
-		options.RequestErrorHandlerFunc = func(ctx *gin.Context, err error) {
-			ctx.JSON(http.StatusBadRequest, gin.H{"msg": err.Error()})
-		}
+		options.RequestErrorHandlerFunc = defaultStrictGinRequestErrorHandler
 	}
 	if options.HandlerErrorFunc == nil {
 		options.HandlerErrorFunc = func(ctx *gin.Context, err error) {
-			ctx.JSON(http.StatusInternalServerError, gin.H{"msg": err.Error()})
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": http.StatusText(http.StatusInternalServerError)})
 		}
 	}
 	if options.ResponseErrorHandlerFunc == nil {
 		options.ResponseErrorHandlerFunc = func(ctx *gin.Context, err error) {
-			ctx.JSON(http.StatusInternalServerError, gin.H{"msg": err.Error()})
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": http.StatusText(http.StatusInternalServerError)})
 		}
 	}
 	return &strictHandler{ssi: ssi, middlewares: middlewares, options: options}
@@ -1059,7 +1083,7 @@ func (sh *strictHandler) ListReleaseReports(ctx *gin.Context, applicationId Appl
 	request.Params = params
 
 	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
-		return sh.ssi.ListReleaseReports(ctx, request.(ListReleaseReportsRequestObject))
+		return sh.ssi.ListReleaseReports(ctx.Request.Context(), request.(ListReleaseReportsRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
 		handler = middleware(handler, "ListReleaseReports")
@@ -1093,7 +1117,7 @@ func (sh *strictHandler) CreateReleaseReport(ctx *gin.Context, applicationId App
 	request.Body = &body
 
 	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
-		return sh.ssi.CreateReleaseReport(ctx, request.(CreateReleaseReportRequestObject))
+		return sh.ssi.CreateReleaseReport(ctx.Request.Context(), request.(CreateReleaseReportRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
 		handler = middleware(handler, "CreateReleaseReport")
@@ -1121,7 +1145,7 @@ func (sh *strictHandler) GetReleaseReport(ctx *gin.Context, applicationId Applic
 	request.ReportId = reportId
 
 	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
-		return sh.ssi.GetReleaseReport(ctx, request.(GetReleaseReportRequestObject))
+		return sh.ssi.GetReleaseReport(ctx.Request.Context(), request.(GetReleaseReportRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
 		handler = middleware(handler, "GetReleaseReport")
@@ -1156,7 +1180,7 @@ func (sh *strictHandler) UpdateReleaseReport(ctx *gin.Context, applicationId App
 	request.Body = &body
 
 	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
-		return sh.ssi.UpdateReleaseReport(ctx, request.(UpdateReleaseReportRequestObject))
+		return sh.ssi.UpdateReleaseReport(ctx.Request.Context(), request.(UpdateReleaseReportRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
 		handler = middleware(handler, "UpdateReleaseReport")
@@ -1182,7 +1206,7 @@ func (sh *strictHandler) ListReportsGlobal(ctx *gin.Context, params ListReportsG
 	request.Params = params
 
 	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
-		return sh.ssi.ListReportsGlobal(ctx, request.(ListReportsGlobalRequestObject))
+		return sh.ssi.ListReportsGlobal(ctx.Request.Context(), request.(ListReportsGlobalRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
 		handler = middleware(handler, "ListReportsGlobal")

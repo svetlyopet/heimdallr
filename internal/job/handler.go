@@ -2,11 +2,13 @@ package job
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 
 	"github.com/svetlyopet/heimdallr/internal/job/api"
+	"github.com/svetlyopet/heimdallr/internal/pagination"
+	"github.com/svetlyopet/heimdallr/internal/requestlimits"
+	"github.com/svetlyopet/heimdallr/internal/validation"
 )
 
 type Handler interface {
@@ -53,7 +55,7 @@ func (h handler) CreateAutomationJob(ctx context.Context, request api.CreateAuto
 		}
 	}
 
-	if request.Body.Output != nil && !isValidBase64(*request.Body.Output) {
+	if request.Body.Output != nil && validateOutput(ctx, *request.Body.Output) != nil {
 		return api.CreateAutomationJob400JSONResponse{
 			BadRequestJSONResponse: api.BadRequestJSONResponse{Error: "invalid output"},
 		}, nil
@@ -113,7 +115,7 @@ func (h handler) UpdateAutomationJob(ctx context.Context, request api.UpdateAuto
 		}
 	}
 
-	if request.Body.Output != nil && !isValidBase64(*request.Body.Output) {
+	if request.Body.Output != nil && validateOutput(ctx, *request.Body.Output) != nil {
 		return api.UpdateAutomationJob400JSONResponse{
 			BadRequestJSONResponse: api.BadRequestJSONResponse{Error: "invalid output"},
 		}, nil
@@ -162,16 +164,13 @@ func paginationParams(pagePtr, limitPtr *api.Page) (page int, limit int, ok bool
 }
 
 func buildPagination(page, limit int, total int64) api.Pagination {
-	totalPages := int64(0)
-	if total > 0 {
-		totalPages = (total + int64(limit) - 1) / int64(limit)
-	}
+	safeTotal, totalPages := pagination.SafeTotals(total, limit)
 
 	return api.Pagination{
 		Page:       page,
 		Limit:      limit,
-		Total:      int(total),
-		TotalPages: int(totalPages),
+		Total:      safeTotal,
+		TotalPages: totalPages,
 	}
 }
 
@@ -183,11 +182,6 @@ func jobErrorMessage(err error, fallback string) string {
 	return fallback
 }
 
-func isValidBase64(value string) bool {
-	if value == "" {
-		return true
-	}
-
-	_, err := base64.StdEncoding.DecodeString(value)
-	return err == nil
+func validateOutput(ctx context.Context, value string) error {
+	return validation.ValidateBase64Output(value, requestlimits.MaxDecodedOutputBytes(ctx))
 }

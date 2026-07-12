@@ -1,10 +1,11 @@
 import { reactive } from "vue";
-import { apiRequest } from "../api/client";
-import { clearStoredToken, clearStoredUsername, getStoredToken, getStoredUsername, setStoredToken, setStoredUsername } from "./headers";
+import { apiRequest } from "../api/client.js";
+import { clearStoredUsername, getStoredUsername, setStoredUsername } from "./headers.js";
+
+const LEGACY_TOKEN_STORAGE_KEY = "heimdallr.auth.token";
 
 export const sessionState = reactive({
     username: "",
-    token: "",
     authenticated: false,
     roles: [],
     checking: false,
@@ -16,36 +17,35 @@ export function initSession() {
         return;
     }
 
-    sessionState.token = getStoredToken();
+    localStorage.removeItem(LEGACY_TOKEN_STORAGE_KEY);
     sessionState.username = getStoredUsername();
     sessionState.initialized = true;
 }
 
 export async function loginWithCredentials(username, password) {
-    const response = await apiRequest("/v1/auth/login", {
+    await apiRequest("/v1/auth/login", {
         method: "POST",
         body: JSON.stringify({ username, password }),
-        skipAuth: true,
     });
 
-    const token = response?.data?.token ?? "";
-    if (!token) {
-        throw new Error("missing login token");
-    }
-
     sessionState.username = username;
-    sessionState.token = token;
-    setStoredToken(token);
     setStoredUsername(username);
 }
 
 export function clearSession() {
     sessionState.username = "";
-    sessionState.token = "";
     sessionState.authenticated = false;
     sessionState.roles = [];
-    clearStoredToken();
+    localStorage.removeItem(LEGACY_TOKEN_STORAGE_KEY);
     clearStoredUsername();
+}
+
+export async function logoutSession() {
+    try {
+        await apiRequest("/v1/auth/logout", { method: "POST" });
+    } finally {
+        clearSession();
+    }
 }
 
 export async function ensureSessionAccess() {
@@ -54,12 +54,6 @@ export async function ensureSessionAccess() {
 }
 
 export async function refreshSessionAccess() {
-    if (!sessionState.token) {
-        sessionState.authenticated = false;
-        sessionState.roles = [];
-        return;
-    }
-
     sessionState.checking = true;
     try {
         await apiRequest("/v1/provider?limit=1");

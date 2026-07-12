@@ -50,9 +50,13 @@ func (s stubTokenService) Delete(_ context.Context, _ string) error {
 func (s stubTokenService) Authenticate(_ context.Context, _ string) (authapi.AuthUser, error) {
 	return authapi.AuthUser{Roles: []authapi.AuthRole{authapi.Admin}}, nil
 }
+func (s stubTokenService) AuthenticateSession(_ context.Context, _ string) (authapi.AuthUser, error) {
+	return authapi.AuthUser{Roles: []authapi.AuthRole{authapi.Admin}}, nil
+}
 
 func (s stubTokenService) RevokeSessionTokens(context.Context, string) error { return nil }
 func (s stubTokenService) RevokeAllUserTokens(context.Context, string) error { return nil }
+func (s stubTokenService) RevokeSessionToken(context.Context, string) error  { return nil }
 
 func newTokenRouter(t *testing.T, svc Service) *gin.Engine {
 	t.Helper()

@@ -7,6 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
+	"github.com/svetlyopet/heimdallr/internal/app"
 	"github.com/svetlyopet/heimdallr/internal/ditest"
 )
 
@@ -36,4 +37,8 @@ func TestAppRegisterRoutesMountsHealthThroughServer(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Contains(t, rec.Body.String(), `"status":"ok"`)
+}
+
+func TestPoliciesCoverGeneratedStrictOperations(t *testing.T) {
+	require.NoError(t, app.ValidatePolicies())
 }

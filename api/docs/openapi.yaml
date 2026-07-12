@@ -24,6 +24,7 @@ tags:
 
 security:
   - BearerAuth: []
+  - SessionCookie: []
 
 paths:
   /health:
@@ -1209,6 +1210,23 @@ paths:
         "500":
           $ref: "#/components/responses/InternalServerError"
 
+  /v1/auth/logout:
+    post:
+      tags:
+        - Auth
+      summary: Logout the current browser session
+      description: Revokes the current session token and expires browser authentication cookies.
+      operationId: logout
+      responses:
+        "204":
+          description: Logout completed
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
   /v1/auth/users:
     get:
       tags:
@@ -1393,6 +1411,11 @@ components:
       type: http
       scheme: bearer
       description: API token passed as a Bearer token in the Authorization header
+    SessionCookie:
+      type: apiKey
+      in: cookie
+      name: heimdallr_session
+      description: HttpOnly browser session cookie
 
   parameters:
     Page:
@@ -1411,6 +1434,7 @@ components:
       schema:
         type: integer
         minimum: 1
+        maximum: 100
         default: 10
 
     ProviderIDPath:
@@ -1789,6 +1813,7 @@ components:
 
     JobOutput:
       type: string
+      description: Base64-encoded output. Decoded content is limited to 4 MiB by default.
 
     JobDataResponse:
       type: object
@@ -2210,6 +2235,7 @@ components:
           $ref: "#/components/schemas/ReportMetadata"
         output:
           type: string
+          description: Base64-encoded output. Decoded content is limited to 4 MiB by default.
         created_at:
           type: string
           format: date-time
@@ -2249,6 +2275,7 @@ components:
           $ref: "#/components/schemas/ReportMetadata"
         output:
           type: string
+          description: Base64-encoded output. Decoded content is limited to 4 MiB by default.
 
     ReportUpdateRequest:
       type: object
@@ -2261,6 +2288,7 @@ components:
           $ref: "#/components/schemas/ReportMetadata"
         output:
           type: string
+          description: Base64-encoded output. Decoded content is limited to 4 MiB by default.
 
     ReportDataResponse:
       type: object
@@ -2811,6 +2839,10 @@ components:
           allOf:
             - $ref: "#/components/schemas/UUID"
           nullable: true
+        expires_at:
+          type: string
+          format: date-time
+          description: Absolute token expiration time.
 
     TokenCreateRequest:
       type: object
@@ -2827,6 +2859,11 @@ components:
           minItems: 1
           items:
             $ref: "#/components/schemas/TokenScope"
+        ttl_seconds:
+          type: integer
+          minimum: 1
+          maximum: 31536000
+          description: Optional token lifetime in seconds. Defaults to 90 days and cannot exceed the configured maximum.
 
     TokenCreateResponse:
       allOf:

@@ -6,17 +6,17 @@ import (
 	"github.com/svetlyopet/heimdallr/internal/report/api"
 )
 
-func RegisterRoutes(rg *gin.RouterGroup, handler Handler, authorizer rbac.Authorizer) {
-	policies := map[string]string{
-		"ListReleaseReports":  rbac.ScopeRead,
-		"CreateReleaseReport": rbac.ScopeApplicationWrite,
-		"GetReleaseReport":    rbac.ScopeRead,
-		"UpdateReleaseReport": rbac.ScopeApplicationWrite,
-		"ListReportsGlobal":   rbac.ScopeRead,
-	}
+var Policies = map[string]string{
+	"ListReleaseReports":  rbac.ScopeRead,
+	"CreateReleaseReport": rbac.ScopeApplicationWrite,
+	"GetReleaseReport":    rbac.ScopeRead,
+	"UpdateReleaseReport": rbac.ScopeApplicationWrite,
+	"ListReportsGlobal":   rbac.ScopeRead,
+}
 
+func RegisterRoutes(rg *gin.RouterGroup, handler Handler, authorizer rbac.Authorizer) {
 	scopeMiddleware := func(next api.StrictHandlerFunc, operationID string) api.StrictHandlerFunc {
-		return rbac.StrictScopeMiddleware(authorizer, policies)(next, operationID)
+		return rbac.StrictScopeMiddleware(authorizer, Policies)(next, operationID)
 	}
 
 	strictHandler := api.NewStrictHandlerWithOptions(handler, []api.StrictMiddlewareFunc{scopeMiddleware}, api.StrictGinServerOptions{

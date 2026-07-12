@@ -1,6 +1,6 @@
 const API_BASE_URL = "/api";
 
-import { getAuthHeaders } from "../auth/headers";
+import { getCSRFToken } from "../auth/headers.js";
 
 export async function apiRequest(path, options = {}) {
     const headers = {
@@ -9,13 +9,18 @@ export async function apiRequest(path, options = {}) {
         ...options.headers,
     };
 
-    if (!options.skipAuth) {
-        Object.assign(headers, getAuthHeaders());
+    const method = (options.method ?? "GET").toUpperCase();
+    if (!["GET", "HEAD", "OPTIONS", "TRACE"].includes(method)) {
+        const csrfToken = getCSRFToken();
+        if (csrfToken) {
+            headers["X-CSRF-Token"] = csrfToken;
+        }
     }
 
     const response = await fetch(`${API_BASE_URL}${path}`, {
-        headers,
         ...options,
+        headers,
+        credentials: "same-origin",
     });
 
     if (response.status === 204) {

@@ -21,4 +21,5 @@ type APITokenService interface {
 	CreateSession(ctx context.Context, req SessionTokenCreateRequest, createdBy uuid.UUID) (SessionTokenCreateResponse, error)
 	RevokeSessionTokens(ctx context.Context, userID string) error
 	RevokeAllUserTokens(ctx context.Context, userID string) error
+	RevokeSessionToken(ctx context.Context, plainToken string) error
 }
