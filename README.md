@@ -157,29 +157,57 @@ Example API and integration material:
 
 ## Configuration
 
-- `DATABASE_URL` — PostgreSQL connection string (required).
-- `HEIMDALLR_BOOTSTRAP_ROOT_PASSWORD` — initial `root` password (minimum 12
-  characters). If unset, a generated password is written to the startup log.
-- `-server-name` and `-server-port` — bind address; defaults to
-  `localhost:8080`.
-- HTTP resource limits default to a 5s read-header timeout, 15s read timeout,
-  30s write timeout, 60s idle timeout, 1 MiB of headers, 5 MiB request bodies,
-  4 MiB of decoded job/report output, and 100 rows per page. Override them with
-  `HEIMDALLR_READ_HEADER_TIMEOUT`, `HEIMDALLR_READ_TIMEOUT`,
-  `HEIMDALLR_WRITE_TIMEOUT`, `HEIMDALLR_IDLE_TIMEOUT`,
-  `HEIMDALLR_MAX_HEADER_BYTES`, `HEIMDALLR_MAX_REQUEST_BODY_BYTES`,
-  `HEIMDALLR_MAX_DECODED_OUTPUT_BYTES`, and
-  `HEIMDALLR_MAX_PAGINATION_LIMIT`.
-- API tokens expire after 90 days by default and may not exceed 365 days.
-  Configure shorter periods with `HEIMDALLR_API_TOKEN_DEFAULT_TTL` and
-  `HEIMDALLR_API_TOKEN_MAX_TTL`; rotate migrated tokens before their assigned
-  deadline.
-- Browser sessions use HttpOnly cookies and CSRF tokens. Set
-  `HEIMDALLR_COOKIE_SECURE=true` when serving over HTTPS; release/production
-  mode refuses an insecure cookie setting. If `HEIMDALLR_CSRF_COOKIE_NAME` is
-  customized, build the SPA with the same value in `VITE_CSRF_COOKIE_NAME`.
-- `-log-format` — `text` or `json`.
-- `-log-level` — `debug`, `info`, `warn`, or `error`.
+Heimdallr resolves each setting from several sources. When the same value is
+set in more than one place, the higher-priority source wins:
+
+1. Built-in defaults (lowest priority)
+2. YAML config file (when `-config` is passed)
+3. Environment variables
+4. Explicit CLI flags (highest priority)
+
+Pass `-config /path/to/config.yaml` to load a YAML file. Omitted file keys fall
+through to the next layer. Release-mode checks (`GIN_MODE=release` or
+`HEIMDALLR_ENV=production`) read only from the environment and require secure
+cookies regardless of file settings.
+
+Example:
+
+```bash
+./heimdallr -config /etc/heimdallr/config.yaml
+```
+
+| Setting | Flag | Environment variable | Config file key | Default | Description |
+| --- | --- | --- | --- | --- | --- |
+| Config file path | `-config` | — | — | — | Path to YAML config file |
+| Database URL | — | `DATABASE_URL` | `database.url` | — | PostgreSQL connection string (required) |
+| Bootstrap root password | — | `HEIMDALLR_BOOTSTRAP_ROOT_PASSWORD` | `auth.bootstrap_root_password` | — | Initial `root` password (min. 12 characters); generated and logged if unset |
+| Server host | `-server-name` | — | `server.host` | `localhost` | HTTP bind host |
+| Server port | `-server-port` | — | `server.port` | `8080` | HTTP listen port |
+| Log format | `-log-format` | — | `logger.format` | `text` | `text` or `json` |
+| Log level | `-log-level` | — | `logger.level` | `info` | `debug`, `info`, `warn`, or `error` |
+| Read header timeout | — | `HEIMDALLR_READ_HEADER_TIMEOUT` | `server.read_header_timeout` | `5s` | Max time to read request headers |
+| Read timeout | — | `HEIMDALLR_READ_TIMEOUT` | `server.read_timeout` | `15s` | Max time to read the full request |
+| Write timeout | — | `HEIMDALLR_WRITE_TIMEOUT` | `server.write_timeout` | `30s` | Max time to write the response |
+| Idle timeout | — | `HEIMDALLR_IDLE_TIMEOUT` | `server.idle_timeout` | `60s` | Max idle connection time |
+| Max header bytes | — | `HEIMDALLR_MAX_HEADER_BYTES` | `server.max_header_bytes` | `1048576` | Maximum request header size (1 MiB) |
+| Max request body bytes | — | `HEIMDALLR_MAX_REQUEST_BODY_BYTES` | `server.max_request_body_bytes` | `5242880` | Maximum request body size (5 MiB) |
+| Max decoded output bytes | — | `HEIMDALLR_MAX_DECODED_OUTPUT_BYTES` | `server.max_decoded_output_bytes` | `4194304` | Maximum decoded job/report output (4 MiB) |
+| Max pagination limit | — | `HEIMDALLR_MAX_PAGINATION_LIMIT` | `server.max_pagination_limit` | `100` | Maximum rows per page (max 100) |
+| Login rate limit max | — | `HEIMDALLR_LOGIN_RATE_LIMIT_MAX` | `auth.login_rate_limit_max` | `10` | Max login attempts per window |
+| Login rate limit window | — | `HEIMDALLR_LOGIN_RATE_LIMIT_WINDOW` | `auth.login_rate_limit_window` | `15m` | Login rate limit window |
+| Login rate limit max keys | — | `HEIMDALLR_LOGIN_RATE_LIMIT_MAX_KEYS` | `auth.login_rate_limit_max_keys` | `10000` | Max tracked login rate limit keys |
+| API rate limit IP rate | — | `HEIMDALLR_API_RATE_LIMIT_IP_RATE` | `auth.api_rate_limit_ip_rate` | `20` | Per-IP sustained request rate |
+| API rate limit IP burst | — | `HEIMDALLR_API_RATE_LIMIT_IP_BURST` | `auth.api_rate_limit_ip_burst` | `40` | Per-IP burst request allowance |
+| API rate limit user rate | — | `HEIMDALLR_API_RATE_LIMIT_USER_RATE` | `auth.api_rate_limit_user_rate` | `50` | Per-user sustained request rate |
+| API rate limit user burst | — | `HEIMDALLR_API_RATE_LIMIT_USER_BURST` | `auth.api_rate_limit_user_burst` | `100` | Per-user burst request allowance |
+| API rate limit max keys | — | `HEIMDALLR_API_RATE_LIMIT_MAX_KEYS` | `auth.api_rate_limit_max_keys` | `10000` | Max tracked API rate limit keys |
+| API rate limit stale TTL | — | `HEIMDALLR_API_RATE_LIMIT_STALE_TTL` | `auth.api_rate_limit_stale_ttl` | `1h` | TTL for stale rate limit entries |
+| Session token TTL | — | `HEIMDALLR_SESSION_TOKEN_TTL` | `auth.session_token_ttl` | `24h` | Browser session lifetime |
+| API token default TTL | — | `HEIMDALLR_API_TOKEN_DEFAULT_TTL` | `auth.api_token_default_ttl` | `2160h` (90 days) | Default API token lifetime |
+| API token max TTL | — | `HEIMDALLR_API_TOKEN_MAX_TTL` | `auth.api_token_max_ttl` | `8760h` (365 days) | Maximum API token lifetime |
+| Session cookie name | — | `HEIMDALLR_SESSION_COOKIE_NAME` | `auth.session_cookie_name` | `heimdallr_session` | HttpOnly session cookie name |
+| CSRF cookie name | — | `HEIMDALLR_CSRF_COOKIE_NAME` | `auth.csrf_cookie_name` | `heimdallr_csrf` | CSRF cookie name; match `VITE_CSRF_COOKIE_NAME` in the SPA build |
+| Cookie secure | — | `HEIMDALLR_COOKIE_SECURE` | `auth.cookie_secure` | `false` (non-release) | Require HTTPS cookies; must be `true` in release/production mode |
 
 Database migrations run automatically when the application starts. For local
 development and tests, start ephemeral PostgreSQL with `make test-db-up`.

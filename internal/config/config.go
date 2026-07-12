@@ -88,6 +88,7 @@ func LoadFromFlags(args []string, env func(string) string) (AppConfig, error) {
 	}
 
 	fs := flag.NewFlagSet("heimdallr", flag.ContinueOnError)
+	configPath := fs.String("config", "", "path to YAML config file")
 	logFormat := fs.String("log-format", "text", "log format: text or json")
 	logLevel := fs.String("log-level", "info", "log level: debug, info, warn, or error")
 	serverName := fs.String("server-name", constants.ApiDefaultHost, "server name")
@@ -97,8 +98,31 @@ func LoadFromFlags(args []string, env func(string) string) (AppConfig, error) {
 		return AppConfig{}, fmt.Errorf("parse flags: %w", err)
 	}
 
+	explicitFlags := make(map[string]bool)
+	fs.Visit(func(f *flag.Flag) {
+		explicitFlags[f.Name] = true
+	})
+
+	var fileCfg fileConfig
+	if strings.TrimSpace(*configPath) != "" {
+		var err error
+		fileCfg, err = loadFileConfig(strings.TrimSpace(*configPath))
+		if err != nil {
+			return AppConfig{}, err
+		}
+	}
+
 	releaseMode := isReleaseMode(env)
-	cookieSecure, err := parseBoolEnv(env, cookieSecureEnv, releaseMode)
+	cookieSecureFallback := releaseMode
+	if fileCfg.Auth.CookieSecure != nil {
+		cookieSecureFallback = *fileCfg.Auth.CookieSecure
+	}
+	cookieSecure, err := mergeBool(
+		cookieSecureFallback,
+		env,
+		cookieSecureEnv,
+		fileCfg.Auth.CookieSecure,
+	)
 	if err != nil {
 		return AppConfig{}, err
 	}
@@ -106,57 +130,205 @@ func LoadFromFlags(args []string, env func(string) string) (AppConfig, error) {
 		return AppConfig{}, fmt.Errorf("%s must be true in release/production mode", cookieSecureEnv)
 	}
 
-	defaultAPITokenTTL := parseDurationEnv(env, apiTokenDefaultTTLEnv, 90*24*time.Hour)
-	maxAPITokenTTL := parseDurationEnv(env, apiTokenMaxTTLEnv, hardMaximumAPITokenTTL)
+	defaultAPITokenTTL := mergeDuration(
+		90*24*time.Hour,
+		env,
+		apiTokenDefaultTTLEnv,
+		fileCfg.Auth.DefaultAPITokenTTL,
+	)
+	maxAPITokenTTL := mergeDuration(
+		hardMaximumAPITokenTTL,
+		env,
+		apiTokenMaxTTLEnv,
+		fileCfg.Auth.MaxAPITokenTTL,
+	)
 	if maxAPITokenTTL > hardMaximumAPITokenTTL {
 		return AppConfig{}, fmt.Errorf("%s must not exceed %s", apiTokenMaxTTLEnv, hardMaximumAPITokenTTL)
 	}
 	if defaultAPITokenTTL > maxAPITokenTTL {
 		return AppConfig{}, fmt.Errorf("%s must not exceed %s", apiTokenDefaultTTLEnv, apiTokenMaxTTLEnv)
 	}
-	maxPaginationLimit := parseIntEnv(env, maxPaginationLimitEnv, 100)
+
+	maxPaginationLimit := mergeInt(
+		100,
+		env,
+		maxPaginationLimitEnv,
+		fileCfg.Server.MaxPaginationLimit,
+	)
 	if maxPaginationLimit > 100 {
 		return AppConfig{}, fmt.Errorf("%s must not exceed 100", maxPaginationLimitEnv)
 	}
 
+	logFormatValue := mergeString(
+		"text",
+		fileCfg.Logger.Format,
+		"",
+		explicitFlags["log-format"],
+		*logFormat,
+	)
+	logLevelValue := mergeString(
+		"info",
+		fileCfg.Logger.Level,
+		"",
+		explicitFlags["log-level"],
+		*logLevel,
+	)
+	serverHost := mergeString(
+		constants.ApiDefaultHost,
+		fileCfg.Server.Host,
+		"",
+		explicitFlags["server-name"],
+		*serverName,
+	)
+	serverPortValue := mergeString(
+		constants.ApiDefaultPort,
+		fileCfg.Server.Port,
+		"",
+		explicitFlags["server-port"],
+		*serverPort,
+	)
+
 	return AppConfig{
 		Server: ServerConfig{
-			Host:                  *serverName,
-			Port:                  *serverPort,
-			ReadHeaderTimeout:     parseDurationEnv(env, readHeaderTimeoutEnv, 5*time.Second),
-			ReadTimeout:           parseDurationEnv(env, readTimeoutEnv, 15*time.Second),
-			WriteTimeout:          parseDurationEnv(env, writeTimeoutEnv, 30*time.Second),
-			IdleTimeout:           parseDurationEnv(env, idleTimeoutEnv, 60*time.Second),
-			MaxHeaderBytes:        parseIntEnv(env, maxHeaderBytesEnv, 1<<20),
-			MaxRequestBodyBytes:   int64(parseIntEnv(env, maxRequestBodyBytesEnv, 5<<20)),
-			MaxDecodedOutputBytes: int64(parseIntEnv(env, maxDecodedOutputBytesEnv, 4<<20)),
-			MaxPaginationLimit:    maxPaginationLimit,
+			Host: serverHost,
+			Port: serverPortValue,
+			ReadHeaderTimeout: mergeDuration(
+				5*time.Second,
+				env,
+				readHeaderTimeoutEnv,
+				fileCfg.Server.ReadHeaderTimeout,
+			),
+			ReadTimeout: mergeDuration(
+				15*time.Second,
+				env,
+				readTimeoutEnv,
+				fileCfg.Server.ReadTimeout,
+			),
+			WriteTimeout: mergeDuration(
+				30*time.Second,
+				env,
+				writeTimeoutEnv,
+				fileCfg.Server.WriteTimeout,
+			),
+			IdleTimeout: mergeDuration(
+				60*time.Second,
+				env,
+				idleTimeoutEnv,
+				fileCfg.Server.IdleTimeout,
+			),
+			MaxHeaderBytes: mergeInt(
+				1<<20,
+				env,
+				maxHeaderBytesEnv,
+				fileCfg.Server.MaxHeaderBytes,
+			),
+			MaxRequestBodyBytes: int64(mergeInt(
+				5<<20,
+				env,
+				maxRequestBodyBytesEnv,
+				int(fileCfg.Server.MaxRequestBodyBytes),
+			)),
+			MaxDecodedOutputBytes: int64(mergeInt(
+				4<<20,
+				env,
+				maxDecodedOutputBytesEnv,
+				int(fileCfg.Server.MaxDecodedOutputBytes),
+			)),
+			MaxPaginationLimit: maxPaginationLimit,
 		},
 		Database: database.Config{
-			DatabaseURL: strings.TrimSpace(env("DATABASE_URL")),
+			DatabaseURL: mergeString("", fileCfg.Database.URL, strings.TrimSpace(env("DATABASE_URL")), false, ""),
 		},
 		Logger: logger.Config{
-			Format: logger.Format(*logFormat),
-			Level:  parseLogLevel(*logLevel),
+			Format: logger.Format(logFormatValue),
+			Level:  parseLogLevel(logLevelValue),
 			Output: os.Stdout,
 		},
 		Auth: AuthConfig{
-			BootstrapRootPassword: strings.TrimSpace(env(bootstrapRootPasswordEnv)),
-			LoginRateLimitMax:     parseIntEnv(env, loginRateLimitMaxEnv, 10),
-			LoginRateLimitWindow:  parseDurationEnv(env, loginRateLimitWindowEnv, 15*time.Minute),
-			LoginRateLimitMaxKeys: parseIntEnv(env, loginRateLimitMaxKeysEnv, 10_000),
-			APIRateLimitIPRate:    parseFloatEnv(env, apiRateLimitIPRateEnv, 20),
-			APIRateLimitIPBurst:   parseFloatEnv(env, apiRateLimitIPBurstEnv, 40),
-			APIRateLimitUserRate:  parseFloatEnv(env, apiRateLimitUserRateEnv, 50),
-			APIRateLimitUserBurst: parseFloatEnv(env, apiRateLimitUserBurstEnv, 100),
-			APIRateLimitMaxKeys:   parseIntEnv(env, apiRateLimitMaxKeysEnv, 10_000),
-			APIRateLimitStaleTTL:  parseDurationEnv(env, apiRateLimitStaleTTLEnv, time.Hour),
-			SessionTokenTTL:       parseDurationEnv(env, sessionTokenTTLEnv, 24*time.Hour),
-			DefaultAPITokenTTL:    defaultAPITokenTTL,
-			MaxAPITokenTTL:        maxAPITokenTTL,
-			SessionCookieName:     envOrDefault(env, sessionCookieNameEnv, "heimdallr_session"),
-			CSRFCookieName:        envOrDefault(env, csrfCookieNameEnv, "heimdallr_csrf"),
-			CookieSecure:          cookieSecure,
+			BootstrapRootPassword: mergeString(
+				"",
+				fileCfg.Auth.BootstrapRootPassword,
+				strings.TrimSpace(env(bootstrapRootPasswordEnv)),
+				false,
+				"",
+			),
+			LoginRateLimitMax: mergeInt(
+				10,
+				env,
+				loginRateLimitMaxEnv,
+				fileCfg.Auth.LoginRateLimitMax,
+			),
+			LoginRateLimitWindow: mergeDuration(
+				15*time.Minute,
+				env,
+				loginRateLimitWindowEnv,
+				fileCfg.Auth.LoginRateLimitWindow,
+			),
+			LoginRateLimitMaxKeys: mergeInt(
+				10_000,
+				env,
+				loginRateLimitMaxKeysEnv,
+				fileCfg.Auth.LoginRateLimitMaxKeys,
+			),
+			APIRateLimitIPRate: mergeFloat(
+				20,
+				env,
+				apiRateLimitIPRateEnv,
+				fileCfg.Auth.APIRateLimitIPRate,
+			),
+			APIRateLimitIPBurst: mergeFloat(
+				40,
+				env,
+				apiRateLimitIPBurstEnv,
+				fileCfg.Auth.APIRateLimitIPBurst,
+			),
+			APIRateLimitUserRate: mergeFloat(
+				50,
+				env,
+				apiRateLimitUserRateEnv,
+				fileCfg.Auth.APIRateLimitUserRate,
+			),
+			APIRateLimitUserBurst: mergeFloat(
+				100,
+				env,
+				apiRateLimitUserBurstEnv,
+				fileCfg.Auth.APIRateLimitUserBurst,
+			),
+			APIRateLimitMaxKeys: mergeInt(
+				10_000,
+				env,
+				apiRateLimitMaxKeysEnv,
+				fileCfg.Auth.APIRateLimitMaxKeys,
+			),
+			APIRateLimitStaleTTL: mergeDuration(
+				time.Hour,
+				env,
+				apiRateLimitStaleTTLEnv,
+				fileCfg.Auth.APIRateLimitStaleTTL,
+			),
+			SessionTokenTTL: mergeDuration(
+				24*time.Hour,
+				env,
+				sessionTokenTTLEnv,
+				fileCfg.Auth.SessionTokenTTL,
+			),
+			DefaultAPITokenTTL: defaultAPITokenTTL,
+			MaxAPITokenTTL:     maxAPITokenTTL,
+			SessionCookieName: mergeString(
+				"heimdallr_session",
+				fileCfg.Auth.SessionCookieName,
+				strings.TrimSpace(env(sessionCookieNameEnv)),
+				false,
+				"",
+			),
+			CSRFCookieName: mergeString(
+				"heimdallr_csrf",
+				fileCfg.Auth.CSRFCookieName,
+				strings.TrimSpace(env(csrfCookieNameEnv)),
+				false,
+				"",
+			),
+			CookieSecure: cookieSecure,
 		},
 	}, nil
 }
@@ -208,6 +380,75 @@ func DefaultTestConfig(output io.Writer) AppConfig {
 	}
 }
 
+func mergeString(defaultValue, fileValue, envValue string, flagSet bool, flagValue string) string {
+	value := defaultValue
+	if strings.TrimSpace(fileValue) != "" {
+		value = strings.TrimSpace(fileValue)
+	}
+	if strings.TrimSpace(envValue) != "" {
+		value = strings.TrimSpace(envValue)
+	}
+	if flagSet && strings.TrimSpace(flagValue) != "" {
+		value = strings.TrimSpace(flagValue)
+	}
+	return value
+}
+
+func mergeInt(defaultValue int, env func(string) string, envKey string, fileValue int) int {
+	value := defaultValue
+	if fileValue > 0 {
+		value = fileValue
+	}
+	if envValue := strings.TrimSpace(env(envKey)); envValue != "" {
+		if parsed, err := strconv.Atoi(envValue); err == nil && parsed > 0 {
+			value = parsed
+		}
+	}
+	return value
+}
+
+func mergeDuration(defaultValue time.Duration, env func(string) string, envKey string, fileValue time.Duration) time.Duration {
+	value := defaultValue
+	if fileValue > 0 {
+		value = fileValue
+	}
+	if envValue := strings.TrimSpace(env(envKey)); envValue != "" {
+		if parsed, err := time.ParseDuration(envValue); err == nil && parsed > 0 {
+			value = parsed
+		}
+	}
+	return value
+}
+
+func mergeFloat(defaultValue float64, env func(string) string, envKey string, fileValue float64) float64 {
+	value := defaultValue
+	if fileValue > 0 {
+		value = fileValue
+	}
+	if envValue := strings.TrimSpace(env(envKey)); envValue != "" {
+		if parsed, err := strconv.ParseFloat(envValue, 64); err == nil && parsed > 0 {
+			value = parsed
+		}
+	}
+	return value
+}
+
+func mergeBool(defaultValue bool, env func(string) string, envKey string, fileValue *bool) (bool, error) {
+	value := defaultValue
+	if fileValue != nil {
+		value = *fileValue
+	}
+	envValue := strings.TrimSpace(env(envKey))
+	if envValue == "" {
+		return value, nil
+	}
+	parsed, err := strconv.ParseBool(envValue)
+	if err != nil {
+		return false, fmt.Errorf("parse %s: %w", envKey, err)
+	}
+	return parsed, nil
+}
+
 func parseLogLevel(level string) slog.Level {
 	switch strings.ToLower(strings.TrimSpace(level)) {
 	case "debug":
@@ -221,71 +462,6 @@ func parseLogLevel(level string) slog.Level {
 	default:
 		return slog.LevelInfo
 	}
-}
-
-func parseIntEnv(env func(string) string, key string, fallback int) int {
-	value := strings.TrimSpace(env(key))
-	if value == "" {
-		return fallback
-	}
-
-	parsed, err := strconv.Atoi(value)
-	if err != nil || parsed <= 0 {
-		return fallback
-	}
-
-	return parsed
-}
-
-func parseDurationEnv(env func(string) string, key string, fallback time.Duration) time.Duration {
-	value := strings.TrimSpace(env(key))
-	if value == "" {
-		return fallback
-	}
-
-	parsed, err := time.ParseDuration(value)
-	if err != nil || parsed <= 0 {
-		return fallback
-	}
-
-	return parsed
-}
-
-func parseFloatEnv(env func(string) string, key string, fallback float64) float64 {
-	value := strings.TrimSpace(env(key))
-	if value == "" {
-		return fallback
-	}
-
-	parsed, err := strconv.ParseFloat(value, 64)
-	if err != nil || parsed <= 0 {
-		return fallback
-	}
-
-	return parsed
-}
-
-func parseBoolEnv(env func(string) string, key string, fallback bool) (bool, error) {
-	value := strings.TrimSpace(env(key))
-	if value == "" {
-		return fallback, nil
-	}
-
-	parsed, err := strconv.ParseBool(value)
-	if err != nil {
-		return false, fmt.Errorf("parse %s: %w", key, err)
-	}
-
-	return parsed, nil
-}
-
-func envOrDefault(env func(string) string, key string, fallback string) string {
-	value := strings.TrimSpace(env(key))
-	if value == "" {
-		return fallback
-	}
-
-	return value
 }
 
 func isReleaseMode(env func(string) string) bool {

@@ -2,6 +2,8 @@ package config_test
 
 import (
 	"log/slog"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -70,4 +72,144 @@ func TestLoadFromFlagsReadsEnvironment(t *testing.T) {
 	require.Equal(t, logger.FormatJSON, cfg.Logger.Format)
 	require.Equal(t, slog.LevelDebug, cfg.Logger.Level)
 	require.Equal(t, "BootstrapPassword12!", cfg.Auth.BootstrapRootPassword)
+}
+
+func writeConfigFile(t *testing.T, content string) string {
+	t.Helper()
+
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
+	return path
+}
+
+func TestLoadFromFlagsReadsConfigFile(t *testing.T) {
+	path := writeConfigFile(t, `
+database:
+  url: postgres://file
+server:
+  host: filehost
+  port: "9090"
+logger:
+  format: json
+  level: warn
+auth:
+  bootstrap_root_password: FilePassword12!
+  login_rate_limit_max: 25
+`)
+
+	cfg, err := config.LoadFromFlags([]string{"-config", path}, func(string) string { return "" })
+	require.NoError(t, err)
+
+	require.Equal(t, "postgres://file", cfg.Database.DatabaseURL)
+	require.Equal(t, "filehost", cfg.Server.Host)
+	require.Equal(t, "9090", cfg.Server.Port)
+	require.Equal(t, logger.FormatJSON, cfg.Logger.Format)
+	require.Equal(t, slog.LevelWarn, cfg.Logger.Level)
+	require.Equal(t, "FilePassword12!", cfg.Auth.BootstrapRootPassword)
+	require.Equal(t, 25, cfg.Auth.LoginRateLimitMax)
+}
+
+func TestLoadFromFlagsEnvironmentOverridesConfigFile(t *testing.T) {
+	path := writeConfigFile(t, `
+database:
+  url: postgres://file
+server:
+  port: "9090"
+auth:
+  bootstrap_root_password: FilePassword12!
+`)
+
+	env := func(key string) string {
+		switch key {
+		case "DATABASE_URL":
+			return "postgres://env"
+		case "HEIMDALLR_BOOTSTRAP_ROOT_PASSWORD":
+			return "EnvPassword12!"
+		default:
+			return ""
+		}
+	}
+
+	cfg, err := config.LoadFromFlags([]string{"-config", path}, env)
+	require.NoError(t, err)
+
+	require.Equal(t, "postgres://env", cfg.Database.DatabaseURL)
+	require.Equal(t, "9090", cfg.Server.Port)
+	require.Equal(t, "EnvPassword12!", cfg.Auth.BootstrapRootPassword)
+}
+
+func TestLoadFromFlagsExplicitFlagOverridesConfigFileAndEnvironment(t *testing.T) {
+	path := writeConfigFile(t, `
+server:
+  host: filehost
+  port: "9090"
+logger:
+  format: json
+  level: debug
+`)
+
+	env := func(key string) string {
+		return ""
+	}
+
+	cfg, err := config.LoadFromFlags(
+		[]string{
+			"-config", path,
+			"-server-name", "flaghost",
+			"-server-port", "7070",
+			"-log-format", "text",
+			"-log-level", "error",
+		},
+		env,
+	)
+	require.NoError(t, err)
+
+	require.Equal(t, "flaghost", cfg.Server.Host)
+	require.Equal(t, "7070", cfg.Server.Port)
+	require.Equal(t, logger.FormatText, cfg.Logger.Format)
+	require.Equal(t, slog.LevelError, cfg.Logger.Level)
+}
+
+func TestLoadFromFlagsConfigFilePortUsedWhenFlagNotExplicit(t *testing.T) {
+	path := writeConfigFile(t, `
+server:
+  port: "9090"
+`)
+
+	cfg, err := config.LoadFromFlags([]string{"-config", path}, func(string) string { return "" })
+	require.NoError(t, err)
+	require.Equal(t, "9090", cfg.Server.Port)
+}
+
+func TestLoadFromFlagsMissingConfigFileReturnsError(t *testing.T) {
+	_, err := config.LoadFromFlags(
+		[]string{"-config", filepath.Join(t.TempDir(), "missing.yaml")},
+		func(string) string { return "" },
+	)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "read config file")
+}
+
+func TestLoadFromFlagsInvalidConfigFileReturnsError(t *testing.T) {
+	path := writeConfigFile(t, "database:\n  url: [")
+	_, err := config.LoadFromFlags([]string{"-config", path}, func(string) string { return "" })
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "parse config file")
+}
+
+func TestLoadFromFlagsRequiresSecureCookiesInReleaseModeWithConfigFile(t *testing.T) {
+	path := writeConfigFile(t, `
+auth:
+  cookie_secure: false
+`)
+
+	env := func(key string) string {
+		if key == "GIN_MODE" {
+			return "release"
+		}
+		return ""
+	}
+
+	_, err := config.LoadFromFlags([]string{"-config", path}, env)
+	require.Error(t, err)
 }
