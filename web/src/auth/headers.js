@@ -1,6 +1,9 @@
 const TOKEN_STORAGE_KEY = "heimdallr.auth.token";
 const USERNAME_STORAGE_KEY = "heimdallr.auth.username";
 
+// Tokens are stored in localStorage and are readable to any same-origin script.
+// The API CSP reduces XSS risk; httpOnly cookies would be a stronger future option.
+
 export function getStoredToken() {
     return localStorage.getItem(TOKEN_STORAGE_KEY) ?? "";
 }

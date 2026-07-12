@@ -13,6 +13,7 @@ import (
 	"github.com/svetlyopet/heimdallr/internal/application"
 	"github.com/svetlyopet/heimdallr/internal/release/api"
 	"github.com/svetlyopet/heimdallr/internal/testutil"
+	"github.com/svetlyopet/heimdallr/internal/rbac"
 )
 
 type stubReleaseService struct {
@@ -59,7 +60,8 @@ func newReleaseRouter(t *testing.T, svc Service) *gin.Engine {
 
 	r := gin.New()
 	apiGroup := r.Group("/api")
-	RegisterRoutes(apiGroup, h)
+	apiGroup.Use(testutil.AuthenticatedAdminMiddleware())
+	RegisterRoutes(apiGroup, h, rbac.NewAuthorizer())
 
 	return r
 }

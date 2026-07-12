@@ -3,9 +3,6 @@ package auth
 import (
 	"context"
 	"crypto/rand"
-	"crypto/sha256"
-	"crypto/subtle"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -14,6 +11,7 @@ import (
 
 	"github.com/svetlyopet/heimdallr/internal/auth/api"
 	"github.com/svetlyopet/heimdallr/internal/logger"
+	"github.com/svetlyopet/heimdallr/internal/rbac"
 	"gorm.io/gorm"
 )
 
@@ -42,6 +40,7 @@ type ServiceConfig struct {
 
 type service struct {
 	repository        Repository
+	tokenService      APITokenService
 	logger            *logger.Logger
 	bootstrapPassword string
 	supportedRoles    map[string]struct{}
@@ -63,9 +62,18 @@ func (s service) Authenticate(ctx context.Context, username string, password str
 		return api.AuthUser{}, ErrInvalidCredentials
 	}
 
-	hashed := hashPassword(password)
-	if subtle.ConstantTimeCompare([]byte(user.PasswordHash), []byte(hashed)) != 1 {
+	valid, needsRehash := verifyPassword(password, user.PasswordHash)
+	if !valid {
 		return api.AuthUser{}, ErrInvalidCredentials
+	}
+
+	if needsRehash {
+		rehashed, hashErr := hashPassword(password)
+		if hashErr != nil {
+			s.logger.ErrorWithStack(ctx, "failed to rehash password", hashErr, slog.String("username", username))
+		} else if _, updateErr := s.repository.UpdateByID(ctx, user.ID.String(), User{PasswordHash: rehashed}); updateErr != nil {
+			s.logger.ErrorWithStack(ctx, "failed to persist rehashed password", updateErr, slog.String("username", username))
+		}
 	}
 
 	return mapEntityToResponse(user), nil
@@ -98,10 +106,16 @@ func (s service) Create(ctx context.Context, req api.AuthCreateUserRequest) (api
 		return api.AuthUser{}, ErrCreateUser
 	}
 
+	passwordHash, err := hashPassword(req.Password)
+	if err != nil {
+		s.logger.ErrorWithStack(ctx, "failed to hash password", err, slog.String("username", username))
+		return api.AuthUser{}, ErrCreateUser
+	}
+
 	created, err := s.repository.Create(ctx, User{
 		Username:     username,
 		Email:        email,
-		PasswordHash: hashPassword(req.Password),
+		PasswordHash: passwordHash,
 		Roles:        roles,
 	})
 	if err != nil {
@@ -148,6 +162,7 @@ func (s service) Update(ctx context.Context, userID string, req api.AuthUpdateUs
 	}
 
 	update := User{}
+	revokeSessions := false
 
 	if req.Email != nil {
 		email := strings.TrimSpace(string(*req.Email))
@@ -161,13 +176,21 @@ func (s service) Update(ctx context.Context, userID string, req api.AuthUpdateUs
 		if len(*req.Password) < minimumPasswordSize || strings.TrimSpace(*req.Password) == "" {
 			return api.AuthUser{}, ErrInvalidPasswordValue
 		}
-		update.PasswordHash = hashPassword(*req.Password)
+
+		passwordHash, hashErr := hashPassword(*req.Password)
+		if hashErr != nil {
+			s.logger.ErrorWithStack(ctx, "failed to hash password", hashErr, slog.String("user_id", userID))
+			return api.AuthUser{}, ErrUpdateUser
+		}
+
+		update.PasswordHash = passwordHash
+		revokeSessions = true
 	}
 
 	if req.Roles != nil {
-		roles, err := s.validateRoles(rolesFromAPI(req.Roles), false)
-		if err != nil {
-			return api.AuthUser{}, err
+		roles, roleErr := s.validateRoles(rolesFromAPI(req.Roles), false)
+		if roleErr != nil {
+			return api.AuthUser{}, roleErr
 		}
 		if len(roles) == 0 {
 			roles = existing.Roles
@@ -176,6 +199,11 @@ func (s service) Update(ctx context.Context, userID string, req api.AuthUpdateUs
 		if existing.Username == rootUsername && !slices.Equal(roles, existing.Roles) {
 			return api.AuthUser{}, ErrRootRoleForbidden
 		}
+
+		if !slices.Equal(roles, existing.Roles) {
+			revokeSessions = true
+		}
+
 		update.Roles = roles
 	}
 
@@ -187,6 +215,12 @@ func (s service) Update(ctx context.Context, userID string, req api.AuthUpdateUs
 
 		s.logger.ErrorWithStack(ctx, "failed to update user", err, slog.String("user_id", userID))
 		return api.AuthUser{}, ErrUpdateUser
+	}
+
+	if revokeSessions && s.tokenService != nil {
+		if revokeErr := s.tokenService.RevokeSessionTokens(ctx, userID); revokeErr != nil {
+			s.logger.ErrorWithStack(ctx, "failed to revoke session tokens after user update", revokeErr, slog.String("user_id", userID))
+		}
 	}
 
 	return mapEntityToResponse(updated), nil
@@ -210,6 +244,12 @@ func (s service) Delete(ctx context.Context, userID string) error {
 
 	if user.Username == rootUsername {
 		return ErrRootDeleteForbidden
+	}
+
+	if s.tokenService != nil {
+		if revokeErr := s.tokenService.RevokeAllUserTokens(ctx, userID); revokeErr != nil {
+			s.logger.ErrorWithStack(ctx, "failed to revoke tokens before user delete", revokeErr, slog.String("user_id", userID))
+		}
 	}
 
 	if err := s.repository.DeleteByID(ctx, userID); err != nil {
@@ -237,20 +277,26 @@ func (s service) EnsureRootUser(ctx context.Context) (string, error) {
 
 	password := strings.TrimSpace(s.bootstrapPassword)
 	if password == "" {
-		var err error
-		password, err = generateSecurePassword(rootPasswordLength)
-		if err != nil {
-			s.logger.ErrorWithStack(ctx, "failed to generate root password", err)
+		var genErr error
+		password, genErr = generateSecurePassword(rootPasswordLength)
+		if genErr != nil {
+			s.logger.ErrorWithStack(ctx, "failed to generate root password", genErr)
 			return "", ErrRootBootstrap
 		}
 	} else if len(password) < minimumPasswordSize {
 		return "", ErrRootBootstrap
 	}
 
+	passwordHash, err := hashPassword(password)
+	if err != nil {
+		s.logger.ErrorWithStack(ctx, "failed to hash root password", err)
+		return "", ErrRootBootstrap
+	}
+
 	_, err = s.repository.Create(ctx, User{
 		Username:     rootUsername,
 		Email:        rootDefaultEmail,
-		PasswordHash: hashPassword(password),
+		PasswordHash: passwordHash,
 		Roles:        []string{RoleAdmin},
 	})
 	if err != nil {
@@ -267,7 +313,7 @@ func (s service) EnsureRootUser(ctx context.Context) (string, error) {
 
 func (s service) HasAnyRole(user api.AuthUser, requiredRoles ...string) bool {
 	if len(requiredRoles) == 0 {
-		return true
+		return false
 	}
 
 	userRoles := map[string]struct{}{}
@@ -299,7 +345,7 @@ func (s service) validateRoles(roles []string, applyDefault bool) ([]string, err
 	return normalized, nil
 }
 
-func NewService(repository Repository, appLogger *logger.Logger, cfg ServiceConfig) Service {
+func NewService(repository Repository, tokenService APITokenService, appLogger *logger.Logger, cfg ServiceConfig) Service {
 	if appLogger == nil {
 		appLogger = logger.Default()
 	}
@@ -311,15 +357,11 @@ func NewService(repository Repository, appLogger *logger.Logger, cfg ServiceConf
 
 	return &service{
 		repository:        repository,
+		tokenService:      tokenService,
 		logger:            appLogger,
 		bootstrapPassword: strings.TrimSpace(cfg.BootstrapRootPassword),
 		supportedRoles:    roles,
 	}
-}
-
-func hashPassword(value string) string {
-	sum := sha256.Sum256([]byte(value))
-	return hex.EncodeToString(sum[:])
 }
 
 func generateSecurePassword(length int) (string, error) {
@@ -346,4 +388,14 @@ func mapEntityToResponse(user User) api.AuthUser {
 		Email:    emailToAPI(user.Email),
 		Roles:    rolesToAPI(user.Roles),
 	}
+}
+
+// LegacyHashPasswordForTest verifies legacy SHA-256 hashes in unit tests.
+func LegacyHashPasswordForTest(value string) string {
+	return legacyHashPassword(value)
+}
+
+// LoginScopesForRoles maps user roles to token scopes at login time.
+func LoginScopesForRoles(roles []string) []string {
+	return rbac.LoginScopesForRoles(roles)
 }

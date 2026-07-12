@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/svetlyopet/heimdallr/internal/provider/api"
 	"github.com/svetlyopet/heimdallr/internal/testutil"
+	"github.com/svetlyopet/heimdallr/internal/rbac"
 )
 
 type stubProviderService struct {
@@ -60,7 +61,8 @@ func newProviderRouter(t *testing.T, svc Service) *gin.Engine {
 
 	r := gin.New()
 	apiGroup := r.Group("/api")
-	RegisterRoutes(apiGroup, h)
+	apiGroup.Use(testutil.AuthenticatedAdminMiddleware())
+	RegisterRoutes(apiGroup, h, rbac.NewAuthorizer())
 
 	return r
 }

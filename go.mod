@@ -11,6 +11,7 @@ require (
 	github.com/oapi-codegen/runtime v1.4.2
 	github.com/samber/do/v2 v2.0.0
 	github.com/stretchr/testify v1.11.1
+	golang.org/x/crypto v0.54.0
 	golang.org/x/tools v0.48.0
 	golang.org/x/vuln v1.6.0
 	gorm.io/datatypes v1.2.7
@@ -274,7 +275,6 @@ require (
 	go.uber.org/zap v1.27.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/arch v0.29.0 // indirect
-	golang.org/x/crypto v0.54.0 // indirect
 	golang.org/x/exp/typeparams v0.0.0-20260209203927-2842357ff358 // indirect
 	golang.org/x/mod v0.38.0 // indirect
 	golang.org/x/net v0.57.0 // indirect

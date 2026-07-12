@@ -13,6 +13,7 @@ import (
 	"github.com/svetlyopet/heimdallr/internal/agent/api"
 	"github.com/svetlyopet/heimdallr/internal/server"
 	"github.com/svetlyopet/heimdallr/internal/testutil"
+	"github.com/svetlyopet/heimdallr/internal/rbac"
 )
 
 type stubAgentService struct {
@@ -104,7 +105,8 @@ func newAgentRouter(t *testing.T, svc Service) *gin.Engine {
 
 	r := gin.New()
 	apiGroup := r.Group("/api")
-	RegisterRoutes(apiGroup, h)
+	apiGroup.Use(testutil.AuthenticatedAdminMiddleware())
+	RegisterRoutes(apiGroup, h, rbac.NewAuthorizer())
 
 	return r
 }

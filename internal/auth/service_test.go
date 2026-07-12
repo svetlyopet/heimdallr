@@ -21,7 +21,7 @@ func newTestService(t *testing.T, cfg ServiceConfig) (Service, Repository, *gorm
 	require.NoError(t, db.AutoMigrate(&User{}))
 
 	repo := NewRepository(db)
-	svc := NewService(repo, nil, cfg)
+	svc := NewService(repo, nil, nil, cfg)
 
 	return svc, repo, db
 }
@@ -47,7 +47,8 @@ func TestServiceEnsureRootUserCreatesOnce(t *testing.T) {
 	require.Equal(t, rootDefaultEmail, root.Email)
 	require.Equal(t, []string{RoleAdmin}, root.Roles)
 	require.NotEqual(t, password, root.PasswordHash)
-	require.Equal(t, hashPassword(password), root.PasswordHash)
+	valid, _ := verifyPassword(password, root.PasswordHash)
+	require.True(t, valid)
 
 	password, err = svc.EnsureRootUser(t.Context())
 	require.NoError(t, err)

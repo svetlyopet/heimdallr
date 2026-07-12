@@ -18,5 +18,7 @@ type SessionTokenCreateResponse struct {
 
 type APITokenService interface {
 	Authenticate(ctx context.Context, plainToken string) (api.AuthUser, error)
-	Create(ctx context.Context, req SessionTokenCreateRequest, createdBy *uuid.UUID) (SessionTokenCreateResponse, error)
+	CreateSession(ctx context.Context, req SessionTokenCreateRequest, createdBy uuid.UUID) (SessionTokenCreateResponse, error)
+	RevokeSessionTokens(ctx context.Context, userID string) error
+	RevokeAllUserTokens(ctx context.Context, userID string) error
 }

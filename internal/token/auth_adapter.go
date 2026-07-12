@@ -7,7 +7,6 @@ import (
 	"github.com/samber/do/v2"
 	"github.com/svetlyopet/heimdallr/internal/auth"
 	authapi "github.com/svetlyopet/heimdallr/internal/auth/api"
-	"github.com/svetlyopet/heimdallr/internal/token/api"
 )
 
 type authTokenServiceAdapter struct {
@@ -18,21 +17,21 @@ func (a authTokenServiceAdapter) Authenticate(ctx context.Context, plainToken st
 	return a.service.Authenticate(ctx, plainToken)
 }
 
-func (a authTokenServiceAdapter) Create(ctx context.Context, req auth.SessionTokenCreateRequest, createdBy *uuid.UUID) (auth.SessionTokenCreateResponse, error) {
-	scopes := make([]api.TokenScope, 0, len(req.Scopes))
-	for _, scope := range req.Scopes {
-		scopes = append(scopes, api.TokenScope(scope))
-	}
-
-	created, err := a.service.Create(ctx, api.TokenCreateRequest{
-		Name:   req.Name,
-		Scopes: scopes,
-	}, createdBy)
+func (a authTokenServiceAdapter) CreateSession(ctx context.Context, req auth.SessionTokenCreateRequest, createdBy uuid.UUID) (auth.SessionTokenCreateResponse, error) {
+	created, err := a.service.CreateSession(ctx, req.Name, req.Scopes, createdBy)
 	if err != nil {
 		return auth.SessionTokenCreateResponse{}, err
 	}
 
 	return auth.SessionTokenCreateResponse{Token: created.Token}, nil
+}
+
+func (a authTokenServiceAdapter) RevokeSessionTokens(ctx context.Context, userID string) error {
+	return a.service.RevokeSessionTokens(ctx, userID)
+}
+
+func (a authTokenServiceAdapter) RevokeAllUserTokens(ctx context.Context, userID string) error {
+	return a.service.RevokeAllUserTokens(ctx, userID)
 }
 
 func provideAuthTokenService(i do.Injector) (auth.APITokenService, error) {

@@ -1,16 +1,16 @@
 package token
 
 import (
+	"time"
+
 	"github.com/google/uuid"
 	"github.com/svetlyopet/heimdallr/internal/database/model"
 	"gorm.io/gorm"
 )
 
 const (
-	ScopeApplicationWrite = "application:write"
-	ScopeAutomationWrite  = "automation:write"
-	ScopeRead             = "read"
-	ScopeAdmin            = "admin"
+	TokenKindSession = "session"
+	TokenKindAPI     = "api"
 )
 
 type APIToken struct {
@@ -18,6 +18,8 @@ type APIToken struct {
 	Name      string     `gorm:"type:varchar(255);not null;check:name <> ''" json:"name"`
 	TokenHash string     `gorm:"type:char(64);not null;uniqueIndex" json:"-"`
 	Scopes    []string   `gorm:"serializer:json;type:text;not null" json:"scopes"`
+	Kind      string     `gorm:"type:varchar(32);not null;default:api" json:"kind"`
+	ExpiresAt *time.Time `json:"expires_at,omitempty"`
 	CreatedBy *uuid.UUID `gorm:"type:uuid" json:"created_by"`
 	model.Timestamp
 }
@@ -25,6 +27,10 @@ type APIToken struct {
 func (t *APIToken) BeforeCreate(tx *gorm.DB) error {
 	if t.ID == uuid.Nil {
 		t.ID = uuid.New()
+	}
+
+	if t.Kind == "" {
+		t.Kind = TokenKindAPI
 	}
 
 	return nil

@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	authapi "github.com/svetlyopet/heimdallr/internal/auth/api"
+	"github.com/svetlyopet/heimdallr/internal/rbac"
 	"github.com/svetlyopet/heimdallr/internal/testutil"
 	"github.com/svetlyopet/heimdallr/internal/token/api"
 )
@@ -38,6 +39,10 @@ func (s stubTokenService) Create(_ context.Context, _ api.TokenCreateRequest, _ 
 	return s.createResp, nil
 }
 
+func (s stubTokenService) CreateSession(_ context.Context, _ string, _ []string, _ uuid.UUID) (api.TokenCreateResponse, error) {
+	return api.TokenCreateResponse{}, nil
+}
+
 func (s stubTokenService) Delete(_ context.Context, _ string) error {
 	return s.deleteError
 }
@@ -46,9 +51,8 @@ func (s stubTokenService) Authenticate(_ context.Context, _ string) (authapi.Aut
 	return authapi.AuthUser{Roles: []authapi.AuthRole{authapi.Admin}}, nil
 }
 
-func (s stubTokenService) HasScope(_ authapi.AuthUser, _ string) bool {
-	return true
-}
+func (s stubTokenService) RevokeSessionTokens(context.Context, string) error { return nil }
+func (s stubTokenService) RevokeAllUserTokens(context.Context, string) error   { return nil }
 
 func newTokenRouter(t *testing.T, svc Service) *gin.Engine {
 	t.Helper()
@@ -60,31 +64,11 @@ func newTokenRouter(t *testing.T, svc Service) *gin.Engine {
 
 	r := gin.New()
 	apiGroup := r.Group("/api")
-	apiGroup.Use(func(ctx *gin.Context) {
-		ctx.Set("auth.user", authapi.AuthUser{Roles: []authapi.AuthRole{authapi.Admin}})
-		ctx.Next()
-	})
-	RegisterRoutes(apiGroup, h, authServiceStub{})
+	apiGroup.Use(testutil.AuthenticatedAdminMiddleware())
+	RegisterRoutes(apiGroup, h, rbac.NewAuthorizer())
 
 	return r
 }
-
-type authServiceStub struct{}
-
-func (authServiceStub) Authenticate(context.Context, string, string) (authapi.AuthUser, error) {
-	return authapi.AuthUser{Roles: []authapi.AuthRole{authapi.Admin}}, nil
-}
-
-func (authServiceStub) List(context.Context) ([]authapi.AuthUser, error) { return nil, nil }
-func (authServiceStub) Create(context.Context, authapi.AuthCreateUserRequest) (authapi.AuthUser, error) {
-	return authapi.AuthUser{}, nil
-}
-func (authServiceStub) Update(context.Context, string, authapi.AuthUpdateUserRequest) (authapi.AuthUser, error) {
-	return authapi.AuthUser{}, nil
-}
-func (authServiceStub) Delete(context.Context, string) error           { return nil }
-func (authServiceStub) EnsureRootUser(context.Context) (string, error) { return "", nil }
-func (authServiceStub) HasAnyRole(authapi.AuthUser, ...string) bool    { return true }
 
 func TestHandlerCreateReturnsBadRequestForInvalidScopes(t *testing.T) {
 	r := newTokenRouter(t, stubTokenService{createError: ErrInvalidScopes})

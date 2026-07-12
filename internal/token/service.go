@@ -7,12 +7,14 @@ import (
 	"encoding/hex"
 	"errors"
 	"log/slog"
-	"slices"
+	"time"
 
 	"github.com/google/uuid"
+	openapi_types "github.com/oapi-codegen/runtime/types"
 	"github.com/svetlyopet/heimdallr/internal/auth"
 	authapi "github.com/svetlyopet/heimdallr/internal/auth/api"
 	"github.com/svetlyopet/heimdallr/internal/logger"
+	"github.com/svetlyopet/heimdallr/internal/rbac"
 	"github.com/svetlyopet/heimdallr/internal/token/api"
 	"gorm.io/gorm"
 )
@@ -20,14 +22,18 @@ import (
 type Service interface {
 	List(ctx context.Context) ([]api.Token, error)
 	Create(ctx context.Context, req api.TokenCreateRequest, createdBy *uuid.UUID) (api.TokenCreateResponse, error)
+	CreateSession(ctx context.Context, name string, scopes []string, createdBy uuid.UUID) (api.TokenCreateResponse, error)
 	Delete(ctx context.Context, tokenID string) error
 	Authenticate(ctx context.Context, plainToken string) (authapi.AuthUser, error)
-	HasScope(user authapi.AuthUser, scope string) bool
+	RevokeSessionTokens(ctx context.Context, userID string) error
+	RevokeAllUserTokens(ctx context.Context, userID string) error
 }
 
 type service struct {
-	repository Repository
-	logger     *logger.Logger
+	repository     Repository
+	userRepository auth.Repository
+	logger         *logger.Logger
+	sessionTTL     time.Duration
 }
 
 func (s service) List(ctx context.Context) ([]api.Token, error) {
@@ -46,7 +52,7 @@ func (s service) List(ctx context.Context) ([]api.Token, error) {
 }
 
 func (s service) Create(ctx context.Context, req api.TokenCreateRequest, createdBy *uuid.UUID) (api.TokenCreateResponse, error) {
-	scopes := normalizeScopes(scopesFromAPI(req.Scopes))
+	scopes := rbac.NormalizeScopes(scopesFromAPI(req.Scopes))
 	if len(scopes) == 0 {
 		return api.TokenCreateResponse{}, ErrInvalidScopes
 	}
@@ -62,6 +68,7 @@ func (s service) Create(ctx context.Context, req api.TokenCreateRequest, created
 		Name:      req.Name,
 		TokenHash: tokenHash,
 		Scopes:    scopes,
+		Kind:      TokenKindAPI,
 		CreatedBy: createdBy,
 	}
 
@@ -81,6 +88,45 @@ func (s service) Create(ctx context.Context, req api.TokenCreateRequest, created
 	}, nil
 }
 
+func (s service) CreateSession(ctx context.Context, name string, scopes []string, createdBy uuid.UUID) (api.TokenCreateResponse, error) {
+	normalizedScopes := rbac.NormalizeScopes(scopes)
+	if len(normalizedScopes) == 0 {
+		return api.TokenCreateResponse{}, ErrInvalidScopes
+	}
+
+	plainToken, tokenHash, err := generateToken()
+	if err != nil {
+		s.logger.ErrorWithStack(ctx, "failed to generate session token", err)
+		return api.TokenCreateResponse{}, ErrCreateToken
+	}
+
+	expiresAt := time.Now().UTC().Add(s.sessionTTL)
+	token := APIToken{
+		ID:        uuid.New(),
+		Name:      name,
+		TokenHash: tokenHash,
+		Scopes:    normalizedScopes,
+		Kind:      TokenKindSession,
+		ExpiresAt: &expiresAt,
+		CreatedBy: &createdBy,
+	}
+
+	created, err := s.repository.Create(ctx, token)
+	if err != nil {
+		s.logger.ErrorWithStack(ctx, "failed to create session token", err, slog.String("name", name))
+		return api.TokenCreateResponse{}, ErrCreateToken
+	}
+
+	response := mapEntityToResponse(created)
+	return api.TokenCreateResponse{
+		CreatedBy: response.CreatedBy,
+		Id:        response.Id,
+		Name:      response.Name,
+		Scopes:    scopesToAPI(normalizedScopes),
+		Token:     plainToken,
+	}, nil
+}
+
 func (s service) Delete(ctx context.Context, tokenID string) error {
 	if err := s.repository.DeleteByID(ctx, tokenID); err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -88,6 +134,24 @@ func (s service) Delete(ctx context.Context, tokenID string) error {
 		}
 
 		s.logger.ErrorWithStack(ctx, "failed to delete api token", err, slog.String("token_id", tokenID))
+		return ErrDeleteToken
+	}
+
+	return nil
+}
+
+func (s service) RevokeSessionTokens(ctx context.Context, userID string) error {
+	if err := s.repository.DeleteSessionTokensByCreatedBy(ctx, userID); err != nil {
+		s.logger.ErrorWithStack(ctx, "failed to revoke session tokens", err, slog.String("user_id", userID))
+		return ErrDeleteToken
+	}
+
+	return nil
+}
+
+func (s service) RevokeAllUserTokens(ctx context.Context, userID string) error {
+	if err := s.repository.DeleteByCreatedBy(ctx, userID); err != nil {
+		s.logger.ErrorWithStack(ctx, "failed to revoke user tokens", err, slog.String("user_id", userID))
 		return ErrDeleteToken
 	}
 
@@ -110,46 +174,67 @@ func (s service) Authenticate(ctx context.Context, plainToken string) (authapi.A
 		return authapi.AuthUser{}, ErrInvalidToken
 	}
 
-	roles := scopesToRoles(apiToken.Scopes)
+	if apiToken.ExpiresAt != nil && apiToken.ExpiresAt.Before(time.Now().UTC()) {
+		return authapi.AuthUser{}, ErrInvalidToken
+	}
+
+	var roles []string
+	userID := apiToken.ID.String()
+	username := "token:" + apiToken.Name
+	email := "token@heimdallr.local"
+
+	if apiToken.CreatedBy != nil {
+		userID = apiToken.CreatedBy.String()
+
+		user, userErr := s.userRepository.FindByID(ctx, userID)
+		if userErr != nil {
+			if errors.Is(userErr, gorm.ErrRecordNotFound) {
+				return authapi.AuthUser{}, ErrInvalidToken
+			}
+
+			s.logger.ErrorWithStack(ctx, "failed to load token owner", userErr, slog.String("user_id", userID))
+			return authapi.AuthUser{}, ErrInvalidToken
+		}
+
+		username = user.Username
+		email = user.Email
+
+		if apiToken.Kind == TokenKindSession {
+			roles = rbac.RolesFromLiveUser(user.Roles)
+		}
+	}
+
+	if len(roles) == 0 {
+		roles = rbac.ScopesToRoles(apiToken.Scopes)
+	}
+
 	authRoles := make([]authapi.AuthRole, 0, len(roles))
 	for _, role := range roles {
 		authRoles = append(authRoles, authapi.AuthRole(role))
 	}
 
-	userID := apiToken.ID.String()
-	if apiToken.CreatedBy != nil {
-		userID = apiToken.CreatedBy.String()
-	}
-
 	return authapi.AuthUser{
 		Id:       userID,
-		Username: "token:" + apiToken.Name,
-		Email:    "token@heimdallr.local",
+		Username: username,
+		Email:    openapi_types.Email(email),
 		Roles:    authRoles,
 	}, nil
 }
 
-func (s service) HasScope(user authapi.AuthUser, scope string) bool {
-	roles := make([]string, 0, len(user.Roles))
-	for _, role := range user.Roles {
-		roles = append(roles, string(role))
-	}
-
-	if slices.Contains(roles, auth.RoleAdmin) {
-		return true
-	}
-
-	return slices.Contains(roles, scope)
-}
-
-func NewService(repository Repository, appLogger *logger.Logger) Service {
+func NewService(repository Repository, userRepository auth.Repository, appLogger *logger.Logger, cfg ServiceConfig) Service {
 	if appLogger == nil {
 		appLogger = logger.Default()
 	}
 
+	if cfg.SessionTokenTTL <= 0 {
+		cfg = DefaultServiceConfig()
+	}
+
 	return &service{
-		repository: repository,
-		logger:     appLogger,
+		repository:     repository,
+		userRepository: userRepository,
+		logger:         appLogger,
+		sessionTTL:     cfg.SessionTokenTTL,
 	}
 }
 
@@ -193,48 +278,4 @@ func generateToken() (string, string, error) {
 func hashToken(plainToken string) string {
 	sum := sha256.Sum256([]byte(plainToken))
 	return hex.EncodeToString(sum[:])
-}
-
-func normalizeScopes(scopes []string) []string {
-	allowed := map[string]struct{}{
-		ScopeApplicationWrite: {},
-		ScopeAutomationWrite:  {},
-		ScopeRead:             {},
-		ScopeAdmin:            {},
-	}
-
-	normalized := make([]string, 0, len(scopes))
-	seen := map[string]struct{}{}
-
-	for _, scope := range scopes {
-		if _, ok := allowed[scope]; !ok {
-			continue
-		}
-
-		if _, ok := seen[scope]; ok {
-			continue
-		}
-
-		seen[scope] = struct{}{}
-		normalized = append(normalized, scope)
-	}
-
-	return normalized
-}
-
-func scopesToRoles(scopes []string) []string {
-	if slices.Contains(scopes, ScopeAdmin) {
-		return []string{auth.RoleAdmin, auth.RoleReader}
-	}
-
-	roles := []string{auth.RoleReader}
-	for _, scope := range scopes {
-		if scope == ScopeApplicationWrite || scope == ScopeAutomationWrite || scope == ScopeRead {
-			if !slices.Contains(roles, scope) {
-				roles = append(roles, scope)
-			}
-		}
-	}
-
-	return roles
 }

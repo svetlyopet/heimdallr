@@ -6,14 +6,21 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/svetlyopet/heimdallr/internal/constants"
 	"github.com/svetlyopet/heimdallr/internal/database"
 	"github.com/svetlyopet/heimdallr/internal/logger"
 )
 
-const bootstrapRootPasswordEnv = "HEIMDALLR_BOOTSTRAP_ROOT_PASSWORD"
+const (
+	bootstrapRootPasswordEnv = "HEIMDALLR_BOOTSTRAP_ROOT_PASSWORD"
+	loginRateLimitMaxEnv     = "HEIMDALLR_LOGIN_RATE_LIMIT_MAX"
+	loginRateLimitWindowEnv  = "HEIMDALLR_LOGIN_RATE_LIMIT_WINDOW"
+	sessionTokenTTLEnv       = "HEIMDALLR_SESSION_TOKEN_TTL"
+)
 
 type ServerConfig struct {
 	Host string
@@ -22,6 +29,9 @@ type ServerConfig struct {
 
 type AuthConfig struct {
 	BootstrapRootPassword string
+	LoginRateLimitMax     int
+	LoginRateLimitWindow  time.Duration
+	SessionTokenTTL       time.Duration
 }
 
 type AppConfig struct {
@@ -63,6 +73,9 @@ func LoadFromFlags(args []string, env func(string) string) (AppConfig, error) {
 		},
 		Auth: AuthConfig{
 			BootstrapRootPassword: strings.TrimSpace(env(bootstrapRootPasswordEnv)),
+			LoginRateLimitMax:     parseIntEnv(env, loginRateLimitMaxEnv, 10),
+			LoginRateLimitWindow:  parseDurationEnv(env, loginRateLimitWindowEnv, 15*time.Minute),
+			SessionTokenTTL:       parseDurationEnv(env, sessionTokenTTLEnv, 24*time.Hour),
 		},
 	}, nil
 }
@@ -87,6 +100,9 @@ func DefaultTestConfig(output io.Writer) AppConfig {
 		},
 		Auth: AuthConfig{
 			BootstrapRootPassword: "IntegrationTestPassword12!",
+			LoginRateLimitMax:     100,
+			LoginRateLimitWindow:  time.Minute,
+			SessionTokenTTL:       24 * time.Hour,
 		},
 	}
 }
@@ -104,4 +120,32 @@ func parseLogLevel(level string) slog.Level {
 	default:
 		return slog.LevelInfo
 	}
+}
+
+func parseIntEnv(env func(string) string, key string, fallback int) int {
+	value := strings.TrimSpace(env(key))
+	if value == "" {
+		return fallback
+	}
+
+	parsed, err := strconv.Atoi(value)
+	if err != nil || parsed <= 0 {
+		return fallback
+	}
+
+	return parsed
+}
+
+func parseDurationEnv(env func(string) string, key string, fallback time.Duration) time.Duration {
+	value := strings.TrimSpace(env(key))
+	if value == "" {
+		return fallback
+	}
+
+	parsed, err := time.ParseDuration(value)
+	if err != nil || parsed <= 0 {
+		return fallback
+	}
+
+	return parsed
 }

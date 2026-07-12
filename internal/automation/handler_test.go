@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/svetlyopet/heimdallr/internal/automation/api"
 	"github.com/svetlyopet/heimdallr/internal/testutil"
+	"github.com/svetlyopet/heimdallr/internal/rbac"
 )
 
 type stubAutomationService struct {
@@ -68,7 +69,8 @@ func newAutomationRouter(t *testing.T, svc Service) *gin.Engine {
 
 	r := gin.New()
 	apiGroup := r.Group("/api")
-	RegisterRoutes(apiGroup, h)
+	apiGroup.Use(testutil.AuthenticatedAdminMiddleware())
+	RegisterRoutes(apiGroup, h, rbac.NewAuthorizer())
 
 	return r
 }

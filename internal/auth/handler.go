@@ -38,10 +38,10 @@ func (h handler) Login(ctx context.Context, request api.LoginRequestObject) (api
 		}, nil
 	}
 
-	created, err := h.tokenService.Create(ctx, SessionTokenCreateRequest{
+	created, err := h.tokenService.CreateSession(ctx, SessionTokenCreateRequest{
 		Name:   "session-" + user.Username,
-		Scopes: loginScopesForRoles(rolesFromSlice(user.Roles)),
-	}, &userID)
+		Scopes: LoginScopesForRoles(rolesFromSlice(user.Roles)),
+	}, userID)
 	if err != nil {
 		return api.Login500JSONResponse{
 			InternalServerErrorJSONResponse: api.InternalServerErrorJSONResponse{Error: "failed to create session token"},
@@ -54,10 +54,6 @@ func (h handler) Login(ctx context.Context, request api.LoginRequestObject) (api
 }
 
 func (h handler) ListUsers(ctx context.Context, _ api.ListUsersRequestObject) (api.ListUsersResponseObject, error) {
-	if _, err := h.requireAdmin(ctx); err != nil {
-		return adminListUsersError(err)
-	}
-
 	users, err := h.service.List(ctx)
 	if err != nil {
 		return api.ListUsers500JSONResponse{
@@ -69,10 +65,6 @@ func (h handler) ListUsers(ctx context.Context, _ api.ListUsersRequestObject) (a
 }
 
 func (h handler) CreateUser(ctx context.Context, request api.CreateUserRequestObject) (api.CreateUserResponseObject, error) {
-	if _, err := h.requireAdmin(ctx); err != nil {
-		return adminCreateUserError(err)
-	}
-
 	if request.Body == nil {
 		return api.CreateUser400JSONResponse{
 			BadRequestJSONResponse: api.BadRequestJSONResponse{Error: "invalid request body"},
@@ -101,10 +93,6 @@ func (h handler) CreateUser(ctx context.Context, request api.CreateUserRequestOb
 }
 
 func (h handler) UpdateUser(ctx context.Context, request api.UpdateUserRequestObject) (api.UpdateUserResponseObject, error) {
-	if _, err := h.requireAdmin(ctx); err != nil {
-		return adminUpdateUserError(err)
-	}
-
 	if request.Body == nil {
 		return api.UpdateUser400JSONResponse{
 			BadRequestJSONResponse: api.BadRequestJSONResponse{Error: "invalid request body"},
@@ -133,10 +121,6 @@ func (h handler) UpdateUser(ctx context.Context, request api.UpdateUserRequestOb
 }
 
 func (h handler) DeleteUser(ctx context.Context, request api.DeleteUserRequestObject) (api.DeleteUserResponseObject, error) {
-	if _, err := h.requireAdmin(ctx); err != nil {
-		return adminDeleteUserError(err)
-	}
-
 	if err := h.service.Delete(ctx, request.UserId.String()); err != nil {
 		switch {
 		case errors.Is(err, ErrUserNotFound):
@@ -164,91 +148,10 @@ func NewHandler(service Service, tokenService APITokenService) (Handler, error) 
 	}, nil
 }
 
-func (h handler) requireAdmin(ctx context.Context) (api.AuthUser, error) {
-	gctx, ok := GinContextFrom(ctx)
-	if !ok {
-		return api.AuthUser{}, ErrInvalidCredentials
-	}
-
-	bearerToken := ExtractBearerToken(gctx.GetHeader("Authorization"))
-	if bearerToken == "" {
-		return api.AuthUser{}, ErrInvalidCredentials
-	}
-
-	user, err := h.tokenService.Authenticate(ctx, bearerToken)
-	if err != nil {
-		return api.AuthUser{}, ErrInvalidCredentials
-	}
-
-	if !h.service.HasAnyRole(user, RoleAdmin) {
-		return api.AuthUser{}, ErrInsufficientRole
-	}
-
-	return user, nil
-}
-
-func loginScopesForRoles(roles []string) []string {
-	for _, role := range roles {
-		if role == RoleAdmin {
-			return []string{"admin"}
-		}
-	}
-
-	return []string{"read"}
-}
-
 func authErrorMessage(err error, fallback string) string {
 	if authErr, ok := errors.AsType[AuthError](err); ok {
 		return authErr.Message
 	}
 
 	return fallback
-}
-
-func adminListUsersError(err error) (api.ListUsersResponseObject, error) {
-	if errors.Is(err, ErrInsufficientRole) {
-		return api.ListUsers403JSONResponse{
-			ForbiddenJSONResponse: api.ForbiddenJSONResponse{Error: ErrInsufficientRole.Error()},
-		}, nil
-	}
-
-	return api.ListUsers401JSONResponse{
-		UnauthorizedJSONResponse: api.UnauthorizedJSONResponse{Error: ErrInvalidCredentials.Error()},
-	}, nil
-}
-
-func adminCreateUserError(err error) (api.CreateUserResponseObject, error) {
-	if errors.Is(err, ErrInsufficientRole) {
-		return api.CreateUser403JSONResponse{
-			ForbiddenJSONResponse: api.ForbiddenJSONResponse{Error: ErrInsufficientRole.Error()},
-		}, nil
-	}
-
-	return api.CreateUser401JSONResponse{
-		UnauthorizedJSONResponse: api.UnauthorizedJSONResponse{Error: ErrInvalidCredentials.Error()},
-	}, nil
-}
-
-func adminUpdateUserError(err error) (api.UpdateUserResponseObject, error) {
-	if errors.Is(err, ErrInsufficientRole) {
-		return api.UpdateUser403JSONResponse{
-			ForbiddenJSONResponse: api.ForbiddenJSONResponse{Error: ErrInsufficientRole.Error()},
-		}, nil
-	}
-
-	return api.UpdateUser401JSONResponse{
-		UnauthorizedJSONResponse: api.UnauthorizedJSONResponse{Error: ErrInvalidCredentials.Error()},
-	}, nil
-}
-
-func adminDeleteUserError(err error) (api.DeleteUserResponseObject, error) {
-	if errors.Is(err, ErrInsufficientRole) {
-		return api.DeleteUser403JSONResponse{
-			ForbiddenJSONResponse: api.ForbiddenJSONResponse{Error: ErrInsufficientRole.Error()},
-		}, nil
-	}
-
-	return api.DeleteUser401JSONResponse{
-		UnauthorizedJSONResponse: api.UnauthorizedJSONResponse{Error: ErrInvalidCredentials.Error()},
-	}, nil
 }

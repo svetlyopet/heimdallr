@@ -7,11 +7,13 @@ import (
 	"github.com/svetlyopet/heimdallr/internal/auth"
 	"github.com/svetlyopet/heimdallr/internal/database"
 	"github.com/svetlyopet/heimdallr/internal/logger"
+	"github.com/svetlyopet/heimdallr/internal/token"
 	"gorm.io/gorm"
 )
 
 var InfrastructurePackage = do.Package(
 	do.Lazy(provideAuthServiceConfig),
+	do.Lazy(provideTokenServiceConfig),
 	do.Lazy(provideLogger),
 	do.Lazy(provideGormDB),
 	do.Lazy(provideDB),
@@ -20,6 +22,7 @@ var InfrastructurePackage = do.Package(
 var Package = do.Package(
 	do.Lazy(provideConfig),
 	do.Lazy(provideAuthServiceConfig),
+	do.Lazy(provideTokenServiceConfig),
 	do.Lazy(provideLogger),
 	do.Lazy(provideGormDB),
 	do.Lazy(provideDB),
@@ -37,6 +40,15 @@ func provideConfig(i do.Injector) (*AppConfig, error) {
 func provideAuthServiceConfig(i do.Injector) (auth.ServiceConfig, error) {
 	cfg := do.MustInvoke[*AppConfig](i)
 	return auth.ServiceConfig{BootstrapRootPassword: cfg.Auth.BootstrapRootPassword}, nil
+}
+
+func provideTokenServiceConfig(i do.Injector) (token.ServiceConfig, error) {
+	cfg := do.MustInvoke[*AppConfig](i)
+	if cfg.Auth.SessionTokenTTL <= 0 {
+		return token.DefaultServiceConfig(), nil
+	}
+
+	return token.ServiceConfig{SessionTokenTTL: cfg.Auth.SessionTokenTTL}, nil
 }
 
 func provideLogger(i do.Injector) (*logger.Logger, error) {

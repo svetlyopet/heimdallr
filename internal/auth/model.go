@@ -22,7 +22,7 @@ type User struct {
 	ID           uuid.UUID `gorm:"type:uuid;primary_key" json:"id"`
 	Username     string    `gorm:"type:varchar(255);uniqueIndex;not null;check:username <> ''" json:"username"`
 	Email        string    `gorm:"type:varchar(255);uniqueIndex;not null;check:email <> ''" json:"email"`
-	PasswordHash string    `gorm:"type:char(64);not null;check:password_hash <> ''" json:"-"`
+	PasswordHash string    `gorm:"type:varchar(255);not null;check:password_hash <> ''" json:"-"`
 	Roles        []string  `gorm:"serializer:json;type:text;not null" json:"roles"`
 
 	model.Timestamp

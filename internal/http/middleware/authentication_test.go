@@ -27,9 +27,16 @@ func (s tokenServiceStub) Create(context.Context, api.TokenCreateRequest, *uuid.
 	return api.TokenCreateResponse{}, token.ErrInvalidToken
 }
 
+func (s tokenServiceStub) CreateSession(context.Context, string, []string, uuid.UUID) (api.TokenCreateResponse, error) {
+	return api.TokenCreateResponse{}, token.ErrInvalidToken
+}
+
 func (s tokenServiceStub) Delete(context.Context, string) error {
 	return token.ErrInvalidToken
 }
+
+func (s tokenServiceStub) RevokeSessionTokens(context.Context, string) error { return nil }
+func (s tokenServiceStub) RevokeAllUserTokens(context.Context, string) error   { return nil }
 
 func (s tokenServiceStub) Authenticate(_ context.Context, plainToken string) (authapi.AuthUser, error) {
 	if s.err != nil {
@@ -41,10 +48,6 @@ func (s tokenServiceStub) Authenticate(_ context.Context, plainToken string) (au
 	}
 
 	return authapi.AuthUser{Username: "token-user", Roles: []authapi.AuthRole{authapi.Admin}}, nil
-}
-
-func (tokenServiceStub) HasScope(authapi.AuthUser, string) bool {
-	return true
 }
 
 func TestAuthenticationRejectsMissingBearerToken(t *testing.T) {

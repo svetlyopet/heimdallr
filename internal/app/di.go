@@ -7,9 +7,11 @@ import (
 	"github.com/svetlyopet/heimdallr/internal/application"
 	"github.com/svetlyopet/heimdallr/internal/auth"
 	"github.com/svetlyopet/heimdallr/internal/automation"
+	"github.com/svetlyopet/heimdallr/internal/config"
 	"github.com/svetlyopet/heimdallr/internal/job"
 	"github.com/svetlyopet/heimdallr/internal/logger"
 	"github.com/svetlyopet/heimdallr/internal/provider"
+	"github.com/svetlyopet/heimdallr/internal/rbac"
 	"github.com/svetlyopet/heimdallr/internal/release"
 	"github.com/svetlyopet/heimdallr/internal/report"
 	"github.com/svetlyopet/heimdallr/internal/server"
@@ -18,6 +20,7 @@ import (
 )
 
 var Package = do.Package(
+	rbac.Package,
 	provider.Package,
 	auth.Package,
 	token.Package,
@@ -29,8 +32,14 @@ var Package = do.Package(
 	analytics.Package,
 	agent.Package,
 	server.Package,
+	do.Lazy(provideLoginRateLimiter),
 	do.Lazy(provideApp),
 )
+
+func provideLoginRateLimiter(i do.Injector) (*auth.LoginRateLimiter, error) {
+	cfg := do.MustInvoke[*config.AppConfig](i)
+	return auth.NewLoginRateLimiter(cfg.Auth.LoginRateLimitMax, cfg.Auth.LoginRateLimitWindow), nil
+}
 
 func provideApp(i do.Injector) (*App, error) {
 	return &App{
@@ -58,8 +67,11 @@ func provideApp(i do.Injector) (*App, error) {
 		analyticsService: do.MustInvoke[analytics.Service](i),
 		analyticsHandler: do.MustInvoke[analytics.Handler](i),
 
-		authService:  do.MustInvoke[auth.Service](i),
-		authHandler:  do.MustInvoke[auth.Handler](i),
+		authService:      do.MustInvoke[auth.Service](i),
+		authHandler:      do.MustInvoke[auth.Handler](i),
+		loginRateLimiter: do.MustInvoke[*auth.LoginRateLimiter](i),
+		authorizer:       do.MustInvoke[rbac.Authorizer](i),
+
 		tokenService: do.MustInvoke[token.Service](i),
 		tokenHandler: do.MustInvoke[token.Handler](i),
 

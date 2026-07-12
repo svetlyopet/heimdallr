@@ -2,6 +2,7 @@ package token
 
 import (
 	"github.com/samber/do/v2"
+	"github.com/svetlyopet/heimdallr/internal/auth"
 	"github.com/svetlyopet/heimdallr/internal/logger"
 	"gorm.io/gorm"
 )
@@ -20,7 +21,9 @@ func provideRepository(i do.Injector) (Repository, error) {
 func provideService(i do.Injector) (Service, error) {
 	return NewService(
 		do.MustInvoke[Repository](i),
+		do.MustInvoke[auth.Repository](i),
 		do.MustInvoke[*logger.Logger](i),
+		do.MustInvoke[ServiceConfig](i),
 	), nil
 }
 

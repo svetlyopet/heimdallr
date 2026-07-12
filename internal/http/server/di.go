@@ -36,6 +36,7 @@ func provideServer(i do.Injector) (*Server, error) {
 	api := handler.Group("/api")
 	application.RegisterPublicRoutes(api)
 	api.Use(middleware.Authentication(application.TokenService()))
+	application.RegisterProtectedAuthRoutes(api)
 	application.RegisterRoutes(api)
 
 	if err = web.RegisterRoutes(handler); err != nil {

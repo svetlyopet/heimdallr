@@ -2,7 +2,9 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
+	"os"
 
 	"github.com/gin-gonic/gin"
 	"github.com/svetlyopet/heimdallr/internal/agent"
@@ -13,6 +15,7 @@ import (
 	"github.com/svetlyopet/heimdallr/internal/job"
 	"github.com/svetlyopet/heimdallr/internal/logger"
 	"github.com/svetlyopet/heimdallr/internal/provider"
+	"github.com/svetlyopet/heimdallr/internal/rbac"
 	"github.com/svetlyopet/heimdallr/internal/release"
 	"github.com/svetlyopet/heimdallr/internal/report"
 	"github.com/svetlyopet/heimdallr/internal/server"
@@ -45,8 +48,10 @@ type App struct {
 	analyticsService analytics.Service
 	analyticsHandler analytics.Handler
 
-	authService auth.Service
-	authHandler auth.Handler
+	authService       auth.Service
+	authHandler       auth.Handler
+	loginRateLimiter  *auth.LoginRateLimiter
+	authorizer        rbac.Authorizer
 
 	tokenService token.Service
 	tokenHandler token.Handler
@@ -59,16 +64,24 @@ type App struct {
 }
 
 func (a *App) RegisterRoutes(rg *gin.RouterGroup) {
-	provider.RegisterRoutes(rg, a.providerHandler)
-	automation.RegisterRoutes(rg, a.automationHandler)
-	job.RegisterRoutes(rg, a.jobHandler)
-	application.RegisterRoutes(rg, a.applicationHandler)
-	release.RegisterRoutes(rg, a.releaseHandler)
-	report.RegisterRoutes(rg, a.reportHandler)
-	analytics.RegisterRoutes(rg, a.analyticsHandler)
-	server.RegisterRoutes(rg, a.serverHandler)
-	agent.RegisterRoutes(rg, a.agentHandler)
-	token.RegisterRoutes(rg, a.tokenHandler, a.authService)
+	provider.RegisterRoutes(rg, a.providerHandler, a.authorizer)
+	automation.RegisterRoutes(rg, a.automationHandler, a.authorizer)
+	job.RegisterRoutes(rg, a.jobHandler, a.authorizer)
+	application.RegisterRoutes(rg, a.applicationHandler, a.authorizer)
+	release.RegisterRoutes(rg, a.releaseHandler, a.authorizer)
+	report.RegisterRoutes(rg, a.reportHandler, a.authorizer)
+	analytics.RegisterRoutes(rg, a.analyticsHandler, a.authorizer)
+	server.RegisterRoutes(rg, a.serverHandler, a.authorizer)
+	agent.RegisterRoutes(rg, a.agentHandler, a.authorizer)
+	token.RegisterRoutes(rg, a.tokenHandler, a.authorizer)
+}
+
+func (a *App) RegisterPublicRoutes(rg *gin.RouterGroup) {
+	auth.RegisterPublicRoutes(rg, a.authHandler, a.loginRateLimiter)
+}
+
+func (a *App) RegisterProtectedAuthRoutes(rg *gin.RouterGroup) {
+	auth.RegisterProtectedRoutes(rg, a.authHandler, a.authorizer)
 }
 
 func (a *App) AuthService() auth.Service {
@@ -94,10 +107,13 @@ func (a *App) Bootstrap(ctx context.Context) error {
 		return nil
 	}
 
-	a.logger.Warn(ctx, "root user bootstrapped with generated credentials",
+	a.logger.Warn(ctx, "root user created on first bootstrap; retrieve credentials from HEIMDALLR_BOOTSTRAP_ROOT_PASSWORD or first-run stderr output",
 		slog.String("username", "root"),
-		slog.String("password", rootPassword),
 	)
+
+	if os.Getenv("HEIMDALLR_BOOTSTRAP_ROOT_PASSWORD") == "" {
+		_, _ = fmt.Fprintf(os.Stderr, "\n=== Heimdallr root user bootstrap ===\nusername: root\npassword: %s\n===================================\n\n", rootPassword)
+	}
 
 	return nil
 }
