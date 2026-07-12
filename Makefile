@@ -12,6 +12,15 @@ APP_PATH := $(BIN_DIR)/$(APP_NAME)
 LOG_FORMAT ?= text
 LOG_LEVEL ?= info
 
+OAPI_CODEGEN := go tool oapi-codegen
+OPENAPI_SPEC := api/docs/openapi.yaml
+
+TEST_DB_MANAGED ?= 1
+TEST_POSTGRES_URL ?= postgres://heimdallr:heimdallr@127.0.0.1:5433/heimdallr?sslmode=disable
+export TEST_POSTGRES_URL
+
+DATABASE_URL ?=
+
 .PHONY: out-reports
 out-reports:
 	@mkdir -p $(REPORTS_DIR)
@@ -63,15 +72,12 @@ html-coverage: out-reports $(REPORTS_DIR)/report.json ## Displays the coverage r
 test-reports: out-reports $(REPORTS_DIR)/report.json
 
 .PHONY: $(REPORTS_DIR)/report.json
-$(REPORTS_DIR)/report.json: out-reports test-web-stub
+$(REPORTS_DIR)/report.json: out-reports test-web-stub test-db-up
 	@go test -count 1 ./... -coverprofile=$(REPORTS_DIR)/cover.out --json | tee "$(@)"
 
 .PHONY: web-install-deps
 web-install-deps: ## Install web dependencies
 	cd $(WEB_DIR) && npm install
-
-OAPI_CODEGEN := go tool oapi-codegen
-OPENAPI_SPEC := api/docs/openapi.yaml
 
 .PHONY: generate-automation-api
 generate-automation-api: ## Generate automation API from OpenAPI
@@ -128,11 +134,23 @@ check-generated: generate-api ## Verifies generated OpenAPI code is up to date (
 lint-api: test-web-stub ## Lints all code with golangci-lint
 	@go tool golangci-lint run
 
-test: test-web-stub ## Run unit tests
+.PHONY: test-db-up
+test-db-up: ## Start ephemeral Postgres for local tests
+	@if [ "$(TEST_DB_MANAGED)" = "1" ]; then \
+		docker compose -f docker-compose.test.yml up -d --wait; \
+	fi
+
+.PHONY: test-db-down
+test-db-down: ## Stop ephemeral Postgres used for local tests
+	@if [ "$(TEST_DB_MANAGED)" = "1" ]; then \
+		docker compose -f docker-compose.test.yml down -v --remove-orphans; \
+	fi
+
+test: test-web-stub test-db-up ## Run unit tests
 	@go test -race -shuffle=on -count=1 -v -covermode=atomic ./...
 
 .PHONY: test-integration
-test-integration: test-web-stub ## Run integration tests
+test-integration: test-web-stub test-db-up ## Run integration tests
 	@go test -tags=integration -race -shuffle=on -v -count=1 ./tests/integration/...
 
 .PHONY: e2e-up
@@ -190,14 +208,12 @@ build-api: out-api generate-api ## Build api release
 build: build-web build-api ## Build api and web assets
 
 .PHONY: run-debug
-run-debug: build-web ## Run web app in debug mode
-	@GIN_MODE=debug go run $(MAIN_PATH) -log-format=$(LOG_FORMAT) -log-level=$(LOG_LEVEL)
+run-debug: build-web test-db-up ## Run web app in debug mode
+	@GIN_MODE=debug DATABASE_URL=$(TEST_POSTGRES_URL) go run $(MAIN_PATH) -log-format=$(LOG_FORMAT) -log-level=$(LOG_LEVEL)
 
 .PHONY: run-release
-run-release: build-web ## Run web app in release mode
-	@GIN_MODE=release go run $(MAIN_PATH) -log-format=$(LOG_FORMAT) -log-level=$(LOG_LEVEL)
-
-DATABASE_URL ?=
+run-release: build-web test-db-up ## Run web app in release mode
+	@GIN_MODE=release DATABASE_URL=$(TEST_POSTGRES_URL) go run $(MAIN_PATH) -log-format=$(LOG_FORMAT) -log-level=$(LOG_LEVEL)
 
 .PHONY: docker-up
 docker-up: ## Start Postgres and Heimdallr via docker-compose

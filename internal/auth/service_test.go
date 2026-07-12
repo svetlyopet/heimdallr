@@ -2,13 +2,12 @@ package auth
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
 	openapi_types "github.com/oapi-codegen/runtime/types"
 	"github.com/stretchr/testify/require"
 	"github.com/svetlyopet/heimdallr/internal/auth/api"
-	"gorm.io/driver/sqlite"
+	"github.com/svetlyopet/heimdallr/internal/testutil"
 	"gorm.io/gorm"
 )
 
@@ -31,11 +30,7 @@ func (r testTokenRepository) WithTx(tx *gorm.DB) TokenRepository {
 func newTestService(t *testing.T, cfg ServiceConfig) (Service, Repository, *gorm.DB) {
 	t.Helper()
 
-	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name())
-	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
-	require.NoError(t, err)
-
-	require.NoError(t, db.AutoMigrate(&User{}))
+	db := testutil.NewPostgresDB(t)
 
 	repo := NewRepository(db)
 	svc := NewService(repo, testTokenRepository{db: db}, db, nil, cfg)

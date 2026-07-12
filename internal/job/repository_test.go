@@ -7,7 +7,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/svetlyopet/heimdallr/internal/automation"
 	"github.com/svetlyopet/heimdallr/internal/job"
-	"github.com/svetlyopet/heimdallr/internal/provider"
 	"github.com/svetlyopet/heimdallr/internal/testutil"
 	"github.com/svetlyopet/heimdallr/tests/testfixtures"
 	"gorm.io/gorm"
@@ -15,7 +14,7 @@ import (
 
 func newJobTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
-	return testutil.NewSQLiteDB(t, &provider.Provider{}, &automation.Automation{}, &job.Job{})
+	return testutil.NewPostgresDB(t)
 }
 
 func TestRepositoryCreateAndFindById(t *testing.T) {

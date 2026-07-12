@@ -3,6 +3,7 @@ package auth
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"strings"
 	"testing"
 
@@ -94,4 +95,32 @@ func mustHashPassword(t *testing.T, value string) string {
 func legacyHashForTest(value string) string {
 	sum := sha256.Sum256([]byte(value))
 	return hex.EncodeToString(sum[:])
+}
+
+func TestGenerateSecurePasswordUsesOnlyAllowedCharacters(t *testing.T) {
+	t.Parallel()
+
+	password, err := generateSecurePassword(64)
+	require.NoError(t, err)
+	require.Len(t, password, 64)
+
+	for _, char := range password {
+		require.Contains(t, passwordAlphabet, string(char))
+	}
+}
+
+func TestGenerateSecurePasswordPropagatesReaderError(t *testing.T) {
+	t.Parallel()
+
+	_, err := generateSecurePasswordWithReader(failingReader{err: errors.New("random source unavailable")}, 12)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "random source unavailable")
+}
+
+type failingReader struct {
+	err error
+}
+
+func (f failingReader) Read([]byte) (int, error) {
+	return 0, f.err
 }

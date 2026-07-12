@@ -36,9 +36,6 @@ bin/
 out/
 reports/
 
-# Sqlite3 database for local development
-heimdallr.db
-
 # Web assets and deps
 web/node_modules/
 web/dist/

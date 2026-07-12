@@ -42,7 +42,7 @@ flowchart LR
     Analytics["Dashboard<br/>compliance and job summaries"]
   end
 
-  Storage[("SQLite or PostgreSQL")]
+  Storage[("PostgreSQL")]
   UI["Web UI"]
 
   CI --> API
@@ -96,8 +96,8 @@ Stop the stack with:
 make docker-down
 ```
 
-For a source-based setup with SQLite, frontend development, or test commands,
-see [CONTRIBUTING.md](CONTRIBUTING.md).
+For a source-based setup, frontend development, or test commands, see
+[CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Common workflows
 
@@ -157,10 +157,9 @@ Example API and integration material:
 
 ## Configuration
 
-- `DATABASE_URL` — PostgreSQL connection string; omit it to use SQLite.
+- `DATABASE_URL` — PostgreSQL connection string (required).
 - `HEIMDALLR_BOOTSTRAP_ROOT_PASSWORD` — initial `root` password (minimum 12
   characters). If unset, a generated password is written to the startup log.
-- `-database-path` — SQLite database path; defaults to `heimdallr.db`.
 - `-server-name` and `-server-port` — bind address; defaults to
   `localhost:8080`.
 - HTTP resource limits default to a 5s read-header timeout, 15s read timeout,
@@ -182,7 +181,8 @@ Example API and integration material:
 - `-log-format` — `text` or `json`.
 - `-log-level` — `debug`, `info`, `warn`, or `error`.
 
-Database migrations run automatically when the application starts.
+Database migrations run automatically when the application starts. For local
+development and tests, start ephemeral PostgreSQL with `make test-db-up`.
 
 ## Contributing
 

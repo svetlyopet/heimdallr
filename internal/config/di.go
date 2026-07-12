@@ -7,7 +7,6 @@ import (
 	"github.com/svetlyopet/heimdallr/internal/auth"
 	"github.com/svetlyopet/heimdallr/internal/database"
 	"github.com/svetlyopet/heimdallr/internal/logger"
-	"github.com/svetlyopet/heimdallr/internal/sqlitemigrate"
 	"github.com/svetlyopet/heimdallr/internal/token"
 	"gorm.io/gorm"
 )
@@ -59,7 +58,7 @@ func provideLogger(i do.Injector) (*logger.Logger, error) {
 
 func provideGormDB(i do.Injector) (*database.GormDB, error) {
 	cfg := do.MustInvoke[*AppConfig](i)
-	return database.OpenGormDB(cfg.Database, database.NewMigrator(sqlitemigrate.AutoMigrate))
+	return database.OpenGormDB(cfg.Database, database.DefaultMigrator())
 }
 
 func provideDB(i do.Injector) (*gorm.DB, error) {

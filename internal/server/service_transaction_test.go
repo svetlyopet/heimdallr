@@ -36,7 +36,7 @@ func (s dbServerLookup) GetById(ctx context.Context, serverID string) (api.Serve
 func newTransactionalServerService(t *testing.T) (server.Service, server.Repository, *gorm.DB, agent.Repository) {
 	t.Helper()
 
-	db := testutil.NewSQLiteDB(t, &server.Server{}, &agent.Agent{}, &agent.ServerAgent{})
+	db := testutil.NewPostgresDB(t)
 	serverRepo := server.NewRepository(db)
 	agentRepo := agent.NewRepository(db)
 	lookup := dbServerLookup{repo: serverRepo}

@@ -12,7 +12,7 @@ import (
 
 func newProviderTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
-	return testutil.NewSQLiteDB(t, &Provider{})
+	return testutil.NewPostgresDB(t)
 }
 
 func TestRepositoryCreateAndFindByName(t *testing.T) {

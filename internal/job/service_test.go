@@ -19,7 +19,7 @@ import (
 func newJobService(t *testing.T) (Service, automation.Service, provider.Service) {
 	t.Helper()
 
-	db := testutil.NewSQLiteDB(t, &provider.Provider{}, &automation.Automation{}, &Job{})
+	db := testutil.NewPostgresDB(t)
 	providerRepo := provider.NewRepository(db)
 	providerSvc := provider.NewService(providerRepo, nil)
 	automationRepo := automation.NewRepository(db)

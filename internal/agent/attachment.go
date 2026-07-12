@@ -103,12 +103,17 @@ func (s attachmentService) createAgentsOnServer(ctx context.Context, serverID uu
 			return server.ErrAttachAgents
 		}
 
+		metadata, err := metadataToEntity(convertServerMetadata(input.Metadata))
+		if err != nil {
+			return server.ErrAttachAgents
+		}
+
 		agent := Agent{
 			ID:       uuid.New(),
 			Name:     input.Name,
 			Type:     stringValue(input.Type),
 			Version:  stringValue(input.Version),
-			Metadata: metadataToEntity(convertServerMetadata(input.Metadata)),
+			Metadata: metadata,
 		}
 
 		if _, err := repo.CreateOnServer(ctx, serverID, agent); err != nil {

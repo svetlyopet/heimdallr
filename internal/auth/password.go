@@ -1,13 +1,17 @@
 package auth
 
 import (
+	"crypto/rand"
 	"encoding/hex"
+	"io"
 	"strings"
 
 	"golang.org/x/crypto/bcrypt"
 )
 
 const bcryptCost = 12
+
+const passwordAlphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()-_=+[]{}<>?"
 
 func hashPassword(value string) (string, error) {
 	hashed, err := bcrypt.GenerateFromPassword([]byte(value), bcryptCost)
@@ -45,4 +49,34 @@ func verifyPassword(password, storedHash string) (valid bool, needsRehash bool) 
 
 	err := bcrypt.CompareHashAndPassword([]byte(storedHash), []byte(password))
 	return err == nil, false
+}
+
+func generateSecurePassword(length int) (string, error) {
+	return generateSecurePasswordWithReader(rand.Reader, length)
+}
+
+func generateSecurePasswordWithReader(reader io.Reader, length int) (string, error) {
+	if length <= 0 {
+		return "", ErrInvalidPasswordValue
+	}
+
+	alphabetSize := len(passwordAlphabet)
+	limit := 256 - (256 % alphabetSize)
+
+	result := make([]byte, length)
+	for i := 0; i < length; {
+		var randomByte [1]byte
+		if _, err := io.ReadFull(reader, randomByte[:]); err != nil {
+			return "", err
+		}
+
+		if int(randomByte[0]) >= limit {
+			continue
+		}
+
+		result[i] = passwordAlphabet[int(randomByte[0])%alphabetSize]
+		i++
+	}
+
+	return string(result), nil
 }

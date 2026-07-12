@@ -6,7 +6,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
-	"github.com/svetlyopet/heimdallr/internal/application"
 	"github.com/svetlyopet/heimdallr/internal/release"
 	"github.com/svetlyopet/heimdallr/internal/testutil"
 	"github.com/svetlyopet/heimdallr/tests/testfixtures"
@@ -15,7 +14,7 @@ import (
 
 func newReleaseTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
-	return testutil.NewSQLiteDB(t, &application.Application{}, &release.Release{})
+	return testutil.NewPostgresDB(t)
 }
 
 func TestRepositoryUpsertCreatesAndUpdatesRelease(t *testing.T) {

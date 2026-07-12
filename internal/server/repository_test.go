@@ -40,18 +40,7 @@ func (testServerAgent) TableName() string {
 func newServerTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 
-	return testutil.NewSQLiteDB(t,
-		&provider.Provider{},
-		&automation.Automation{},
-		&job.Job{},
-		&application.Application{},
-		&release.Release{},
-		&Server{},
-		&testAgent{},
-		&testServerAgent{},
-		&ServerJob{},
-		&ServerRelease{},
-	)
+	return testutil.NewPostgresDB(t)
 }
 
 func TestRepositoryFindAllReturnsServers(t *testing.T) {

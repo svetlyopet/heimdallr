@@ -5,12 +5,14 @@ import (
 	"errors"
 
 	"github.com/samber/do/v2"
+	"github.com/svetlyopet/heimdallr/internal/logger"
 	"github.com/svetlyopet/heimdallr/internal/server/api"
 	"gorm.io/gorm"
 )
 
 type lookupService struct {
 	repository Repository
+	logger     *logger.Logger
 }
 
 func (l lookupService) GetById(ctx context.Context, serverID string) (api.Server, error) {
@@ -23,9 +25,12 @@ func (l lookupService) GetById(ctx context.Context, serverID string) (api.Server
 		return api.Server{}, ErrGetServer
 	}
 
-	return mapEntityToResponse(server), nil
+	return mapEntityToResponse(ctx, server, l.logger)
 }
 
 func provideLookupService(i do.Injector) (LookupService, error) {
-	return lookupService{repository: do.MustInvoke[Repository](i)}, nil
+	return lookupService{
+		repository: do.MustInvoke[Repository](i),
+		logger:     do.MustInvoke[*logger.Logger](i),
+	}, nil
 }

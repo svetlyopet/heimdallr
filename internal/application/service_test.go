@@ -15,7 +15,7 @@ import (
 func newApplicationService(t *testing.T) (Service, *gorm.DB) {
 	t.Helper()
 
-	db := testutil.NewSQLiteDB(t, &Application{})
+	db := testutil.NewPostgresDB(t)
 	repo := NewRepository(db)
 	return NewService(repo, nil), db
 }

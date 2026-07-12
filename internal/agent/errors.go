@@ -15,6 +15,7 @@ const (
 	ErrMsgDeleteAgent        = "failed to delete agent"
 	ErrMsgAgentAlreadyLinked = "agent is already linked to this server"
 	ErrMsgAgentAlreadyExists = "agent already exists"
+	ErrMsgCorruptMetadata    = "corrupt stored metadata"
 )
 
 var (
@@ -27,6 +28,7 @@ var (
 	ErrDeleteAgent        = errors.New(ErrMsgDeleteAgent)
 	ErrAgentAlreadyLinked = errors.New(ErrMsgAgentAlreadyLinked)
 	ErrAgentAlreadyExists = errors.New(ErrMsgAgentAlreadyExists)
+	ErrCorruptMetadata    = errors.New(ErrMsgCorruptMetadata)
 )
 
 type AgentError struct {

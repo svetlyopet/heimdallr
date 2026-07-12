@@ -62,7 +62,7 @@ func TestServiceCreateOnServerReturnsAgent(t *testing.T) {
 }
 
 func TestServiceCreateOnServerReturnsServerNotFound(t *testing.T) {
-	svc := NewService(stubAgentRepository{}, stubServerLookup{err: server.ErrServerNotFound}, testutil.NewSQLiteDB(t), nil)
+	svc := NewService(stubAgentRepository{}, stubServerLookup{err: server.ErrServerNotFound}, testutil.NewPostgresDB(t), nil)
 
 	name := "datadog"
 	_, err := svc.CreateOnServer(context.Background(), uuid.New().String(), api.ServerAgentRequest{Name: &name})
@@ -78,7 +78,7 @@ func TestServiceGetByIdReturnsNotFound(t *testing.T) {
 
 func TestServiceDetachReturnsNotFound(t *testing.T) {
 	serverID := uuid.New()
-	db := testutil.NewSQLiteDB(t)
+	db := testutil.NewPostgresDB(t)
 	svc := NewService(stubAgentRepository{}, stubServerLookup{
 		resp: serverapi.Server{Id: serverID},
 	}, db, nil)
@@ -88,7 +88,7 @@ func TestServiceDetachReturnsNotFound(t *testing.T) {
 }
 
 func TestServiceGetAllReturnsServerNotFound(t *testing.T) {
-	svc := NewService(stubAgentRepository{}, stubServerLookup{err: server.ErrServerNotFound}, testutil.NewSQLiteDB(t), nil)
+	svc := NewService(stubAgentRepository{}, stubServerLookup{err: server.ErrServerNotFound}, testutil.NewPostgresDB(t), nil)
 
 	_, _, err := svc.GetAll(context.Background(), uuid.New().String(), 1, 10)
 	require.ErrorIs(t, err, server.ErrServerNotFound)
@@ -142,6 +142,7 @@ func TestServiceCreateOnServerStoresMetadata(t *testing.T) {
 
 type stubAgentRepository struct {
 	findAllErr error
+	findById   Agent
 }
 
 func (s stubAgentRepository) FindAll(context.Context, string, int, int) ([]Agent, int64, error) {
@@ -152,7 +153,11 @@ func (s stubAgentRepository) FindAllGlobal(context.Context, ListFilters, int, in
 	return nil, 0, s.findAllErr
 }
 
-func (s stubAgentRepository) FindById(context.Context, string, string) (Agent, error) {
+func (s stubAgentRepository) FindById(_ context.Context, _ string, _ string) (Agent, error) {
+	if s.findById.ID != uuid.Nil {
+		return s.findById, nil
+	}
+
 	return Agent{}, gorm.ErrRecordNotFound
 }
 
@@ -196,7 +201,7 @@ func TestServiceGetAllReturnsRepositoryError(t *testing.T) {
 	svc := NewService(
 		stubAgentRepository{findAllErr: errors.New("db down")},
 		stubServerLookup{resp: serverapi.Server{Id: uuid.New()}},
-		testutil.NewSQLiteDB(t),
+		testutil.NewPostgresDB(t),
 		nil,
 	)
 
@@ -229,7 +234,7 @@ func TestServiceGetByIdReturnsAgent(t *testing.T) {
 }
 
 func TestServiceCreateOnServerReturnsInvalidServerID(t *testing.T) {
-	svc := NewService(stubAgentRepository{}, stubServerLookup{}, testutil.NewSQLiteDB(t), nil)
+	svc := NewService(stubAgentRepository{}, stubServerLookup{}, testutil.NewPostgresDB(t), nil)
 
 	name := "agent"
 	_, err := svc.CreateOnServer(context.Background(), "not-a-uuid", api.ServerAgentRequest{Name: &name})
@@ -237,7 +242,7 @@ func TestServiceCreateOnServerReturnsInvalidServerID(t *testing.T) {
 }
 
 func TestServiceGetAllReturnsInvalidServerID(t *testing.T) {
-	svc := NewService(stubAgentRepository{}, stubServerLookup{}, testutil.NewSQLiteDB(t), nil)
+	svc := NewService(stubAgentRepository{}, stubServerLookup{}, testutil.NewPostgresDB(t), nil)
 
 	_, _, err := svc.GetAll(context.Background(), "bad-id", 1, 10)
 	require.ErrorIs(t, err, ErrInvalidServerID)

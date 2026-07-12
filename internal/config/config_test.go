@@ -17,7 +17,7 @@ func TestLoadFromFlagsDefaults(t *testing.T) {
 
 	require.Equal(t, constants.ApiDefaultHost, cfg.Server.Host)
 	require.Equal(t, constants.ApiDefaultPort, cfg.Server.Port)
-	require.Equal(t, constants.AppDefaultName+".db", cfg.Database.DatabasePath)
+	require.Empty(t, cfg.Database.DatabaseURL)
 	require.Equal(t, logger.FormatText, cfg.Logger.Format)
 	require.Equal(t, slog.LevelInfo, cfg.Logger.Level)
 	require.Empty(t, cfg.Auth.BootstrapRootPassword)
@@ -59,7 +59,7 @@ func TestLoadFromFlagsReadsEnvironment(t *testing.T) {
 	}
 
 	cfg, err := config.LoadFromFlags(
-		[]string{"-log-format", "json", "-log-level", "debug", "-server-name", "testhost", "-server-port", "9090", "-database-path", "custom.db"},
+		[]string{"-log-format", "json", "-log-level", "debug", "-server-name", "testhost", "-server-port", "9090"},
 		env,
 	)
 	require.NoError(t, err)
@@ -67,7 +67,6 @@ func TestLoadFromFlagsReadsEnvironment(t *testing.T) {
 	require.Equal(t, "testhost", cfg.Server.Host)
 	require.Equal(t, "9090", cfg.Server.Port)
 	require.Equal(t, "postgres://example", cfg.Database.DatabaseURL)
-	require.Equal(t, "custom.db", cfg.Database.DatabasePath)
 	require.Equal(t, logger.FormatJSON, cfg.Logger.Format)
 	require.Equal(t, slog.LevelDebug, cfg.Logger.Level)
 	require.Equal(t, "BootstrapPassword12!", cfg.Auth.BootstrapRootPassword)

@@ -61,7 +61,16 @@ func (s service) GetAll(ctx context.Context, serverID string, page int, limit in
 		return nil, 0, ErrListAgents
 	}
 
-	return mapEntitiesToResponses(agents), total, nil
+	responses := make([]api.Agent, 0, len(agents))
+	for _, agent := range agents {
+		item, err := mapEntityToResponse(ctx, agent, 1, ErrListAgents, s.logger)
+		if err != nil {
+			return nil, 0, err
+		}
+		responses = append(responses, item)
+	}
+
+	return responses, total, nil
 }
 
 func (s service) GetById(ctx context.Context, agentID string, serverID string) (api.Agent, error) {
@@ -78,7 +87,7 @@ func (s service) GetById(ctx context.Context, agentID string, serverID string) (
 		return api.Agent{}, ErrGetAgent
 	}
 
-	return mapEntityToResponse(agent, 1), nil
+	return mapEntityToResponse(ctx, agent, 1, ErrGetAgent, s.logger)
 }
 
 func (s service) CreateOnServer(ctx context.Context, serverID string, req api.ServerAgentRequest) (api.Agent, error) {
@@ -132,7 +141,7 @@ func (s service) CreateOnServer(ctx context.Context, serverID string, req api.Se
 			return api.Agent{}, ErrCreateAgent
 		}
 
-		return mapEntityToResponse(agent, 1), nil
+		return mapEntityToResponse(ctx, agent, 1, ErrGetAgent, s.logger)
 	}
 
 	name := stringValue(req.Name)
@@ -144,12 +153,17 @@ func (s service) CreateOnServer(ctx context.Context, serverID string, req api.Se
 		return api.Agent{}, err
 	}
 
+	metadata, err := metadataToEntity(req.Metadata)
+	if err != nil {
+		return api.Agent{}, ErrCreateAgent
+	}
+
 	agent := Agent{
 		ID:       uuid.New(),
 		Name:     name,
 		Type:     stringValue(req.Type),
 		Version:  stringValue(req.Version),
-		Metadata: metadataToEntity(req.Metadata),
+		Metadata: metadata,
 	}
 
 	var created Agent
@@ -171,7 +185,7 @@ func (s service) CreateOnServer(ctx context.Context, serverID string, req api.Se
 		return api.Agent{}, ErrCreateAgent
 	}
 
-	return mapEntityToResponse(created, 1), nil
+	return mapEntityToResponse(ctx, created, 1, ErrGetAgent, s.logger)
 }
 
 func (s service) Detach(ctx context.Context, serverID string, agentID string) error {
@@ -213,7 +227,16 @@ func (s service) ListGlobal(ctx context.Context, filter ListFilters, page int, l
 		return nil, 0, ErrListAgents
 	}
 
-	return mapAgentsWithCountToResponses(agents), total, nil
+	responses := make([]api.Agent, 0, len(agents))
+	for _, agent := range agents {
+		item, err := mapAgentWithCountToResponse(ctx, agent, ErrListAgents, s.logger)
+		if err != nil {
+			return nil, 0, err
+		}
+		responses = append(responses, item)
+	}
+
+	return responses, total, nil
 }
 
 func (s service) GetByIdGlobal(ctx context.Context, agentID string) (api.AgentDetail, error) {
@@ -238,7 +261,11 @@ func (s service) GetByIdGlobal(ctx context.Context, agentID string) (api.AgentDe
 		return api.AgentDetail{}, ErrGetAgent
 	}
 
-	base := mapAgentWithCountToResponse(agent)
+	base, err := mapAgentWithCountToResponse(ctx, agent, ErrGetAgent, s.logger)
+	if err != nil {
+		return api.AgentDetail{}, err
+	}
+
 	return api.AgentDetail{
 		Id:          base.Id,
 		Name:        base.Name,
@@ -278,12 +305,17 @@ func (s service) CreateUnassigned(ctx context.Context, req api.AgentCreateReques
 		return api.Agent{}, err
 	}
 
+	metadata, err := metadataToEntity(req.Metadata)
+	if err != nil {
+		return api.Agent{}, ErrCreateAgent
+	}
+
 	agent := Agent{
 		ID:       uuid.New(),
 		Name:     req.Name,
 		Type:     stringValue(req.Type),
 		Version:  stringValue(req.Version),
-		Metadata: metadataToEntity(req.Metadata),
+		Metadata: metadata,
 	}
 
 	created, err := s.repository.CreateUnassigned(ctx, agent)
@@ -298,7 +330,7 @@ func (s service) CreateUnassigned(ctx context.Context, req api.AgentCreateReques
 		return api.Agent{}, ErrCreateAgent
 	}
 
-	return mapEntityToResponse(created, 0), nil
+	return mapEntityToResponse(ctx, created, 0, ErrGetAgent, s.logger)
 }
 
 func (s service) DeleteGlobal(ctx context.Context, agentID string) error {
@@ -349,37 +381,28 @@ func NewService(repository Repository, serverLookupService server.LookupService,
 	}
 }
 
-func mapEntitiesToResponses(agents []Agent) []api.Agent {
-	responses := make([]api.Agent, 0, len(agents))
-	for _, agent := range agents {
-		responses = append(responses, mapEntityToResponse(agent, 1))
+func mapEntityToResponse(ctx context.Context, agent Agent, serverCount int, boundaryErr error, appLogger *logger.Logger) (api.Agent, error) {
+	metadata, err := metadataFromEntity(agent.Metadata)
+	if err != nil {
+		appLogger.ErrorWithStack(ctx, "failed to decode stored agent metadata", err,
+			slog.String("entity_type", "agent"),
+			slog.String("agent_id", agent.ID.String()),
+		)
+		return api.Agent{}, boundaryErr
 	}
 
-	return responses
-}
-
-func mapAgentsWithCountToResponses(agents []AgentWithCount) []api.Agent {
-	responses := make([]api.Agent, 0, len(agents))
-	for _, agent := range agents {
-		responses = append(responses, mapAgentWithCountToResponse(agent))
-	}
-
-	return responses
-}
-
-func mapAgentWithCountToResponse(agent AgentWithCount) api.Agent {
-	return mapEntityToResponse(agent.Agent, int(agent.ServerCount))
-}
-
-func mapEntityToResponse(agent Agent, serverCount int) api.Agent {
 	return api.Agent{
 		Id:          agent.ID,
 		Name:        agent.Name,
 		Type:        agent.Type,
 		Version:     agent.Version,
-		Metadata:    metadataFromEntity(agent.Metadata),
+		Metadata:    metadata,
 		ServerCount: serverCount,
-	}
+	}, nil
+}
+
+func mapAgentWithCountToResponse(ctx context.Context, agent AgentWithCount, boundaryErr error, appLogger *logger.Logger) (api.Agent, error) {
+	return mapEntityToResponse(ctx, agent.Agent, int(agent.ServerCount), boundaryErr, appLogger)
 }
 
 func mapLinkedServersToResponses(servers []LinkedServer) []api.AgentServer {
@@ -394,30 +417,30 @@ func mapLinkedServersToResponses(servers []LinkedServer) []api.AgentServer {
 	return responses
 }
 
-func metadataFromEntity(raw datatypes.JSON) api.ServerMetadata {
-	if len(raw) == 0 {
-		return api.ServerMetadata{}
+func metadataFromEntity(raw datatypes.JSON) (api.ServerMetadata, error) {
+	if len(raw) == 0 || string(raw) == "null" {
+		return api.ServerMetadata{}, nil
 	}
 
 	var metadata api.ServerMetadata
 	if err := json.Unmarshal(raw, &metadata); err != nil {
-		return api.ServerMetadata{}
+		return nil, ErrCorruptMetadata
 	}
 
-	return metadata
+	return metadata, nil
 }
 
-func metadataToEntity(metadata *api.ServerMetadata) datatypes.JSON {
+func metadataToEntity(metadata *api.ServerMetadata) (datatypes.JSON, error) {
 	if metadata == nil || len(*metadata) == 0 {
-		return datatypes.JSON([]byte(`{}`))
+		return datatypes.JSON([]byte(`{}`)), nil
 	}
 
 	raw, err := json.Marshal(metadata)
 	if err != nil {
-		return datatypes.JSON([]byte(`{}`))
+		return nil, err
 	}
 
-	return datatypes.JSON(raw)
+	return datatypes.JSON(raw), nil
 }
 
 func stringValue(value *string) string {

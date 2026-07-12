@@ -28,6 +28,7 @@ const (
 	ErrMsgDuplicateAgentIDs        = "duplicate agent ids in request"
 	ErrMsgDuplicateAgentNames      = "duplicate agent names in request"
 	ErrMsgUpdateServer             = "failed to update server"
+	ErrMsgCorruptMetadata          = "corrupt stored metadata"
 )
 
 var (
@@ -53,6 +54,7 @@ var (
 	ErrDuplicateAgentIDs        = errors.New(ErrMsgDuplicateAgentIDs)
 	ErrDuplicateAgentNames      = errors.New(ErrMsgDuplicateAgentNames)
 	ErrUpdateServer             = errors.New(ErrMsgUpdateServer)
+	ErrCorruptMetadata          = errors.New(ErrMsgCorruptMetadata)
 )
 
 type ServerError struct {

@@ -2,7 +2,6 @@ package auth
 
 import (
 	"context"
-	"crypto/rand"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -21,8 +20,6 @@ const (
 	rootPasswordLength  = 24
 	minimumPasswordSize = 12
 )
-
-const passwordAlphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()-_=+[]{}<>?"
 
 type Service interface {
 	Authenticate(ctx context.Context, username string, password string) (api.AuthUser, error)
@@ -382,23 +379,6 @@ func NewService(repository Repository, tokenRepo TokenRepository, db *gorm.DB, a
 		bootstrapPassword: strings.TrimSpace(cfg.BootstrapRootPassword),
 		supportedRoles:    roles,
 	}
-}
-
-func generateSecurePassword(length int) (string, error) {
-	if length <= 0 {
-		return "", ErrInvalidPasswordValue
-	}
-
-	bytes := make([]byte, length)
-	if _, err := rand.Read(bytes); err != nil {
-		return "", err
-	}
-
-	for i := range length {
-		bytes[i] = passwordAlphabet[int(bytes[i])%len(passwordAlphabet)]
-	}
-
-	return string(bytes), nil
 }
 
 func mapEntityToResponse(user User) api.AuthUser {

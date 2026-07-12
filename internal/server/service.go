@@ -54,19 +54,11 @@ func (s service) GetAll(ctx context.Context, agentID string, page int, limit int
 
 	responses := make([]api.ServerListItem, 0, len(servers))
 	for _, server := range servers {
-		responses = append(responses, api.ServerListItem{
-			Id:              server.ID,
-			Hostname:        server.Hostname,
-			Metadata:        metadataFromEntity(server.Metadata),
-			OperatingSystem: server.OperatingSystem,
-			Hypervisor:      server.Hypervisor,
-			Location:        server.Location,
-			Relations: api.ServerRelationSummary{
-				AgentCount:   int(server.AgentCount),
-				JobCount:     int(server.JobCount),
-				ReleaseCount: int(server.ReleaseCount),
-			},
-		})
+		item, err := s.mapServerListItem(ctx, server)
+		if err != nil {
+			return nil, 0, err
+		}
+		responses = append(responses, item)
 	}
 
 	return responses, total, nil
@@ -93,7 +85,7 @@ func (s service) GetById(ctx context.Context, serverID string) (api.ServerWithRe
 		return api.ServerWithRelations{}, ErrGetServer
 	}
 
-	return mapEntityToWithRelations(server, counts), nil
+	return s.mapEntityToWithRelations(ctx, server, counts)
 }
 
 func (s service) Create(ctx context.Context, req api.ServerCreateRequest) (api.Server, error) {
@@ -115,7 +107,10 @@ func (s service) Create(ctx context.Context, req api.ServerCreateRequest) (api.S
 		return api.Server{}, err
 	}
 
-	metadata := metadataToEntity(req.Metadata)
+	metadata, err := metadataToEntity(req.Metadata)
+	if err != nil {
+		return api.Server{}, ErrCreateServer
+	}
 
 	serverEntity := Server{
 		ID:              uuid.New(),
@@ -157,7 +152,7 @@ func (s service) Create(ctx context.Context, req api.ServerCreateRequest) (api.S
 		return api.Server{}, ErrCreateServer
 	}
 
-	return mapEntityToResponse(created), nil
+	return s.mapEntityToResponse(ctx, created)
 }
 
 func (s service) Update(ctx context.Context, serverID string, req api.ServerUpdateRequest) (api.ServerWithRelations, error) {
@@ -479,22 +474,44 @@ func NewService(repository Repository, agentAttachment AgentAttachmentService, d
 	}
 }
 
-func mapEntityToResponse(server Server) api.Server {
+func mapEntityToResponse(ctx context.Context, server Server, logger *logger.Logger) (api.Server, error) {
+	metadata, err := metadataFromEntity(server.Metadata)
+	if err != nil {
+		logger.ErrorWithStack(ctx, "failed to decode stored server metadata", err,
+			slog.String("entity_type", "server"),
+			slog.String("server_id", server.ID.String()),
+		)
+		return api.Server{}, ErrGetServer
+	}
+
 	return api.Server{
 		Id:              server.ID,
 		Hostname:        server.Hostname,
-		Metadata:        metadataFromEntity(server.Metadata),
+		Metadata:        metadata,
 		OperatingSystem: server.OperatingSystem,
 		Hypervisor:      server.Hypervisor,
 		Location:        server.Location,
-	}
+	}, nil
 }
 
-func mapEntityToWithRelations(server Server, counts RelationSummary) api.ServerWithRelations {
+func (s service) mapEntityToResponse(ctx context.Context, server Server) (api.Server, error) {
+	return mapEntityToResponse(ctx, server, s.logger)
+}
+
+func mapEntityToWithRelations(ctx context.Context, server Server, counts RelationSummary, logger *logger.Logger) (api.ServerWithRelations, error) {
+	metadata, err := metadataFromEntity(server.Metadata)
+	if err != nil {
+		logger.ErrorWithStack(ctx, "failed to decode stored server metadata", err,
+			slog.String("entity_type", "server"),
+			slog.String("server_id", server.ID.String()),
+		)
+		return api.ServerWithRelations{}, ErrGetServer
+	}
+
 	return api.ServerWithRelations{
 		Id:              server.ID,
 		Hostname:        server.Hostname,
-		Metadata:        metadataFromEntity(server.Metadata),
+		Metadata:        metadata,
 		OperatingSystem: server.OperatingSystem,
 		Hypervisor:      server.Hypervisor,
 		Location:        server.Location,
@@ -503,7 +520,36 @@ func mapEntityToWithRelations(server Server, counts RelationSummary) api.ServerW
 			JobCount:     int(counts.JobCount),
 			ReleaseCount: int(counts.ReleaseCount),
 		},
+	}, nil
+}
+
+func (s service) mapEntityToWithRelations(ctx context.Context, server Server, counts RelationSummary) (api.ServerWithRelations, error) {
+	return mapEntityToWithRelations(ctx, server, counts, s.logger)
+}
+
+func (s service) mapServerListItem(ctx context.Context, server ServerWithCounts) (api.ServerListItem, error) {
+	metadata, err := metadataFromEntity(server.Metadata)
+	if err != nil {
+		s.logger.ErrorWithStack(ctx, "failed to decode stored server metadata", err,
+			slog.String("entity_type", "server"),
+			slog.String("server_id", server.ID.String()),
+		)
+		return api.ServerListItem{}, ErrListServers
 	}
+
+	return api.ServerListItem{
+		Id:              server.ID,
+		Hostname:        server.Hostname,
+		Metadata:        metadata,
+		OperatingSystem: server.OperatingSystem,
+		Hypervisor:      server.Hypervisor,
+		Location:        server.Location,
+		Relations: api.ServerRelationSummary{
+			AgentCount:   int(server.AgentCount),
+			JobCount:     int(server.JobCount),
+			ReleaseCount: int(server.ReleaseCount),
+		},
+	}, nil
 }
 
 func mapJobAssociationRow(row JobAssociationRow) api.ServerJobAssociation {
@@ -529,30 +575,30 @@ func mapReleaseAssociationRow(row ReleaseAssociationRow) api.ServerReleaseAssoci
 	}
 }
 
-func metadataFromEntity(raw datatypes.JSON) api.ServerMetadata {
-	if len(raw) == 0 {
-		return api.ServerMetadata{}
+func metadataFromEntity(raw datatypes.JSON) (api.ServerMetadata, error) {
+	if len(raw) == 0 || string(raw) == "null" {
+		return api.ServerMetadata{}, nil
 	}
 
 	var metadata api.ServerMetadata
 	if err := json.Unmarshal(raw, &metadata); err != nil {
-		return api.ServerMetadata{}
+		return nil, ErrCorruptMetadata
 	}
 
-	return metadata
+	return metadata, nil
 }
 
-func metadataToEntity(metadata *api.ServerMetadata) datatypes.JSON {
+func metadataToEntity(metadata *api.ServerMetadata) (datatypes.JSON, error) {
 	if metadata == nil || len(*metadata) == 0 {
-		return datatypes.JSON([]byte(`{}`))
+		return datatypes.JSON([]byte(`{}`)), nil
 	}
 
 	raw, err := json.Marshal(metadata)
 	if err != nil {
-		return datatypes.JSON([]byte(`{}`))
+		return nil, err
 	}
 
-	return datatypes.JSON(raw)
+	return datatypes.JSON(raw), nil
 }
 
 func stringValue(value *string) string {

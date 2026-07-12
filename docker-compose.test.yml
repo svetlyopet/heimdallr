@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: heimdallr
+      POSTGRES_PASSWORD: heimdallr
+      POSTGRES_DB: heimdallr
+    ports:
+      - "5433:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U heimdallr -d heimdallr"]
+      interval: 5s
+      timeout: 5s
+      retries: 5

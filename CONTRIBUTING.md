@@ -13,7 +13,7 @@ For backend and full-stack development:
 
 Install these only when you need the related workflow:
 
-- Docker with Compose v2 for PostgreSQL and end-to-end tests
+- Docker with Compose v2 for PostgreSQL, local development, and end-to-end tests
 - Ansible for the operations end-to-end suite
 - [gitleaks](https://github.com/gitleaks/gitleaks) for the pre-commit hook
 - `curl` for local health checks
@@ -41,17 +41,23 @@ git config --unset core.hooksPath
 
 ## Run locally
 
-### SQLite
+### PostgreSQL (required)
 
-SQLite is the quickest option and does not require an external database:
+Start ephemeral PostgreSQL for local development and tests:
+
+```bash
+make test-db-up
+```
+
+Then run the API from source:
 
 ```bash
 make run-debug
 ```
 
-The command builds the web application and starts Heimdallr at
-[http://localhost:8080](http://localhost:8080). Data is stored in
-`heimdallr.db`, which is ignored by Git.
+The command builds the web application, connects to PostgreSQL, and starts
+Heimdallr at [http://localhost:8080](http://localhost:8080). Stop the database
+with `make test-db-down` when you are finished.
 
 On the first start, Heimdallr creates the `root` user. Set a predictable local
 password with:
@@ -78,7 +84,7 @@ npm run dev
 Open [http://127.0.0.1:5173](http://127.0.0.1:5173). Vite proxies `/api`
 requests to the API on port 8080.
 
-### PostgreSQL with Docker
+### PostgreSQL with Docker (full stack)
 
 ```bash
 make docker-up
@@ -138,9 +144,8 @@ intentionally introduces a breaking API change.
 ### Database changes
 
 PostgreSQL migrations live in `internal/database/migrations/` and run
-automatically at startup. Local SQLite uses GORM auto-migration, so schema
-changes must work in both paths. Exercise PostgreSQL through Docker when a
-change affects models, constraints, or queries.
+automatically at startup. Add paired `.up.sql` and `.down.sql` files when schema
+changes affect models, constraints, or queries.
 
 ### Web changes
 
@@ -153,7 +158,9 @@ every backend change.
 
 ## Testing
 
-Run checks that match the area you changed. The normal backend baseline is:
+Run checks that match the area you changed. `make test` and
+`make test-integration` start ephemeral PostgreSQL automatically via Docker
+Compose when needed. The normal backend baseline is:
 
 ```bash
 make check-fmt
@@ -204,7 +211,7 @@ for those checks before review.
 Run `make help` for the full list. Common targets:
 
 ```bash
-make run-debug          # Build the UI and run the API with SQLite
+make run-debug          # Build the UI and run the API with PostgreSQL
 make build              # Build the web app and Go binary
 make fmt                # Format Go code and imports
 make test               # Unit tests with race detection and shuffled order

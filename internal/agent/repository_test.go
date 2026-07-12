@@ -16,7 +16,7 @@ import (
 func newAgentTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 
-	return testutil.NewSQLiteDB(t, &server.Server{}, &Agent{}, &ServerAgent{})
+	return testutil.NewPostgresDB(t)
 }
 
 func TestRepositoryCreateOnServer(t *testing.T) {

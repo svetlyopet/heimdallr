@@ -16,7 +16,7 @@ import (
 func newAutomationService(t *testing.T) (Service, provider.Service) {
 	t.Helper()
 
-	db := testutil.NewSQLiteDB(t, &provider.Provider{}, &Automation{})
+	db := testutil.NewPostgresDB(t)
 	providerRepo := provider.NewRepository(db)
 	providerSvc := provider.NewService(providerRepo, nil)
 	automationRepo := NewRepository(db)

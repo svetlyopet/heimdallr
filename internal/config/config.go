@@ -92,7 +92,6 @@ func LoadFromFlags(args []string, env func(string) string) (AppConfig, error) {
 	logLevel := fs.String("log-level", "info", "log level: debug, info, warn, or error")
 	serverName := fs.String("server-name", constants.ApiDefaultHost, "server name")
 	serverPort := fs.String("server-port", constants.ApiDefaultPort, "server port")
-	databasePath := fs.String("database-path", constants.AppDefaultName+".db", "sqlite database path when DATABASE_URL is unset")
 
 	if err := fs.Parse(args); err != nil {
 		return AppConfig{}, fmt.Errorf("parse flags: %w", err)
@@ -134,8 +133,7 @@ func LoadFromFlags(args []string, env func(string) string) (AppConfig, error) {
 			MaxPaginationLimit:    maxPaginationLimit,
 		},
 		Database: database.Config{
-			DatabaseURL:  strings.TrimSpace(env("DATABASE_URL")),
-			DatabasePath: *databasePath,
+			DatabaseURL: strings.TrimSpace(env("DATABASE_URL")),
 		},
 		Logger: logger.Config{
 			Format: logger.Format(*logFormat),
@@ -182,7 +180,7 @@ func DefaultTestConfig(output io.Writer) AppConfig {
 			MaxPaginationLimit:    100,
 		},
 		Database: database.Config{
-			DatabasePath: ":memory:",
+			DatabaseURL: strings.TrimSpace(os.Getenv("TEST_POSTGRES_URL")),
 		},
 		Logger: logger.Config{
 			Format: logger.FormatText,

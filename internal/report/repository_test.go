@@ -2,7 +2,6 @@ package report
 
 import (
 	"context"
-	"fmt"
 	"testing"
 	"time"
 
@@ -11,20 +10,14 @@ import (
 	"github.com/svetlyopet/heimdallr/internal/application"
 	"github.com/svetlyopet/heimdallr/internal/database/model"
 	"github.com/svetlyopet/heimdallr/internal/release"
-	"gorm.io/driver/sqlite"
+	"github.com/svetlyopet/heimdallr/internal/testutil"
 	"gorm.io/gorm"
 )
 
 func newReportTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 
-	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name())
-	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
-	require.NoError(t, err)
-
-	require.NoError(t, db.AutoMigrate(&application.Application{}, &release.Release{}, &Report{}))
-
-	return db
+	return testutil.NewPostgresDB(t)
 }
 
 func TestRepositoryFindAllGlobalFiltersByStatusAndType(t *testing.T) {

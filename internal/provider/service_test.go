@@ -15,7 +15,7 @@ import (
 func newProviderService(t *testing.T) Service {
 	t.Helper()
 
-	db := testutil.NewSQLiteDB(t, &Provider{})
+	db := testutil.NewPostgresDB(t)
 	return NewService(NewRepository(db), nil)
 }
 

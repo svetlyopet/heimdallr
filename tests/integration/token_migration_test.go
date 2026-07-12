@@ -4,42 +4,39 @@ package integration
 
 import (
 	"net/url"
-	"os"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/svetlyopet/heimdallr/internal/database"
+	"github.com/svetlyopet/heimdallr/internal/testutil"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
 
 func TestPostgresTokenExpirationMigration(t *testing.T) {
-	databaseURL := os.Getenv("TEST_POSTGRES_URL")
-	if databaseURL == "" {
-		t.Skip("TEST_POSTGRES_URL is not configured")
-	}
+	adminURL := testutil.PostgresURL(t)
+	schemaName := "heimdallr_token_migration_test"
 
-	adminDB, err := gorm.Open(postgres.Open(databaseURL), &gorm.Config{})
+	adminDB, err := gorm.Open(postgres.Open(adminURL), &gorm.Config{})
 	require.NoError(t, err)
 	adminSQLDB, err := adminDB.DB()
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		require.NoError(t, adminSQLDB.Close())
+		_ = adminSQLDB.Close()
 	})
 
-	const testSchema = "heimdallr_token_migration_test"
 	require.NoError(t, adminDB.Exec("DROP SCHEMA IF EXISTS heimdallr_token_migration_test CASCADE").Error)
 	require.NoError(t, adminDB.Exec("CREATE SCHEMA heimdallr_token_migration_test").Error)
 	t.Cleanup(func() {
 		require.NoError(t, adminDB.Exec("DROP SCHEMA IF EXISTS heimdallr_token_migration_test CASCADE").Error)
 	})
 
-	parsedURL, err := url.Parse(databaseURL)
+	parsedURL, err := url.Parse(adminURL)
 	require.NoError(t, err)
 	query := parsedURL.Query()
-	query.Set("search_path", testSchema)
+	query.Set("search_path", schemaName)
 	parsedURL.RawQuery = query.Encode()
 
 	migrationDB, err := gorm.Open(postgres.Open(parsedURL.String()), &gorm.Config{})
@@ -47,34 +44,26 @@ func TestPostgresTokenExpirationMigration(t *testing.T) {
 	sqlDB, err := migrationDB.DB()
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		require.NoError(t, sqlDB.Close())
+		_ = sqlDB.Close()
 	})
 
-	require.NoError(t, migrationDB.Exec(`
-		CREATE TABLE api_tokens (
-			id UUID PRIMARY KEY,
-			kind VARCHAR(32) NOT NULL,
-			expires_at TIMESTAMPTZ NULL
-		)
-	`).Error)
-	require.NoError(t, migrationDB.Exec(`
-		CREATE TABLE schema_migrations (
-			version BIGINT NOT NULL PRIMARY KEY,
-			dirty BOOLEAN NOT NULL
-		)
-	`).Error)
-	require.NoError(t, migrationDB.Exec("INSERT INTO schema_migrations (version, dirty) VALUES (8, FALSE)").Error)
+	require.NoError(t, database.RunMigrationsTo(sqlDB, 8))
 
 	sessionID := uuid.New()
 	apiTokenID := uuid.New()
+	tokenHash := "0000000000000000000000000000000000000000000000000000000000000000"
+	apiTokenHash := "1111111111111111111111111111111111111111111111111111111111111111"
 	require.NoError(t, migrationDB.Exec(
-		"INSERT INTO api_tokens (id, kind, expires_at) VALUES (?, 'session', NULL), (?, 'api', NULL)",
+		`INSERT INTO api_tokens (id, name, token_hash, scopes, kind, expires_at)
+		 VALUES (?, 'session-token', ?, '[]', 'session', NULL), (?, 'api-token', ?, '["read"]', 'api', NULL)`,
 		sessionID,
+		tokenHash,
 		apiTokenID,
+		apiTokenHash,
 	).Error)
 
 	migrationStartedAt := time.Now().UTC()
-	require.NoError(t, database.RunMigrations(sqlDB, "postgres"))
+	require.NoError(t, database.RunMigrationsTo(sqlDB, 9))
 
 	var sessionExpiry time.Time
 	require.NoError(t, migrationDB.Raw(
@@ -91,8 +80,10 @@ func TestPostgresTokenExpirationMigration(t *testing.T) {
 	require.WithinDuration(t, migrationStartedAt.Add(90*24*time.Hour), apiTokenExpiry, time.Minute)
 
 	insertWithoutExpiry := migrationDB.Exec(
-		"INSERT INTO api_tokens (id, kind, expires_at) VALUES (?, 'api', NULL)",
+		`INSERT INTO api_tokens (id, name, token_hash, scopes, kind, expires_at)
+		 VALUES (?, 'legacy', ?, '["read"]', 'api', NULL)`,
 		uuid.New(),
+		"2222222222222222222222222222222222222222222222222222222222222222",
 	).Error
 	require.Error(t, insertWithoutExpiry)
 }

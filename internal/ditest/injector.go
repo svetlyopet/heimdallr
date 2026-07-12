@@ -2,13 +2,13 @@ package ditest
 
 import (
 	"bytes"
-	"path/filepath"
 	"testing"
 
 	"github.com/samber/do/v2"
 	"github.com/svetlyopet/heimdallr/internal/app"
 	"github.com/svetlyopet/heimdallr/internal/config"
 	"github.com/svetlyopet/heimdallr/internal/http/server"
+	"github.com/svetlyopet/heimdallr/internal/testutil"
 )
 
 type Option func(do.Injector)
@@ -23,7 +23,7 @@ func defaultTestConfig(t *testing.T) config.AppConfig {
 	t.Helper()
 
 	cfg := config.DefaultTestConfig(bytes.NewBuffer(nil))
-	cfg.Database.DatabasePath = filepath.Join(t.TempDir(), "heimdallr.db")
+	cfg.Database.DatabaseURL = testutil.PostgresDatabaseURL(t)
 
 	return cfg
 }

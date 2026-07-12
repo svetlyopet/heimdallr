@@ -207,7 +207,7 @@ func (s stubServerRepository) WithTx(*gorm.DB) Repository {
 }
 
 func TestServiceGetAllReturnsRepositoryError(t *testing.T) {
-	db := testutil.NewSQLiteDB(t, &Server{})
+	db := testutil.NewPostgresDB(t)
 	svc := NewService(stubServerRepository{findAllErr: ErrListServers}, stubAgentAttachment{}, db, nil)
 
 	_, _, err := svc.GetAll(context.Background(), "", 1, 10)
@@ -215,7 +215,7 @@ func TestServiceGetAllReturnsRepositoryError(t *testing.T) {
 }
 
 func TestServiceCreateUsesDefaultMetadata(t *testing.T) {
-	db := testutil.NewSQLiteDB(t, &Server{})
+	db := testutil.NewPostgresDB(t)
 	repo := NewRepository(db)
 	svc := NewService(repo, stubAgentAttachment{}, db, nil)
 
@@ -225,7 +225,7 @@ func TestServiceCreateUsesDefaultMetadata(t *testing.T) {
 }
 
 func TestServiceCreateStoresMetadata(t *testing.T) {
-	db := testutil.NewSQLiteDB(t, &Server{})
+	db := testutil.NewPostgresDB(t)
 	repo := NewRepository(db)
 	svc := NewService(repo, stubAgentAttachment{}, db, nil)
 

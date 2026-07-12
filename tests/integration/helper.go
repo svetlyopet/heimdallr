@@ -6,11 +6,11 @@ import (
 	"bytes"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"testing"
 
 	"github.com/svetlyopet/heimdallr/internal/config"
 	"github.com/svetlyopet/heimdallr/internal/ditest"
+	"github.com/svetlyopet/heimdallr/internal/testutil"
 	"github.com/svetlyopet/heimdallr/tests/flows"
 )
 
@@ -25,7 +25,7 @@ func startTestServer(t *testing.T) testServer {
 
 	rootPassword := "IntegrationTestPassword12!"
 	cfg := config.DefaultTestConfig(bytes.NewBuffer(nil))
-	cfg.Database.DatabasePath = filepath.Join(t.TempDir(), "heimdallr.db")
+	cfg.Database.DatabaseURL = testutil.PostgresDatabaseURL(t)
 	cfg.Auth.BootstrapRootPassword = rootPassword
 
 	injector := ditest.NewServerInjector(t, ditest.WithConfig(cfg))

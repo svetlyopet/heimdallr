@@ -17,7 +17,7 @@ import (
 func newTokenService(t *testing.T) Service {
 	t.Helper()
 
-	db := testutil.NewSQLiteDB(t, &APIToken{}, &auth.User{})
+	db := testutil.NewPostgresDB(t)
 	return NewService(NewRepository(db), auth.NewRepository(db), nil, DefaultServiceConfig())
 }
 
@@ -69,7 +69,7 @@ func TestServiceCreateHonorsBoundedTTL(t *testing.T) {
 
 func TestServiceCreateSessionUsesLiveUserRoles(t *testing.T) {
 	svc := newTokenService(t).(*service)
-	db := testutil.NewSQLiteDB(t, &APIToken{}, &auth.User{})
+	db := testutil.NewPostgresDB(t)
 	userRepo := auth.NewRepository(db)
 	svc.userRepository = userRepo
 	svc.repository = NewRepository(db)

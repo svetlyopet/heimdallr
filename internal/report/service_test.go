@@ -18,7 +18,7 @@ import (
 func newReportService(t *testing.T) (Service, application.Service, release.Service) {
 	t.Helper()
 
-	db := testutil.NewSQLiteDB(t, &application.Application{}, &release.Release{}, &Report{})
+	db := testutil.NewPostgresDB(t)
 	appRepo := application.NewRepository(db)
 	appSvc := application.NewService(appRepo, nil)
 	releaseRepo := release.NewRepository(db)

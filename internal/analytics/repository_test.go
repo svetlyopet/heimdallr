@@ -1,7 +1,6 @@
 package analytics
 
 import (
-	"fmt"
 	"testing"
 	"time"
 
@@ -10,32 +9,33 @@ import (
 	"github.com/svetlyopet/heimdallr/internal/application"
 	"github.com/svetlyopet/heimdallr/internal/automation"
 	"github.com/svetlyopet/heimdallr/internal/job"
+	"github.com/svetlyopet/heimdallr/internal/provider"
 	"github.com/svetlyopet/heimdallr/internal/release"
-	"github.com/svetlyopet/heimdallr/internal/report"
-	"gorm.io/driver/sqlite"
+	"github.com/svetlyopet/heimdallr/internal/testutil"
 	"gorm.io/gorm"
 )
 
 func newAnalyticsTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 
-	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name())
-	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
-	require.NoError(t, err)
-
-	require.NoError(t, db.AutoMigrate(&automation.Automation{}, &job.Job{}))
-
-	return db
+	return testutil.NewPostgresDB(t)
 }
 
 func createAutomation(t *testing.T, db *gorm.DB, name string) automation.Automation {
 	t.Helper()
 
+	providerID := uuidMustParse(t, "e9a411c9-f862-4f7d-9e8e-e54f46fc06f1")
+	require.NoError(t, db.FirstOrCreate(&provider.Provider{
+		ID:   providerID,
+		Name: "awx",
+		Url:  "https://example.com/provider",
+	}).Error)
+
 	a := automation.Automation{
 		Name:       name,
 		Url:        "https://example.com/automation",
 		Provider:   "awx",
-		ProviderID: uuidMustParse(t, "e9a411c9-f862-4f7d-9e8e-e54f46fc06f1"),
+		ProviderID: providerID,
 	}
 
 	require.NoError(t, db.Create(&a).Error)
@@ -119,13 +119,7 @@ func TestRepositoryGetAutomationOverviewExcludesDeletedAutomation(t *testing.T) 
 func newComplianceTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 
-	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name()+"-compliance")
-	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
-	require.NoError(t, err)
-
-	require.NoError(t, db.AutoMigrate(&application.Application{}, &release.Release{}, &report.Report{}))
-
-	return db
+	return testutil.NewPostgresDB(t)
 }
 
 func TestRepositoryGetComplianceOverviewSelectsHigherIDOnTimestampTie(t *testing.T) {
