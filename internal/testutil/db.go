@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -26,11 +27,37 @@ func PostgresURL(t *testing.T) string {
 	return databaseURL
 }
 
+func schemaNameFromQualified(qualified string) string {
+	hash := sha256.Sum256([]byte(qualified))
+	return "t_" + hex.EncodeToString(hash[:16])
+}
+
 func testSchemaName(t *testing.T) string {
 	t.Helper()
 
-	hash := sha256.Sum256([]byte(t.Name()))
-	return "t_" + hex.EncodeToString(hash[:16])
+	var pcs [32]uintptr
+	n := runtime.Callers(2, pcs[:])
+	frames := runtime.CallersFrames(pcs[:n])
+	for {
+		frame, more := frames.Next()
+		if isTestFunction(frame.Function) {
+			return schemaNameFromQualified(frame.Function)
+		}
+		if !more {
+			break
+		}
+	}
+
+	return schemaNameFromQualified(t.Name())
+}
+
+func isTestFunction(name string) bool {
+	i := strings.LastIndexByte(name, '.')
+	if i < 0 {
+		return false
+	}
+
+	return strings.HasPrefix(name[i+1:], "Test")
 }
 
 func NewPostgresDB(t *testing.T) *gorm.DB {

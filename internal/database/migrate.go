@@ -7,16 +7,17 @@ import (
 	"fmt"
 
 	"github.com/golang-migrate/migrate/v4"
-	"github.com/golang-migrate/migrate/v4/database"
-	"github.com/golang-migrate/migrate/v4/database/postgres"
+	pgx5 "github.com/golang-migrate/migrate/v4/database/pgx/v5"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
 )
 
 //go:embed migrations/*.sql
 var migrationsFS embed.FS
 
+const migrationDriverName = "pgx5"
+
 func RunMigrations(sqlDB *sql.DB, driverName string) error {
-	if driverName != "postgres" {
+	if driverName != "postgres" && driverName != migrationDriverName {
 		return fmt.Errorf("unsupported migration driver: %s", driverName)
 	}
 
@@ -25,13 +26,12 @@ func RunMigrations(sqlDB *sql.DB, driverName string) error {
 		return fmt.Errorf("create migration source: %w", err)
 	}
 
-	var databaseDriver database.Driver
-	databaseDriver, err = postgres.WithInstance(sqlDB, &postgres.Config{})
+	databaseDriver, err := pgx5.WithInstance(sqlDB, &pgx5.Config{})
 	if err != nil {
 		return fmt.Errorf("create migration database driver: %w", err)
 	}
 
-	m, err := migrate.NewWithInstance("iofs", sourceDriver, driverName, databaseDriver)
+	m, err := migrate.NewWithInstance("iofs", sourceDriver, migrationDriverName, databaseDriver)
 	if err != nil {
 		return fmt.Errorf("create migrator: %w", err)
 	}
@@ -49,12 +49,12 @@ func RunMigrationsTo(sqlDB *sql.DB, version uint) error {
 		return fmt.Errorf("create migration source: %w", err)
 	}
 
-	databaseDriver, err := postgres.WithInstance(sqlDB, &postgres.Config{})
+	databaseDriver, err := pgx5.WithInstance(sqlDB, &pgx5.Config{})
 	if err != nil {
 		return fmt.Errorf("create migration database driver: %w", err)
 	}
 
-	m, err := migrate.NewWithInstance("iofs", sourceDriver, "postgres", databaseDriver)
+	m, err := migrate.NewWithInstance("iofs", sourceDriver, migrationDriverName, databaseDriver)
 	if err != nil {
 		return fmt.Errorf("create migrator: %w", err)
 	}

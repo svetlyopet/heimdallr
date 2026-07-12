@@ -1,0 +1,41 @@
+package agent
+
+import (
+	"github.com/samber/do/v2"
+	"github.com/svetlyopet/heimdallr/internal/logger"
+	server2 "github.com/svetlyopet/heimdallr/internal/modules/server"
+	"gorm.io/gorm"
+)
+
+var Package = do.Package(
+	do.Lazy(provideRepository),
+	do.Lazy(provideService),
+	do.Lazy(provideAgentAttachmentService),
+	do.Lazy(provideHandler),
+)
+
+func provideRepository(i do.Injector) (Repository, error) {
+	return NewRepository(do.MustInvoke[*gorm.DB](i)), nil
+}
+
+func provideService(i do.Injector) (Service, error) {
+	return NewService(
+		do.MustInvoke[Repository](i),
+		do.MustInvokeAs[server2.LookupService](i),
+		do.MustInvoke[*gorm.DB](i),
+		do.MustInvoke[*logger.Logger](i),
+	), nil
+}
+
+func provideAgentAttachmentService(i do.Injector) (server2.AgentAttachmentService, error) {
+	return NewAttachmentService(
+		do.MustInvoke[Repository](i),
+		do.MustInvokeAs[server2.LookupService](i),
+		do.MustInvoke[*gorm.DB](i),
+		do.MustInvoke[*logger.Logger](i),
+	), nil
+}
+
+func provideHandler(i do.Injector) (Handler, error) {
+	return NewHandler(do.MustInvoke[Service](i))
+}

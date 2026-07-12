@@ -7,10 +7,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/svetlyopet/heimdallr/internal/database/model"
-	"github.com/svetlyopet/heimdallr/modules/application"
-	"github.com/svetlyopet/heimdallr/modules/automation"
-	"github.com/svetlyopet/heimdallr/modules/provider"
-	"github.com/svetlyopet/heimdallr/modules/release"
+	"github.com/svetlyopet/heimdallr/internal/modules/application"
+	"github.com/svetlyopet/heimdallr/internal/modules/automation"
+	"github.com/svetlyopet/heimdallr/internal/modules/provider"
+	"github.com/svetlyopet/heimdallr/internal/modules/release"
 	"gorm.io/gorm"
 )
 
