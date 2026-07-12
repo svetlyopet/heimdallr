@@ -1286,6 +1286,8 @@ func (sh *strictHandler) ListGlobalAgents(ctx *gin.Context, params ListGlobalAge
 		handler = middleware(handler, "ListGlobalAgents")
 	}
 
+	ctx.Set("operation_id", "ListGlobalAgents")
+
 	response, err := handler(ctx, request)
 
 	if err != nil {
@@ -1317,6 +1319,8 @@ func (sh *strictHandler) CreateUnassignedAgent(ctx *gin.Context) {
 		handler = middleware(handler, "CreateUnassignedAgent")
 	}
 
+	ctx.Set("operation_id", "CreateUnassignedAgent")
+
 	response, err := handler(ctx, request)
 
 	if err != nil {
@@ -1343,6 +1347,8 @@ func (sh *strictHandler) DeleteGlobalAgent(ctx *gin.Context, agentId AgentIDPath
 		handler = middleware(handler, "DeleteGlobalAgent")
 	}
 
+	ctx.Set("operation_id", "DeleteGlobalAgent")
+
 	response, err := handler(ctx, request)
 
 	if err != nil {
@@ -1368,6 +1374,8 @@ func (sh *strictHandler) GetGlobalAgent(ctx *gin.Context, agentId AgentIDPath) {
 	for _, middleware := range sh.middlewares {
 		handler = middleware(handler, "GetGlobalAgent")
 	}
+
+	ctx.Set("operation_id", "GetGlobalAgent")
 
 	response, err := handler(ctx, request)
 
@@ -1396,6 +1404,8 @@ func (sh *strictHandler) ListAgentServers(ctx *gin.Context, agentId AgentIDPath,
 		handler = middleware(handler, "ListAgentServers")
 	}
 
+	ctx.Set("operation_id", "ListAgentServers")
+
 	response, err := handler(ctx, request)
 
 	if err != nil {
@@ -1422,6 +1432,8 @@ func (sh *strictHandler) ListAgents(ctx *gin.Context, serverId ServerIDPath, par
 	for _, middleware := range sh.middlewares {
 		handler = middleware(handler, "ListAgents")
 	}
+
+	ctx.Set("operation_id", "ListAgents")
 
 	response, err := handler(ctx, request)
 
@@ -1456,6 +1468,8 @@ func (sh *strictHandler) CreateAgent(ctx *gin.Context, serverId ServerIDPath) {
 		handler = middleware(handler, "CreateAgent")
 	}
 
+	ctx.Set("operation_id", "CreateAgent")
+
 	response, err := handler(ctx, request)
 
 	if err != nil {
@@ -1483,6 +1497,8 @@ func (sh *strictHandler) DetachAgent(ctx *gin.Context, serverId ServerIDPath, ag
 		handler = middleware(handler, "DetachAgent")
 	}
 
+	ctx.Set("operation_id", "DetachAgent")
+
 	response, err := handler(ctx, request)
 
 	if err != nil {
@@ -1509,6 +1525,8 @@ func (sh *strictHandler) GetAgent(ctx *gin.Context, serverId ServerIDPath, agent
 	for _, middleware := range sh.middlewares {
 		handler = middleware(handler, "GetAgent")
 	}
+
+	ctx.Set("operation_id", "GetAgent")
 
 	response, err := handler(ctx, request)
 

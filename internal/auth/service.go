@@ -31,6 +31,7 @@ type Service interface {
 	Update(ctx context.Context, userID string, req api.AuthUpdateUserRequest) (api.AuthUser, error)
 	Delete(ctx context.Context, userID string) error
 	EnsureRootUser(ctx context.Context) (string, error)
+	CountLegacyPasswordHashes(ctx context.Context) (int64, error)
 	HasAnyRole(user api.AuthUser, requiredRoles ...string) bool
 }
 
@@ -40,7 +41,8 @@ type ServiceConfig struct {
 
 type service struct {
 	repository        Repository
-	tokenService      APITokenService
+	tokenRepo         TokenRepository
+	db                *gorm.DB
 	logger            *logger.Logger
 	bootstrapPassword string
 	supportedRoles    map[string]struct{}
@@ -62,18 +64,13 @@ func (s service) Authenticate(ctx context.Context, username string, password str
 		return api.AuthUser{}, ErrInvalidCredentials
 	}
 
-	valid, needsRehash := verifyPassword(password, user.PasswordHash)
-	if !valid {
+	if user.PasswordResetRequired {
 		return api.AuthUser{}, ErrInvalidCredentials
 	}
 
-	if needsRehash {
-		rehashed, hashErr := hashPassword(password)
-		if hashErr != nil {
-			s.logger.ErrorWithStack(ctx, "failed to rehash password", hashErr, slog.String("username", username))
-		} else if _, updateErr := s.repository.UpdateByID(ctx, user.ID.String(), User{PasswordHash: rehashed}); updateErr != nil {
-			s.logger.ErrorWithStack(ctx, "failed to persist rehashed password", updateErr, slog.String("username", username))
-		}
+	valid, _ := verifyPassword(password, user.PasswordHash)
+	if !valid {
+		return api.AuthUser{}, ErrInvalidCredentials
 	}
 
 	return mapEntityToResponse(user), nil
@@ -207,20 +204,32 @@ func (s service) Update(ctx context.Context, userID string, req api.AuthUpdateUs
 		update.Roles = roles
 	}
 
-	updated, err := s.repository.UpdateByID(ctx, userID, update)
+	var updated User
+
+	if revokeSessions {
+		err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			var updateErr error
+			updated, updateErr = s.repository.WithTx(tx).UpdateByID(ctx, userID, update)
+			if updateErr != nil {
+				return updateErr
+			}
+
+			return s.tokenRepo.WithTx(tx).DeleteSessionTokensByCreatedBy(ctx, userID)
+		})
+	} else {
+		updated, err = s.repository.UpdateByID(ctx, userID, update)
+	}
+
 	if err != nil {
+		if errors.Is(err, ErrConcurrentUserUpdate) {
+			return api.AuthUser{}, ErrConcurrentUserUpdate
+		}
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return api.AuthUser{}, ErrUserNotFound
 		}
 
 		s.logger.ErrorWithStack(ctx, "failed to update user", err, slog.String("user_id", userID))
 		return api.AuthUser{}, ErrUpdateUser
-	}
-
-	if revokeSessions && s.tokenService != nil {
-		if revokeErr := s.tokenService.RevokeSessionTokens(ctx, userID); revokeErr != nil {
-			s.logger.ErrorWithStack(ctx, "failed to revoke session tokens after user update", revokeErr, slog.String("user_id", userID))
-		}
 	}
 
 	return mapEntityToResponse(updated), nil
@@ -246,13 +255,13 @@ func (s service) Delete(ctx context.Context, userID string) error {
 		return ErrRootDeleteForbidden
 	}
 
-	if s.tokenService != nil {
-		if revokeErr := s.tokenService.RevokeAllUserTokens(ctx, userID); revokeErr != nil {
-			s.logger.ErrorWithStack(ctx, "failed to revoke tokens before user delete", revokeErr, slog.String("user_id", userID))
+	if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := s.tokenRepo.WithTx(tx).DeleteByCreatedBy(ctx, userID); err != nil {
+			return err
 		}
-	}
 
-	if err := s.repository.DeleteByID(ctx, userID); err != nil {
+		return s.repository.WithTx(tx).DeleteByID(ctx, userID)
+	}); err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return ErrUserNotFound
 		}
@@ -311,6 +320,16 @@ func (s service) EnsureRootUser(ctx context.Context) (string, error) {
 	return password, nil
 }
 
+func (s service) CountLegacyPasswordHashes(ctx context.Context) (int64, error) {
+	count, err := s.repository.CountLegacyPasswordHashes(ctx)
+	if err != nil {
+		s.logger.ErrorWithStack(ctx, "failed to count legacy password hashes", err)
+		return 0, ErrListUsers
+	}
+
+	return count, nil
+}
+
 func (s service) HasAnyRole(user api.AuthUser, requiredRoles ...string) bool {
 	if len(requiredRoles) == 0 {
 		return false
@@ -345,7 +364,7 @@ func (s service) validateRoles(roles []string, applyDefault bool) ([]string, err
 	return normalized, nil
 }
 
-func NewService(repository Repository, tokenService APITokenService, appLogger *logger.Logger, cfg ServiceConfig) Service {
+func NewService(repository Repository, tokenRepo TokenRepository, db *gorm.DB, appLogger *logger.Logger, cfg ServiceConfig) Service {
 	if appLogger == nil {
 		appLogger = logger.Default()
 	}
@@ -357,7 +376,8 @@ func NewService(repository Repository, tokenService APITokenService, appLogger *
 
 	return &service{
 		repository:        repository,
-		tokenService:      tokenService,
+		tokenRepo:         tokenRepo,
+		db:                db,
 		logger:            appLogger,
 		bootstrapPassword: strings.TrimSpace(cfg.BootstrapRootPassword),
 		supportedRoles:    roles,
@@ -388,11 +408,6 @@ func mapEntityToResponse(user User) api.AuthUser {
 		Email:    emailToAPI(user.Email),
 		Roles:    rolesToAPI(user.Roles),
 	}
-}
-
-// LegacyHashPasswordForTest verifies legacy SHA-256 hashes in unit tests.
-func LegacyHashPasswordForTest(value string) string {
-	return legacyHashPassword(value)
 }
 
 // LoginScopesForRoles maps user roles to token scopes at login time.

@@ -731,6 +731,8 @@ func (sh *strictHandler) ListAutomations(ctx *gin.Context, params ListAutomation
 		handler = middleware(handler, "ListAutomations")
 	}
 
+	ctx.Set("operation_id", "ListAutomations")
+
 	response, err := handler(ctx, request)
 
 	if err != nil {
@@ -762,6 +764,8 @@ func (sh *strictHandler) CreateAutomation(ctx *gin.Context) {
 		handler = middleware(handler, "CreateAutomation")
 	}
 
+	ctx.Set("operation_id", "CreateAutomation")
+
 	response, err := handler(ctx, request)
 
 	if err != nil {
@@ -788,6 +792,8 @@ func (sh *strictHandler) DeleteAutomation(ctx *gin.Context, automationId Automat
 		handler = middleware(handler, "DeleteAutomation")
 	}
 
+	ctx.Set("operation_id", "DeleteAutomation")
+
 	response, err := handler(ctx, request)
 
 	if err != nil {
@@ -813,6 +819,8 @@ func (sh *strictHandler) GetAutomation(ctx *gin.Context, automationId Automation
 	for _, middleware := range sh.middlewares {
 		handler = middleware(handler, "GetAutomation")
 	}
+
+	ctx.Set("operation_id", "GetAutomation")
 
 	response, err := handler(ctx, request)
 
@@ -846,6 +854,8 @@ func (sh *strictHandler) UpdateAutomation(ctx *gin.Context, automationId Automat
 	for _, middleware := range sh.middlewares {
 		handler = middleware(handler, "UpdateAutomation")
 	}
+
+	ctx.Set("operation_id", "UpdateAutomation")
 
 	response, err := handler(ctx, request)
 

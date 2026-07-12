@@ -6,6 +6,7 @@ import (
 	"log/slog"
 
 	"github.com/svetlyopet/heimdallr/internal/automation/api"
+	"github.com/svetlyopet/heimdallr/internal/database"
 	"github.com/svetlyopet/heimdallr/internal/logger"
 	"github.com/svetlyopet/heimdallr/internal/provider"
 	"gorm.io/gorm"
@@ -141,6 +142,10 @@ func (s service) Create(ctx context.Context, req api.AutomationCreateRequest) (a
 
 	createdAutomation, err := s.repository.Create(ctx, automation)
 	if err != nil {
+		if database.IsUniqueViolation(err) {
+			return api.Automation{}, ErrAutomationAlreadyExists
+		}
+
 		s.logger.ErrorWithStack(
 			ctx,
 			"failed to create automation",

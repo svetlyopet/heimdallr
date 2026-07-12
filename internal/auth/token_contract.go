@@ -5,6 +5,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/svetlyopet/heimdallr/internal/auth/api"
+	"gorm.io/gorm"
 )
 
 type SessionTokenCreateRequest struct {
@@ -14,6 +15,12 @@ type SessionTokenCreateRequest struct {
 
 type SessionTokenCreateResponse struct {
 	Token string
+}
+
+type TokenRepository interface {
+	DeleteByCreatedBy(ctx context.Context, userID string) error
+	DeleteSessionTokensByCreatedBy(ctx context.Context, userID string) error
+	WithTx(tx *gorm.DB) TokenRepository
 }
 
 type APITokenService interface {

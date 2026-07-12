@@ -479,6 +479,8 @@ func (sh *strictHandler) GetAutomationAnalyticsOverview(ctx *gin.Context) {
 		handler = middleware(handler, "GetAutomationAnalyticsOverview")
 	}
 
+	ctx.Set("operation_id", "GetAutomationAnalyticsOverview")
+
 	response, err := handler(ctx, request)
 
 	if err != nil {
@@ -505,6 +507,8 @@ func (sh *strictHandler) GetAutomationAnalyticsOverviewByID(ctx *gin.Context, au
 		handler = middleware(handler, "GetAutomationAnalyticsOverviewByID")
 	}
 
+	ctx.Set("operation_id", "GetAutomationAnalyticsOverviewByID")
+
 	response, err := handler(ctx, request)
 
 	if err != nil {
@@ -528,6 +532,8 @@ func (sh *strictHandler) GetComplianceAnalyticsOverview(ctx *gin.Context) {
 	for _, middleware := range sh.middlewares {
 		handler = middleware(handler, "GetComplianceAnalyticsOverview")
 	}
+
+	ctx.Set("operation_id", "GetComplianceAnalyticsOverview")
 
 	response, err := handler(ctx, request)
 

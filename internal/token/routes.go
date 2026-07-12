@@ -2,6 +2,7 @@ package token
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/svetlyopet/heimdallr/internal/logger"
 	"github.com/svetlyopet/heimdallr/internal/rbac"
 	"github.com/svetlyopet/heimdallr/internal/token/api"
 )
@@ -12,7 +13,7 @@ var Policies = map[string]string{
 	"DeleteToken": rbac.ScopeAdmin,
 }
 
-func RegisterRoutes(rg *gin.RouterGroup, handler Handler, authorizer rbac.Authorizer) {
+func RegisterRoutes(rg *gin.RouterGroup, handler Handler, authorizer rbac.Authorizer, appLogger *logger.Logger) {
 	adminGroup := rg.Group("")
 	adminGroup.Use(rbac.RequireRole(authorizer, rbac.RoleAdmin))
 
@@ -21,7 +22,7 @@ func RegisterRoutes(rg *gin.RouterGroup, handler Handler, authorizer rbac.Author
 	}
 
 	strictHandler := api.NewStrictHandlerWithOptions(handler, []api.StrictMiddlewareFunc{scopeMiddleware}, api.StrictGinServerOptions{
-		HandlerErrorFunc: rbac.StrictHandlerErrorFunc,
+		HandlerErrorFunc: rbac.NewStrictHandlerErrorFunc(appLogger),
 	})
 	api.RegisterHandlersWithOptions(adminGroup, strictHandler, api.GinServerOptions{})
 }

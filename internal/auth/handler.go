@@ -126,6 +126,10 @@ func (h handler) UpdateUser(ctx context.Context, request api.UpdateUserRequestOb
 			return api.UpdateUser400JSONResponse{
 				BadRequestJSONResponse: api.BadRequestJSONResponse{Error: authErrorMessage(err, err.Error())},
 			}, nil
+		case errors.Is(err, ErrConcurrentUserUpdate):
+			return api.UpdateUser409JSONResponse{
+				ConflictJSONResponse: api.ConflictJSONResponse{Error: authErrorMessage(err, "concurrent user update")},
+			}, nil
 		}
 
 		return api.UpdateUser500JSONResponse{

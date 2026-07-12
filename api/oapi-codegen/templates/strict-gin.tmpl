@@ -153,6 +153,8 @@ type strictHandler struct {
             handler = middleware(handler, "{{.OperationId}}")
         }
 
+        ctx.Set("operation_id", "{{.OperationId}}")
+
         response, err := handler(ctx, request)
 
         if err != nil {

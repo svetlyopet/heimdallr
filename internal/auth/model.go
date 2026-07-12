@@ -19,11 +19,13 @@ var defaultSupportedRoles = map[string]struct{}{
 }
 
 type User struct {
-	ID           uuid.UUID `gorm:"type:uuid;primary_key" json:"id"`
-	Username     string    `gorm:"type:varchar(255);uniqueIndex;not null;check:username <> ''" json:"username"`
-	Email        string    `gorm:"type:varchar(255);uniqueIndex;not null;check:email <> ''" json:"email"`
-	PasswordHash string    `gorm:"type:varchar(255);not null;check:password_hash <> ''" json:"-"`
-	Roles        []string  `gorm:"serializer:json;type:text;not null" json:"roles"`
+	ID                    uuid.UUID `gorm:"type:uuid;primary_key" json:"id"`
+	Username              string    `gorm:"type:varchar(255);uniqueIndex;not null;check:username <> ''" json:"username"`
+	Email                 string    `gorm:"type:varchar(255);uniqueIndex;not null;check:email <> ''" json:"email"`
+	PasswordHash          string    `gorm:"type:varchar(255);not null;check:password_hash <> ''" json:"-"`
+	PasswordResetRequired bool      `gorm:"not null;default:false" json:"-"`
+	Roles                 []string  `gorm:"serializer:json;type:text;not null" json:"roles"`
+	Version               int64     `gorm:"not null;default:1" json:"-"`
 
 	model.Timestamp
 }

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 
+	"github.com/svetlyopet/heimdallr/internal/automation"
 	"github.com/svetlyopet/heimdallr/internal/job/api"
 	"github.com/svetlyopet/heimdallr/internal/pagination"
 	"github.com/svetlyopet/heimdallr/internal/requestlimits"
@@ -63,6 +64,18 @@ func (h handler) CreateAutomationJob(ctx context.Context, request api.CreateAuto
 
 	job, err := h.service.Create(ctx, request.AutomationId.String(), *request.Body)
 	if err != nil {
+		if errors.Is(err, automation.ErrAutomationNotFound) {
+			return api.CreateAutomationJob404JSONResponse{
+				NotFoundJSONResponse: api.NotFoundJSONResponse{Error: jobErrorMessage(err, "automation not found")},
+			}, nil
+		}
+
+		if errors.Is(err, ErrInvalidAutomationID) {
+			return api.CreateAutomationJob400JSONResponse{
+				BadRequestJSONResponse: api.BadRequestJSONResponse{Error: jobErrorMessage(err, "invalid automation id")},
+			}, nil
+		}
+
 		if errors.Is(err, ErrJobNotFound) {
 			return api.CreateAutomationJob404JSONResponse{
 				NotFoundJSONResponse: api.NotFoundJSONResponse{Error: jobErrorMessage(err, "automation not found")},

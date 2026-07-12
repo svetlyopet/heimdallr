@@ -65,16 +65,16 @@ type App struct {
 }
 
 func (a *App) RegisterRoutes(rg *gin.RouterGroup) {
-	provider.RegisterRoutes(rg, a.providerHandler, a.authorizer)
-	automation.RegisterRoutes(rg, a.automationHandler, a.authorizer)
-	job.RegisterRoutes(rg, a.jobHandler, a.authorizer)
-	application.RegisterRoutes(rg, a.applicationHandler, a.authorizer)
-	release.RegisterRoutes(rg, a.releaseHandler, a.authorizer)
-	report.RegisterRoutes(rg, a.reportHandler, a.authorizer)
-	analytics.RegisterRoutes(rg, a.analyticsHandler, a.authorizer)
-	server.RegisterRoutes(rg, a.serverHandler, a.authorizer)
-	agent.RegisterRoutes(rg, a.agentHandler, a.authorizer)
-	token.RegisterRoutes(rg, a.tokenHandler, a.authorizer)
+	provider.RegisterRoutes(rg, a.providerHandler, a.authorizer, a.logger)
+	automation.RegisterRoutes(rg, a.automationHandler, a.authorizer, a.logger)
+	job.RegisterRoutes(rg, a.jobHandler, a.authorizer, a.logger)
+	application.RegisterRoutes(rg, a.applicationHandler, a.authorizer, a.logger)
+	release.RegisterRoutes(rg, a.releaseHandler, a.authorizer, a.logger)
+	report.RegisterRoutes(rg, a.reportHandler, a.authorizer, a.logger)
+	analytics.RegisterRoutes(rg, a.analyticsHandler, a.authorizer, a.logger)
+	server.RegisterRoutes(rg, a.serverHandler, a.authorizer, a.logger)
+	agent.RegisterRoutes(rg, a.agentHandler, a.authorizer, a.logger)
+	token.RegisterRoutes(rg, a.tokenHandler, a.authorizer, a.logger)
 }
 
 func (a *App) RegisterPublicRoutes(rg *gin.RouterGroup) {
@@ -82,7 +82,7 @@ func (a *App) RegisterPublicRoutes(rg *gin.RouterGroup) {
 }
 
 func (a *App) RegisterProtectedAuthRoutes(rg *gin.RouterGroup) {
-	auth.RegisterProtectedRoutes(rg, a.authHandler, a.authorizer, a.authCookieConfig)
+	auth.RegisterProtectedRoutes(rg, a.authHandler, a.authorizer, a.logger, a.authCookieConfig)
 }
 
 func (a *App) AuthService() auth.Service {

@@ -782,6 +782,20 @@ func (response UpdateUser404JSONResponse) VisitUpdateUserResponse(w http.Respons
 	return err
 }
 
+type UpdateUser409JSONResponse struct{ ConflictJSONResponse }
+
+func (response UpdateUser409JSONResponse) VisitUpdateUserResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type UpdateUser500JSONResponse struct {
 	InternalServerErrorJSONResponse
 }
@@ -899,6 +913,8 @@ func (sh *strictHandler) Login(ctx *gin.Context) {
 		handler = middleware(handler, "Login")
 	}
 
+	ctx.Set("operation_id", "Login")
+
 	response, err := handler(ctx, request)
 
 	if err != nil {
@@ -923,6 +939,8 @@ func (sh *strictHandler) Logout(ctx *gin.Context) {
 		handler = middleware(handler, "Logout")
 	}
 
+	ctx.Set("operation_id", "Logout")
+
 	response, err := handler(ctx, request)
 
 	if err != nil {
@@ -946,6 +964,8 @@ func (sh *strictHandler) ListUsers(ctx *gin.Context) {
 	for _, middleware := range sh.middlewares {
 		handler = middleware(handler, "ListUsers")
 	}
+
+	ctx.Set("operation_id", "ListUsers")
 
 	response, err := handler(ctx, request)
 
@@ -978,6 +998,8 @@ func (sh *strictHandler) CreateUser(ctx *gin.Context) {
 		handler = middleware(handler, "CreateUser")
 	}
 
+	ctx.Set("operation_id", "CreateUser")
+
 	response, err := handler(ctx, request)
 
 	if err != nil {
@@ -1003,6 +1025,8 @@ func (sh *strictHandler) DeleteUser(ctx *gin.Context, userId UserID) {
 	for _, middleware := range sh.middlewares {
 		handler = middleware(handler, "DeleteUser")
 	}
+
+	ctx.Set("operation_id", "DeleteUser")
 
 	response, err := handler(ctx, request)
 
@@ -1036,6 +1060,8 @@ func (sh *strictHandler) UpdateUser(ctx *gin.Context, userId UserID) {
 	for _, middleware := range sh.middlewares {
 		handler = middleware(handler, "UpdateUser")
 	}
+
+	ctx.Set("operation_id", "UpdateUser")
 
 	response, err := handler(ctx, request)
 

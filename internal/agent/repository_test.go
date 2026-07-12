@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"github.com/svetlyopet/heimdallr/internal/database"
 	"github.com/svetlyopet/heimdallr/internal/server"
 	"github.com/svetlyopet/heimdallr/internal/testutil"
 	"gorm.io/datatypes"
@@ -304,5 +305,5 @@ func TestRepositoryCreateUnassignedRejectsDuplicateName(t *testing.T) {
 		Metadata: datatypes.JSON([]byte(`{}`)),
 	})
 	require.Error(t, err)
-	require.True(t, isUniqueViolation(err))
+	require.True(t, database.IsUniqueViolation(err))
 }

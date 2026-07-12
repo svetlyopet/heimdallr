@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/svetlyopet/heimdallr/internal/agent/api"
+	"github.com/svetlyopet/heimdallr/internal/database"
 	"github.com/svetlyopet/heimdallr/internal/logger"
 	"github.com/svetlyopet/heimdallr/internal/server"
 	serverapi "github.com/svetlyopet/heimdallr/internal/server/api"
@@ -31,6 +32,7 @@ type Service interface {
 type service struct {
 	repository          Repository
 	serverLookupService server.LookupService
+	db                  *gorm.DB
 	logger              *logger.Logger
 }
 
@@ -97,7 +99,24 @@ func (s service) CreateOnServer(ctx context.Context, serverID string, req api.Se
 	}
 
 	if req.AgentId != nil {
-		if err := s.repository.AttachToServer(ctx, parsedServerID, []uuid.UUID{*req.AgentId}); err != nil {
+		var agent Agent
+
+		err := database.WithTransaction(ctx, s.db, func(tx *gorm.DB) error {
+			txRepo := s.repository.WithTx(tx)
+
+			if err := txRepo.AttachToServer(ctx, parsedServerID, []uuid.UUID{*req.AgentId}); err != nil {
+				return err
+			}
+
+			found, err := txRepo.FindById(ctx, req.AgentId.String(), serverID)
+			if err != nil {
+				return err
+			}
+
+			agent = found
+			return nil
+		})
+		if err != nil {
 			if errors.Is(err, ErrAgentAlreadyLinked) {
 				return api.Agent{}, ErrAgentAlreadyLinked
 			}
@@ -106,12 +125,11 @@ func (s service) CreateOnServer(ctx context.Context, serverID string, req api.Se
 				return api.Agent{}, ErrAgentNotFound
 			}
 
-			return api.Agent{}, ErrCreateAgent
-		}
+			if database.IsUniqueViolation(err) {
+				return api.Agent{}, ErrAgentAlreadyLinked
+			}
 
-		agent, err := s.repository.FindById(ctx, req.AgentId.String(), serverID)
-		if err != nil {
-			return api.Agent{}, ErrGetAgent
+			return api.Agent{}, ErrCreateAgent
 		}
 
 		return mapEntityToResponse(agent, 1), nil
@@ -134,9 +152,15 @@ func (s service) CreateOnServer(ctx context.Context, serverID string, req api.Se
 		Metadata: metadataToEntity(req.Metadata),
 	}
 
-	created, err := s.repository.CreateOnServer(ctx, parsedServerID, agent)
+	var created Agent
+
+	err = database.WithTransaction(ctx, s.db, func(tx *gorm.DB) error {
+		var createErr error
+		created, createErr = s.repository.WithTx(tx).CreateOnServer(ctx, parsedServerID, agent)
+		return createErr
+	})
 	if err != nil {
-		if isUniqueViolation(err) {
+		if database.IsUniqueViolation(err) {
 			return api.Agent{}, ErrAgentAlreadyExists
 		}
 
@@ -264,7 +288,7 @@ func (s service) CreateUnassigned(ctx context.Context, req api.AgentCreateReques
 
 	created, err := s.repository.CreateUnassigned(ctx, agent)
 	if err != nil {
-		if isUniqueViolation(err) {
+		if database.IsUniqueViolation(err) {
 			return api.Agent{}, ErrAgentAlreadyExists
 		}
 
@@ -312,7 +336,7 @@ func (s service) ensureAgentNameAvailable(ctx context.Context, name string) erro
 	return nil
 }
 
-func NewService(repository Repository, serverLookupService server.LookupService, appLogger *logger.Logger) Service {
+func NewService(repository Repository, serverLookupService server.LookupService, db *gorm.DB, appLogger *logger.Logger) Service {
 	if appLogger == nil {
 		appLogger = logger.Default()
 	}
@@ -320,6 +344,7 @@ func NewService(repository Repository, serverLookupService server.LookupService,
 	return &service{
 		repository:          repository,
 		serverLookupService: serverLookupService,
+		db:                  db,
 		logger:              appLogger,
 	}
 }

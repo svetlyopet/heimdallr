@@ -571,6 +571,8 @@ func (sh *strictHandler) ListTokens(ctx *gin.Context) {
 		handler = middleware(handler, "ListTokens")
 	}
 
+	ctx.Set("operation_id", "ListTokens")
+
 	response, err := handler(ctx, request)
 
 	if err != nil {
@@ -602,6 +604,8 @@ func (sh *strictHandler) CreateToken(ctx *gin.Context) {
 		handler = middleware(handler, "CreateToken")
 	}
 
+	ctx.Set("operation_id", "CreateToken")
+
 	response, err := handler(ctx, request)
 
 	if err != nil {
@@ -627,6 +631,8 @@ func (sh *strictHandler) DeleteToken(ctx *gin.Context, tokenId TokenIDPath) {
 	for _, middleware := range sh.middlewares {
 		handler = middleware(handler, "DeleteToken")
 	}
+
+	ctx.Set("operation_id", "DeleteToken")
 
 	response, err := handler(ctx, request)
 

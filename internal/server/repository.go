@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"errors"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -26,6 +25,7 @@ type Repository interface {
 	ReleaseAssociationExists(ctx context.Context, serverID uuid.UUID, releaseID uuid.UUID) (bool, error)
 	CreateReleaseAssociation(ctx context.Context, association ServerRelease) error
 	DeleteReleaseAssociation(ctx context.Context, serverID uuid.UUID, releaseID uuid.UUID) error
+	WithTx(tx *gorm.DB) Repository
 }
 
 type ServerWithCounts struct {
@@ -177,9 +177,9 @@ func (r repository) FindAssociatedJobs(ctx context.Context, serverID string, lim
 
 	query := r.db.WithContext(ctx).
 		Table("server_jobs").
-		Joins("JOIN jobs ON jobs.id = server_jobs.job_id AND jobs.automation_id = server_jobs.automation_id").
-		Joins("JOIN automations ON automations.id = jobs.automation_id").
-		Joins("JOIN providers ON providers.id = automations.provider_id").
+		Joins("JOIN jobs ON jobs.id = server_jobs.job_id AND jobs.automation_id = server_jobs.automation_id AND jobs.deleted_at IS NULL").
+		Joins("JOIN automations ON automations.id = jobs.automation_id AND automations.deleted_at IS NULL").
+		Joins("JOIN providers ON providers.id = automations.provider_id AND providers.deleted_at IS NULL").
 		Where("server_jobs.server_id = ?", serverID)
 
 	if err := query.Count(&total).Error; err != nil {
@@ -218,7 +218,8 @@ func (r repository) JobExists(ctx context.Context, jobID string, automationID uu
 
 	if err := r.db.WithContext(ctx).
 		Table("jobs").
-		Where("id = ? AND automation_id = ?", jobID, automationID).
+		Joins("JOIN automations ON automations.id = jobs.automation_id AND automations.deleted_at IS NULL").
+		Where("jobs.deleted_at IS NULL AND jobs.id = ? AND jobs.automation_id = ?", jobID, automationID).
 		Count(&count).Error; err != nil {
 		return false, err
 	}
@@ -348,10 +349,6 @@ func NewRepository(db *gorm.DB) Repository {
 	return &repository{db: db}
 }
 
-func isUniqueViolation(err error) bool {
-	if err == nil {
-		return false
-	}
-
-	return errors.Is(err, gorm.ErrDuplicatedKey)
+func (r repository) WithTx(tx *gorm.DB) Repository {
+	return &repository{db: tx}
 }

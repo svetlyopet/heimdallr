@@ -704,6 +704,8 @@ func (sh *strictHandler) ListReleases(ctx *gin.Context, applicationId Applicatio
 		handler = middleware(handler, "ListReleases")
 	}
 
+	ctx.Set("operation_id", "ListReleases")
+
 	response, err := handler(ctx, request)
 
 	if err != nil {
@@ -738,6 +740,8 @@ func (sh *strictHandler) CreateRelease(ctx *gin.Context, applicationId Applicati
 		handler = middleware(handler, "CreateRelease")
 	}
 
+	ctx.Set("operation_id", "CreateRelease")
+
 	response, err := handler(ctx, request)
 
 	if err != nil {
@@ -764,6 +768,8 @@ func (sh *strictHandler) GetRelease(ctx *gin.Context, applicationId ApplicationI
 	for _, middleware := range sh.middlewares {
 		handler = middleware(handler, "GetRelease")
 	}
+
+	ctx.Set("operation_id", "GetRelease")
 
 	response, err := handler(ctx, request)
 

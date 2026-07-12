@@ -21,6 +21,7 @@ const (
 	ErrMsgRootBootstrap        = "failed to bootstrap root user"
 	ErrMsgInvalidAuthHeader    = "missing authentication headers"
 	ErrMsgInvalidPasswordValue = "invalid password"
+	ErrMsgConcurrentUserUpdate = "concurrent user update"
 )
 
 var (
@@ -39,6 +40,7 @@ var (
 	ErrRootBootstrap        = errors.New(ErrMsgRootBootstrap)
 	ErrInvalidAuthHeader    = errors.New(ErrMsgInvalidAuthHeader)
 	ErrInvalidPasswordValue = errors.New(ErrMsgInvalidPasswordValue)
+	ErrConcurrentUserUpdate = errors.New(ErrMsgConcurrentUserUpdate)
 )
 
 type AuthError struct {

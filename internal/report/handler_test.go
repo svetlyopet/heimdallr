@@ -68,7 +68,7 @@ func newReportRouter(t *testing.T, svc Service) *gin.Engine {
 	r := gin.New()
 	apiGroup := r.Group("/api")
 	apiGroup.Use(testutil.AuthenticatedAdminMiddleware())
-	RegisterRoutes(apiGroup, h, rbac.NewAuthorizer())
+	RegisterRoutes(apiGroup, h, rbac.NewAuthorizer(), nil)
 
 	return r
 }

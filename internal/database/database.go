@@ -5,16 +5,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/svetlyopet/heimdallr/internal/agent"
-	"github.com/svetlyopet/heimdallr/internal/application"
-	"github.com/svetlyopet/heimdallr/internal/auth"
-	"github.com/svetlyopet/heimdallr/internal/automation"
-	"github.com/svetlyopet/heimdallr/internal/job"
-	"github.com/svetlyopet/heimdallr/internal/provider"
-	"github.com/svetlyopet/heimdallr/internal/release"
-	"github.com/svetlyopet/heimdallr/internal/report"
-	"github.com/svetlyopet/heimdallr/internal/server"
-	"github.com/svetlyopet/heimdallr/internal/token"
 	"gorm.io/driver/postgres"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -30,18 +20,28 @@ type Migrator interface {
 	MigrateSQLite(db *gorm.DB) error
 }
 
-type defaultMigrator struct{}
+type defaultMigrator struct {
+	sqliteMigrator func(*gorm.DB) error
+}
 
-func (defaultMigrator) MigratePostgres(sqlDB *sql.DB) error {
+func (m defaultMigrator) MigratePostgres(sqlDB *sql.DB) error {
 	return RunMigrations(sqlDB, "postgres")
 }
 
-func (defaultMigrator) MigrateSQLite(db *gorm.DB) error {
-	return autoMigrateSQLite(db)
+func (m defaultMigrator) MigrateSQLite(db *gorm.DB) error {
+	if m.sqliteMigrator == nil {
+		return fmt.Errorf("sqlite migration is not configured")
+	}
+
+	return m.sqliteMigrator(db)
 }
 
 func DefaultMigrator() Migrator {
 	return defaultMigrator{}
+}
+
+func NewMigrator(sqliteMigrate func(*gorm.DB) error) Migrator {
+	return defaultMigrator{sqliteMigrator: sqliteMigrate}
 }
 
 func Open(cfg Config, migrator Migrator) (*gorm.DB, error) {
@@ -62,7 +62,7 @@ func Open(cfg Config, migrator Migrator) (*gorm.DB, error) {
 }
 
 func openPostgres(databaseURL string, migrator Migrator) (*gorm.DB, error) {
-	db, err := gorm.Open(postgres.Open(databaseURL), &gorm.Config{})
+	db, err := gorm.Open(postgres.Open(databaseURL), &gorm.Config{TranslateError: true})
 	if err != nil {
 		return nil, fmt.Errorf("open postgres database: %w", err)
 	}
@@ -80,7 +80,7 @@ func openPostgres(databaseURL string, migrator Migrator) (*gorm.DB, error) {
 }
 
 func openSQLite(databasePath string, migrator Migrator) (*gorm.DB, error) {
-	db, err := gorm.Open(sqlite.Open(databasePath), &gorm.Config{})
+	db, err := gorm.Open(sqlite.Open(databasePath), &gorm.Config{TranslateError: true})
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite database: %w", err)
 	}
@@ -90,68 +90,6 @@ func openSQLite(databasePath string, migrator Migrator) (*gorm.DB, error) {
 	}
 
 	return db, nil
-}
-
-func autoMigrateSQLite(db *gorm.DB) error {
-	if err := prepareSQLiteTokenExpiration(db); err != nil {
-		return err
-	}
-
-	return db.AutoMigrate(
-		&auth.User{},
-		&provider.Provider{},
-		&automation.Automation{},
-		&job.Job{},
-		&application.Application{},
-		&release.Release{},
-		&report.Report{},
-		&token.APIToken{},
-		&server.Server{},
-		&agent.Agent{},
-		&agent.ServerAgent{},
-		&server.ServerJob{},
-		&server.ServerRelease{},
-	)
-}
-
-func prepareSQLiteTokenExpiration(db *gorm.DB) error {
-	migrator := db.Migrator()
-	if !migrator.HasTable(&token.APIToken{}) {
-		return nil
-	}
-
-	if !migrator.HasColumn(&token.APIToken{}, "Kind") {
-		if err := db.Exec(
-			"ALTER TABLE api_tokens ADD COLUMN kind VARCHAR(32) NOT NULL DEFAULT 'api'",
-		).Error; err != nil {
-			return fmt.Errorf("add sqlite api token kind: %w", err)
-		}
-	}
-	if !migrator.HasColumn(&token.APIToken{}, "ExpiresAt") {
-		if err := db.Exec(
-			"ALTER TABLE api_tokens ADD COLUMN expires_at DATETIME NULL",
-		).Error; err != nil {
-			return fmt.Errorf("add sqlite api token expiration: %w", err)
-		}
-	}
-
-	if err := db.Exec(
-		"UPDATE api_tokens SET kind = 'session' WHERE name LIKE 'session-%' AND kind = 'api'",
-	).Error; err != nil {
-		return fmt.Errorf("classify sqlite session tokens: %w", err)
-	}
-	if err := db.Exec(`
-		UPDATE api_tokens
-		SET expires_at = CASE
-			WHEN kind = 'session' THEN datetime('now', '+24 hours')
-			ELSE datetime('now', '+90 days')
-		END
-		WHERE expires_at IS NULL
-	`).Error; err != nil {
-		return fmt.Errorf("backfill sqlite api token expiration: %w", err)
-	}
-
-	return nil
 }
 
 // NewSQLiteDatabase keeps backward compatibility for tests.

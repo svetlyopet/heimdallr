@@ -518,6 +518,8 @@ func (sh *strictHandler) ListProviders(ctx *gin.Context, params ListProvidersPar
 		handler = middleware(handler, "ListProviders")
 	}
 
+	ctx.Set("operation_id", "ListProviders")
+
 	response, err := handler(ctx, request)
 
 	if err != nil {
@@ -549,6 +551,8 @@ func (sh *strictHandler) CreateProvider(ctx *gin.Context) {
 		handler = middleware(handler, "CreateProvider")
 	}
 
+	ctx.Set("operation_id", "CreateProvider")
+
 	response, err := handler(ctx, request)
 
 	if err != nil {
@@ -574,6 +578,8 @@ func (sh *strictHandler) GetProvider(ctx *gin.Context, providerId ProviderIDPath
 	for _, middleware := range sh.middlewares {
 		handler = middleware(handler, "GetProvider")
 	}
+
+	ctx.Set("operation_id", "GetProvider")
 
 	response, err := handler(ctx, request)
 

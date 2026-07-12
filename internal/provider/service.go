@@ -77,6 +77,14 @@ func (s service) GetByName(ctx context.Context, providerName string) (api.Provid
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return api.Provider{}, ErrProviderNotFound
 		}
+
+		s.logger.ErrorWithStack(
+			ctx,
+			"failed to find provider by name",
+			err,
+			slog.String("provider_name", providerName),
+		)
+		return api.Provider{}, ErrGetProvider
 	}
 
 	return mapEntityToResponse(provider), nil

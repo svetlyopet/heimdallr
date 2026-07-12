@@ -49,7 +49,8 @@ func TestServiceGetByIdReturnsNotFound(t *testing.T) {
 }
 
 type stubProviderRepository struct {
-	findAllErr error
+	findAllErr    error
+	findByNameErr error
 }
 
 func (s stubProviderRepository) FindAll(context.Context, int, int) ([]Provider, int64, error) {
@@ -65,6 +66,9 @@ func (s stubProviderRepository) FindByIdWithAutomations(context.Context, string)
 }
 
 func (s stubProviderRepository) FindByName(context.Context, string) (Provider, error) {
+	if s.findByNameErr != nil {
+		return Provider{}, s.findByNameErr
+	}
 	return Provider{}, gorm.ErrRecordNotFound
 }
 
@@ -77,4 +81,11 @@ func TestServiceGetAllReturnsListError(t *testing.T) {
 
 	_, _, err := svc.GetAll(context.Background(), 1, 10)
 	require.ErrorIs(t, err, ErrListProviders)
+}
+
+func TestServiceGetByNameReturnsGetProviderOnDatabaseError(t *testing.T) {
+	svc := NewService(stubProviderRepository{findByNameErr: errors.New("connection refused")}, nil)
+
+	_, err := svc.GetByName(context.Background(), "awx")
+	require.ErrorIs(t, err, ErrGetProvider)
 }

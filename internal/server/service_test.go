@@ -17,11 +17,11 @@ type stubAgentAttachment struct {
 	createErr error
 }
 
-func (s stubAgentAttachment) AttachAgentIDs(context.Context, uuid.UUID, []uuid.UUID) error {
+func (s stubAgentAttachment) AttachAgentIDs(context.Context, uuid.UUID, []uuid.UUID, *gorm.DB) error {
 	return s.attachErr
 }
 
-func (s stubAgentAttachment) CreateAgentsOnServer(context.Context, uuid.UUID, []api.AgentCreateRequest) error {
+func (s stubAgentAttachment) CreateAgentsOnServer(context.Context, uuid.UUID, []api.AgentCreateRequest, *gorm.DB) error {
 	return s.createErr
 }
 
@@ -34,7 +34,7 @@ func newServerService(t *testing.T) (Service, *gorm.DB) {
 
 	db := newServerTestDB(t)
 	repo := NewRepository(db)
-	return NewService(repo, stubAgentAttachment{}, nil), db
+	return NewService(repo, stubAgentAttachment{}, db, nil), db
 }
 
 func TestServiceCreateReturnsServer(t *testing.T) {
@@ -202,8 +202,13 @@ func (s stubServerRepository) DeleteReleaseAssociation(context.Context, uuid.UUI
 	return nil
 }
 
+func (s stubServerRepository) WithTx(*gorm.DB) Repository {
+	return s
+}
+
 func TestServiceGetAllReturnsRepositoryError(t *testing.T) {
-	svc := NewService(stubServerRepository{findAllErr: ErrListServers}, stubAgentAttachment{}, nil)
+	db := testutil.NewSQLiteDB(t, &Server{})
+	svc := NewService(stubServerRepository{findAllErr: ErrListServers}, stubAgentAttachment{}, db, nil)
 
 	_, _, err := svc.GetAll(context.Background(), "", 1, 10)
 	require.ErrorIs(t, err, ErrListServers)
@@ -212,7 +217,7 @@ func TestServiceGetAllReturnsRepositoryError(t *testing.T) {
 func TestServiceCreateUsesDefaultMetadata(t *testing.T) {
 	db := testutil.NewSQLiteDB(t, &Server{})
 	repo := NewRepository(db)
-	svc := NewService(repo, stubAgentAttachment{}, nil)
+	svc := NewService(repo, stubAgentAttachment{}, db, nil)
 
 	created, err := svc.Create(context.Background(), api.ServerCreateRequest{Hostname: "meta-host.example.com"})
 	require.NoError(t, err)
@@ -222,7 +227,7 @@ func TestServiceCreateUsesDefaultMetadata(t *testing.T) {
 func TestServiceCreateStoresMetadata(t *testing.T) {
 	db := testutil.NewSQLiteDB(t, &Server{})
 	repo := NewRepository(db)
-	svc := NewService(repo, stubAgentAttachment{}, nil)
+	svc := NewService(repo, stubAgentAttachment{}, db, nil)
 
 	metadata := api.ServerMetadata{"rack": "A1"}
 	created, err := svc.Create(context.Background(), api.ServerCreateRequest{
@@ -238,12 +243,12 @@ type recordingAgentAttachment struct {
 	agents    []api.AgentCreateRequest
 }
 
-func (r *recordingAgentAttachment) AttachAgentIDs(_ context.Context, _ uuid.UUID, agentIDs []uuid.UUID) error {
+func (r *recordingAgentAttachment) AttachAgentIDs(_ context.Context, _ uuid.UUID, agentIDs []uuid.UUID, _ *gorm.DB) error {
 	r.attachIDs = append(r.attachIDs, agentIDs...)
 	return nil
 }
 
-func (r *recordingAgentAttachment) CreateAgentsOnServer(_ context.Context, _ uuid.UUID, agents []api.AgentCreateRequest) error {
+func (r *recordingAgentAttachment) CreateAgentsOnServer(_ context.Context, _ uuid.UUID, agents []api.AgentCreateRequest, _ *gorm.DB) error {
 	r.agents = append(r.agents, agents...)
 	return nil
 }
@@ -252,7 +257,7 @@ func TestServiceCreateInvokesAgentAttachment(t *testing.T) {
 	db := newServerTestDB(t)
 	repo := NewRepository(db)
 	attachment := &recordingAgentAttachment{}
-	svc := NewService(repo, attachment, nil)
+	svc := NewService(repo, attachment, db, nil)
 
 	orphanID := uuid.New()
 	agentType := "security"
@@ -275,7 +280,7 @@ func TestServiceUpdateInvokesAgentAttachment(t *testing.T) {
 	db := newServerTestDB(t)
 	repo := NewRepository(db)
 	attachment := &recordingAgentAttachment{}
-	svc := NewService(repo, attachment, nil)
+	svc := NewService(repo, attachment, db, nil)
 
 	created, err := svc.Create(context.Background(), api.ServerCreateRequest{Hostname: "update-host.example.com"})
 	require.NoError(t, err)

@@ -25,6 +25,8 @@ const (
 	ErrMsgAttachAgents             = "failed to attach agents to server"
 	ErrMsgAgentAlreadyLinked       = "agent is already linked to this server"
 	ErrMsgAgentAlreadyExists       = "agent already exists"
+	ErrMsgDuplicateAgentIDs        = "duplicate agent ids in request"
+	ErrMsgDuplicateAgentNames      = "duplicate agent names in request"
 	ErrMsgUpdateServer             = "failed to update server"
 )
 
@@ -48,6 +50,8 @@ var (
 	ErrAttachAgents             = errors.New(ErrMsgAttachAgents)
 	ErrAgentAlreadyLinked       = errors.New(ErrMsgAgentAlreadyLinked)
 	ErrAgentAlreadyExists       = errors.New(ErrMsgAgentAlreadyExists)
+	ErrDuplicateAgentIDs        = errors.New(ErrMsgDuplicateAgentIDs)
+	ErrDuplicateAgentNames      = errors.New(ErrMsgDuplicateAgentNames)
 	ErrUpdateServer             = errors.New(ErrMsgUpdateServer)
 )
 

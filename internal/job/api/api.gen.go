@@ -731,6 +731,8 @@ func (sh *strictHandler) ListAutomationJobs(ctx *gin.Context, automationId Autom
 		handler = middleware(handler, "ListAutomationJobs")
 	}
 
+	ctx.Set("operation_id", "ListAutomationJobs")
+
 	response, err := handler(ctx, request)
 
 	if err != nil {
@@ -764,6 +766,8 @@ func (sh *strictHandler) CreateAutomationJob(ctx *gin.Context, automationId Auto
 		handler = middleware(handler, "CreateAutomationJob")
 	}
 
+	ctx.Set("operation_id", "CreateAutomationJob")
+
 	response, err := handler(ctx, request)
 
 	if err != nil {
@@ -790,6 +794,8 @@ func (sh *strictHandler) GetAutomationJob(ctx *gin.Context, automationId Automat
 	for _, middleware := range sh.middlewares {
 		handler = middleware(handler, "GetAutomationJob")
 	}
+
+	ctx.Set("operation_id", "GetAutomationJob")
 
 	response, err := handler(ctx, request)
 
@@ -824,6 +830,8 @@ func (sh *strictHandler) UpdateAutomationJob(ctx *gin.Context, automationId Auto
 	for _, middleware := range sh.middlewares {
 		handler = middleware(handler, "UpdateAutomationJob")
 	}
+
+	ctx.Set("operation_id", "UpdateAutomationJob")
 
 	response, err := handler(ctx, request)
 

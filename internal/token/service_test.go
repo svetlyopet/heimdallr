@@ -11,6 +11,7 @@ import (
 	"github.com/svetlyopet/heimdallr/internal/rbac"
 	"github.com/svetlyopet/heimdallr/internal/testutil"
 	"github.com/svetlyopet/heimdallr/internal/token/api"
+	"golang.org/x/crypto/bcrypt"
 )
 
 func newTokenService(t *testing.T) Service {
@@ -73,10 +74,13 @@ func TestServiceCreateSessionUsesLiveUserRoles(t *testing.T) {
 	svc.userRepository = userRepo
 	svc.repository = NewRepository(db)
 
+	passwordHash, err := bcrypt.GenerateFromPassword([]byte("StrongPassword123!"), bcrypt.DefaultCost)
+	require.NoError(t, err)
+
 	createdUser, err := userRepo.Create(context.Background(), auth.User{
 		Username:     "reader-user",
 		Email:        "reader@example.com",
-		PasswordHash: "hash",
+		PasswordHash: string(passwordHash),
 		Roles:        []string{auth.RoleReader},
 	})
 	require.NoError(t, err)

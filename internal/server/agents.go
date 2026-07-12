@@ -5,9 +5,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/svetlyopet/heimdallr/internal/server/api"
+	"gorm.io/gorm"
 )
 
 type AgentAttachmentService interface {
-	AttachAgentIDs(ctx context.Context, serverID uuid.UUID, agentIDs []uuid.UUID) error
-	CreateAgentsOnServer(ctx context.Context, serverID uuid.UUID, agents []api.AgentCreateRequest) error
+	AttachAgentIDs(ctx context.Context, serverID uuid.UUID, agentIDs []uuid.UUID, tx *gorm.DB) error
+	CreateAgentsOnServer(ctx context.Context, serverID uuid.UUID, agents []api.AgentCreateRequest, tx *gorm.DB) error
 }

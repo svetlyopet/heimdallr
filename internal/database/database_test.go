@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/svetlyopet/heimdallr/internal/database"
+	"github.com/svetlyopet/heimdallr/internal/sqlitemigrate"
 	"github.com/svetlyopet/heimdallr/internal/token"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -57,7 +58,10 @@ func TestOpenSQLiteUsesMigrator(t *testing.T) {
 }
 
 func TestOpenGormDBImplementsShutdown(t *testing.T) {
-	gormDB, err := database.OpenGormDB(database.Config{DatabasePath: ":memory:"}, database.DefaultMigrator())
+	gormDB, err := database.OpenGormDB(
+		database.Config{DatabasePath: ":memory:"},
+		database.NewMigrator(sqlitemigrate.AutoMigrate),
+	)
 	require.NoError(t, err)
 
 	require.NoError(t, gormDB.Shutdown(t.Context()))
@@ -81,7 +85,7 @@ func TestSQLiteMigrationBackfillsTokenExpiration(t *testing.T) {
 
 	migratedDB, err := database.Open(
 		database.Config{DatabasePath: path},
-		database.DefaultMigrator(),
+		database.NewMigrator(sqlitemigrate.AutoMigrate),
 	)
 	require.NoError(t, err)
 

@@ -6,7 +6,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -31,29 +30,6 @@ func (tokenServiceStub) RevokeSessionTokens(context.Context, string) error { ret
 func (tokenServiceStub) RevokeAllUserTokens(context.Context, string) error { return nil }
 func (tokenServiceStub) RevokeSessionToken(context.Context, string) error  { return nil }
 
-func TestLoginRateLimiterBlocksRepeatedAttempts(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-
-	limiter := NewLoginRateLimiter(2, time.Minute)
-
-	router := gin.New()
-	router.POST("/login", limiter.Middleware(), func(ctx *gin.Context) {
-		ctx.Status(http.StatusUnauthorized)
-	})
-
-	for i := 0; i < 2; i++ {
-		req := httptest.NewRequest(http.MethodPost, "/login", nil)
-		rr := httptest.NewRecorder()
-		router.ServeHTTP(rr, req)
-		require.Equal(t, http.StatusUnauthorized, rr.Code)
-	}
-
-	req := httptest.NewRequest(http.MethodPost, "/login", nil)
-	rr := httptest.NewRecorder()
-	router.ServeHTTP(rr, req)
-	require.Equal(t, http.StatusTooManyRequests, rr.Code)
-}
-
 func TestProtectedUserRoutesRequireAdmin(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
@@ -64,7 +40,7 @@ func TestProtectedUserRoutesRequireAdmin(t *testing.T) {
 	router := gin.New()
 	apiGroup := router.Group("/api")
 	apiGroup.Use(testutil.AuthenticatedReaderMiddleware())
-	RegisterProtectedRoutes(apiGroup, h, rbac.NewAuthorizer())
+	RegisterProtectedRoutes(apiGroup, h, rbac.NewAuthorizer(), nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/users", nil)
 	rr := httptest.NewRecorder()
@@ -78,25 +54,20 @@ func TestHasAnyRoleEmptyRequiredRoles(t *testing.T) {
 	require.False(t, svc.HasAnyRole(user))
 }
 
-func TestLegacyPasswordRehashOnLogin(t *testing.T) {
-	svc, repo, _ := newTestService(t, ServiceConfig{})
+func TestLegacyPasswordRejectedWhenResetRequired(t *testing.T) {
+	svc, _, db := newTestService(t, ServiceConfig{})
 
-	created, err := repo.Create(t.Context(), User{
-		Username:     "legacy-user",
-		Email:        "legacy@example.com",
-		PasswordHash: LegacyHashPasswordForTest("LegacyPassword123!"),
-		Roles:        []string{RoleReader},
-	})
-	require.NoError(t, err)
+	legacyHash := legacyHashForTest("LegacyPassword123!")
+	require.NoError(t, db.Create(&User{
+		Username:              "legacy-user",
+		Email:                 "legacy@example.com",
+		PasswordHash:          legacyHash,
+		PasswordResetRequired: true,
+		Roles:                 []string{RoleReader},
+	}).Error)
 
-	_, err = svc.Authenticate(t.Context(), "legacy-user", "LegacyPassword123!")
-	require.NoError(t, err)
-
-	updated, err := repo.FindByID(t.Context(), created.ID.String())
-	require.NoError(t, err)
-	require.NotEqual(t, LegacyHashPasswordForTest("LegacyPassword123!"), updated.PasswordHash)
-	valid, _ := verifyPassword("LegacyPassword123!", updated.PasswordHash)
-	require.True(t, valid)
+	_, err := svc.Authenticate(t.Context(), "legacy-user", "LegacyPassword123!")
+	require.ErrorIs(t, err, ErrInvalidCredentials)
 }
 
 func TestCreateUserHashesWithBcrypt(t *testing.T) {

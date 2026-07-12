@@ -31,9 +31,9 @@ func TestAttachmentServiceAttachAgentIDs(t *testing.T) {
 
 	attachment := NewAttachmentService(repo, stubServerLookup{
 		resp: serverapi.Server{Id: serverID, Hostname: "attach-host.example.com"},
-	}, nil)
+	}, db, nil)
 
-	require.NoError(t, attachment.AttachAgentIDs(context.Background(), serverID, []uuid.UUID{orphan.ID}))
+	require.NoError(t, attachment.AttachAgentIDs(context.Background(), serverID, []uuid.UUID{orphan.ID}, nil))
 
 	found, err := repo.FindById(context.Background(), orphan.ID.String(), serverID.String())
 	require.NoError(t, err)
@@ -53,7 +53,7 @@ func TestAttachmentServiceCreateAgentsOnServer(t *testing.T) {
 
 	attachment := NewAttachmentService(repo, stubServerLookup{
 		resp: serverapi.Server{Id: serverID, Hostname: "inline-host.example.com"},
-	}, nil)
+	}, db, nil)
 
 	agentType := "security"
 	agentVersion := "1.0.0"
@@ -61,7 +61,7 @@ func TestAttachmentServiceCreateAgentsOnServer(t *testing.T) {
 		Name:    "crowdstrike",
 		Type:    &agentType,
 		Version: &agentVersion,
-	}}))
+	}}, nil))
 
 	agents, total, err := repo.FindAll(context.Background(), serverID.String(), 10, 0)
 	require.NoError(t, err)

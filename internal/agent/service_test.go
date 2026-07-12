@@ -10,6 +10,7 @@ import (
 	"github.com/svetlyopet/heimdallr/internal/agent/api"
 	"github.com/svetlyopet/heimdallr/internal/server"
 	serverapi "github.com/svetlyopet/heimdallr/internal/server/api"
+	"github.com/svetlyopet/heimdallr/internal/testutil"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
@@ -29,7 +30,7 @@ func newAgentService(t *testing.T) (Service, *gorm.DB) {
 	db := newAgentTestDB(t)
 	repo := NewRepository(db)
 	lookup := stubServerLookup{}
-	return NewService(repo, lookup, nil), db
+	return NewService(repo, lookup, db, nil), db
 }
 
 func TestServiceCreateOnServerReturnsAgent(t *testing.T) {
@@ -45,7 +46,7 @@ func TestServiceCreateOnServerReturnsAgent(t *testing.T) {
 
 	svc := NewService(repo, stubServerLookup{
 		resp: serverapi.Server{Id: serverID, Hostname: "agent-host.example.com"},
-	}, nil)
+	}, db, nil)
 
 	name := "datadog"
 	agentType := "monitoring"
@@ -61,7 +62,7 @@ func TestServiceCreateOnServerReturnsAgent(t *testing.T) {
 }
 
 func TestServiceCreateOnServerReturnsServerNotFound(t *testing.T) {
-	svc := NewService(stubAgentRepository{}, stubServerLookup{err: server.ErrServerNotFound}, nil)
+	svc := NewService(stubAgentRepository{}, stubServerLookup{err: server.ErrServerNotFound}, testutil.NewSQLiteDB(t), nil)
 
 	name := "datadog"
 	_, err := svc.CreateOnServer(context.Background(), uuid.New().String(), api.ServerAgentRequest{Name: &name})
@@ -77,16 +78,17 @@ func TestServiceGetByIdReturnsNotFound(t *testing.T) {
 
 func TestServiceDetachReturnsNotFound(t *testing.T) {
 	serverID := uuid.New()
+	db := testutil.NewSQLiteDB(t)
 	svc := NewService(stubAgentRepository{}, stubServerLookup{
 		resp: serverapi.Server{Id: serverID},
-	}, nil)
+	}, db, nil)
 
 	err := svc.Detach(context.Background(), serverID.String(), uuid.New().String())
 	require.ErrorIs(t, err, ErrAgentNotFound)
 }
 
 func TestServiceGetAllReturnsServerNotFound(t *testing.T) {
-	svc := NewService(stubAgentRepository{}, stubServerLookup{err: server.ErrServerNotFound}, nil)
+	svc := NewService(stubAgentRepository{}, stubServerLookup{err: server.ErrServerNotFound}, testutil.NewSQLiteDB(t), nil)
 
 	_, _, err := svc.GetAll(context.Background(), uuid.New().String(), 1, 10)
 	require.ErrorIs(t, err, server.ErrServerNotFound)
@@ -105,7 +107,7 @@ func TestServiceCreateOnServerUsesDefaultMetadata(t *testing.T) {
 
 	svc := NewService(repo, stubServerLookup{
 		resp: serverapi.Server{Id: serverID, Hostname: "meta-host.example.com"},
-	}, nil)
+	}, db, nil)
 
 	name := "agent"
 	created, err := svc.CreateOnServer(context.Background(), serverID.String(), api.ServerAgentRequest{Name: &name})
@@ -126,7 +128,7 @@ func TestServiceCreateOnServerStoresMetadata(t *testing.T) {
 
 	svc := NewService(repo, stubServerLookup{
 		resp: serverapi.Server{Id: serverID, Hostname: "meta-host-2.example.com"},
-	}, nil)
+	}, db, nil)
 
 	name := "agent"
 	metadata := api.ServerMetadata{"env": "prod"}
@@ -186,10 +188,15 @@ func (s stubAgentRepository) DeleteGlobal(context.Context, string) error {
 	return gorm.ErrRecordNotFound
 }
 
+func (s stubAgentRepository) WithTx(*gorm.DB) Repository {
+	return s
+}
+
 func TestServiceGetAllReturnsRepositoryError(t *testing.T) {
 	svc := NewService(
 		stubAgentRepository{findAllErr: errors.New("db down")},
 		stubServerLookup{resp: serverapi.Server{Id: uuid.New()}},
+		testutil.NewSQLiteDB(t),
 		nil,
 	)
 
@@ -210,7 +217,7 @@ func TestServiceGetByIdReturnsAgent(t *testing.T) {
 
 	svc := NewService(repo, stubServerLookup{
 		resp: serverapi.Server{Id: serverID},
-	}, nil)
+	}, db, nil)
 
 	name := "falcon"
 	created, err := svc.CreateOnServer(context.Background(), serverID.String(), api.ServerAgentRequest{Name: &name})
@@ -222,7 +229,7 @@ func TestServiceGetByIdReturnsAgent(t *testing.T) {
 }
 
 func TestServiceCreateOnServerReturnsInvalidServerID(t *testing.T) {
-	svc := NewService(stubAgentRepository{}, stubServerLookup{}, nil)
+	svc := NewService(stubAgentRepository{}, stubServerLookup{}, testutil.NewSQLiteDB(t), nil)
 
 	name := "agent"
 	_, err := svc.CreateOnServer(context.Background(), "not-a-uuid", api.ServerAgentRequest{Name: &name})
@@ -230,7 +237,7 @@ func TestServiceCreateOnServerReturnsInvalidServerID(t *testing.T) {
 }
 
 func TestServiceGetAllReturnsInvalidServerID(t *testing.T) {
-	svc := NewService(stubAgentRepository{}, stubServerLookup{}, nil)
+	svc := NewService(stubAgentRepository{}, stubServerLookup{}, testutil.NewSQLiteDB(t), nil)
 
 	_, _, err := svc.GetAll(context.Background(), "bad-id", 1, 10)
 	require.ErrorIs(t, err, ErrInvalidServerID)
@@ -270,7 +277,7 @@ func TestServiceCreateOnServerReturnsAlreadyExists(t *testing.T) {
 
 	svc := NewService(repo, stubServerLookup{
 		resp: serverapi.Server{Id: serverID},
-	}, nil)
+	}, db, nil)
 
 	falcon := "falcon"
 	_, err := svc.CreateOnServer(context.Background(), serverID.String(), api.ServerAgentRequest{Name: &falcon})
@@ -283,7 +290,7 @@ func TestServiceCreateOnServerReturnsAlreadyExists(t *testing.T) {
 func TestServiceListGlobalUnassignedOnly(t *testing.T) {
 	db := newAgentTestDB(t)
 	repo := NewRepository(db)
-	svc := NewService(repo, stubServerLookup{}, nil)
+	svc := NewService(repo, stubServerLookup{}, db, nil)
 
 	_, err := svc.CreateUnassigned(context.Background(), api.AgentCreateRequest{Name: "orphan"})
 	require.NoError(t, err)

@@ -3,6 +3,7 @@ package auth
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/svetlyopet/heimdallr/internal/auth/api"
+	"github.com/svetlyopet/heimdallr/internal/logger"
 	"github.com/svetlyopet/heimdallr/internal/rbac"
 )
 
@@ -32,7 +33,7 @@ func RegisterPublicRoutes(rg *gin.RouterGroup, handler Handler, loginRateLimiter
 	loginGroup.POST("/v1/auth/login", wrapper.Login)
 }
 
-func RegisterProtectedRoutes(rg *gin.RouterGroup, handler Handler, authorizer rbac.Authorizer, cookieConfigs ...CookieConfig) {
+func RegisterProtectedRoutes(rg *gin.RouterGroup, handler Handler, authorizer rbac.Authorizer, appLogger *logger.Logger, cookieConfigs ...CookieConfig) {
 	cookieConfig := CookieConfig{}
 	if len(cookieConfigs) > 0 {
 		cookieConfig = cookieConfigs[0]
@@ -46,14 +47,14 @@ func RegisterProtectedRoutes(rg *gin.RouterGroup, handler Handler, authorizer rb
 	}
 
 	strictHandler := api.NewStrictHandlerWithOptions(handler, []api.StrictMiddlewareFunc{scopeMiddleware}, api.StrictGinServerOptions{
-		HandlerErrorFunc: rbac.StrictHandlerErrorFunc,
+		HandlerErrorFunc: rbac.NewStrictHandlerErrorFunc(appLogger),
 	})
 	wrapper := api.ServerInterfaceWrapper{Handler: strictHandler}
 
 	logoutHandler := api.NewStrictHandlerWithOptions(handler, []api.StrictMiddlewareFunc{
 		SessionCookieMiddleware(cookieConfig),
 	}, api.StrictGinServerOptions{
-		HandlerErrorFunc: rbac.StrictHandlerErrorFunc,
+		HandlerErrorFunc: rbac.NewStrictHandlerErrorFunc(appLogger),
 	})
 	logoutWrapper := api.ServerInterfaceWrapper{Handler: logoutHandler}
 

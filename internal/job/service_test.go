@@ -161,3 +161,23 @@ func TestServiceGetAllReturnsListError(t *testing.T) {
 	_, _, err := svc.GetAll(context.Background(), "00000000-0000-0000-0000-000000000001", 1, 10)
 	require.ErrorIs(t, err, ErrListJobs)
 }
+
+func TestServiceCreateReturnsNotFoundForMissingAutomation(t *testing.T) {
+	jobSvc := NewService(stubJobRepository{}, stubAutomationLookup{
+		getByIdError: automation.ErrAutomationNotFound,
+	}, nil)
+
+	_, err := jobSvc.Create(context.Background(), uuid.NewString(), api.JobCreateRequest{
+		Id: "1000", Status: api.Started, Location: "global", Url: "https://example.com/job/1",
+	})
+	require.ErrorIs(t, err, automation.ErrAutomationNotFound)
+}
+
+func TestServiceCreateReturnsInvalidAutomationID(t *testing.T) {
+	jobSvc := NewService(stubJobRepository{}, stubAutomationLookup{}, nil)
+
+	_, err := jobSvc.Create(context.Background(), "not-a-uuid", api.JobCreateRequest{
+		Id: "1000", Status: api.Started, Location: "global", Url: "https://example.com/job/1",
+	})
+	require.ErrorIs(t, err, ErrInvalidAutomationID)
+}

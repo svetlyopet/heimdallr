@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/google/uuid"
+	"github.com/svetlyopet/heimdallr/internal/database"
 	"github.com/svetlyopet/heimdallr/internal/logger"
 	"github.com/svetlyopet/heimdallr/internal/server"
 	serverapi "github.com/svetlyopet/heimdallr/internal/server/api"
@@ -14,10 +15,16 @@ import (
 type attachmentService struct {
 	repository          Repository
 	serverLookupService server.LookupService
+	db                  *gorm.DB
 	logger              *logger.Logger
 }
 
-func NewAttachmentService(repository Repository, serverLookupService server.LookupService, appLogger *logger.Logger) server.AgentAttachmentService {
+func NewAttachmentService(
+	repository Repository,
+	serverLookupService server.LookupService,
+	db *gorm.DB,
+	appLogger *logger.Logger,
+) server.AgentAttachmentService {
 	if appLogger == nil {
 		appLogger = logger.Default()
 	}
@@ -25,24 +32,37 @@ func NewAttachmentService(repository Repository, serverLookupService server.Look
 	return &attachmentService{
 		repository:          repository,
 		serverLookupService: serverLookupService,
+		db:                  db,
 		logger:              appLogger,
 	}
 }
 
-func (s attachmentService) AttachAgentIDs(ctx context.Context, serverID uuid.UUID, agentIDs []uuid.UUID) error {
+func (s attachmentService) AttachAgentIDs(ctx context.Context, serverID uuid.UUID, agentIDs []uuid.UUID, tx *gorm.DB) error {
 	if len(agentIDs) == 0 {
 		return nil
 	}
 
-	if _, err := s.serverLookupService.GetById(ctx, serverID.String()); err != nil {
-		if errors.Is(err, server.ErrServerNotFound) {
-			return server.ErrServerNotFound
-		}
-
-		return server.ErrAttachAgents
+	if tx != nil {
+		return s.attachAgentIDs(ctx, serverID, agentIDs, s.repository.WithTx(tx), true)
 	}
 
-	if err := s.repository.AttachToServer(ctx, serverID, agentIDs); err != nil {
+	return database.WithTransaction(ctx, s.db, func(innerTx *gorm.DB) error {
+		return s.attachAgentIDs(ctx, serverID, agentIDs, s.repository.WithTx(innerTx), false)
+	})
+}
+
+func (s attachmentService) attachAgentIDs(ctx context.Context, serverID uuid.UUID, agentIDs []uuid.UUID, repo Repository, skipServerLookup bool) error {
+	if !skipServerLookup {
+		if _, err := s.serverLookupService.GetById(ctx, serverID.String()); err != nil {
+			if errors.Is(err, server.ErrServerNotFound) {
+				return server.ErrServerNotFound
+			}
+
+			return server.ErrAttachAgents
+		}
+	}
+
+	if err := repo.AttachToServer(ctx, serverID, agentIDs); err != nil {
 		if errors.Is(err, ErrAgentAlreadyLinked) {
 			return server.ErrAgentAlreadyLinked
 		}
@@ -51,15 +71,33 @@ func (s attachmentService) AttachAgentIDs(ctx context.Context, serverID uuid.UUI
 			return ErrAgentNotFound
 		}
 
+		if database.IsUniqueViolation(err) {
+			return server.ErrAgentAlreadyLinked
+		}
+
 		return server.ErrAttachAgents
 	}
 
 	return nil
 }
 
-func (s attachmentService) CreateAgentsOnServer(ctx context.Context, serverID uuid.UUID, agents []serverapi.AgentCreateRequest) error {
+func (s attachmentService) CreateAgentsOnServer(ctx context.Context, serverID uuid.UUID, agents []serverapi.AgentCreateRequest, tx *gorm.DB) error {
+	if len(agents) == 0 {
+		return nil
+	}
+
+	if tx != nil {
+		return s.createAgentsOnServer(ctx, serverID, agents, s.repository.WithTx(tx))
+	}
+
+	return database.WithTransaction(ctx, s.db, func(innerTx *gorm.DB) error {
+		return s.createAgentsOnServer(ctx, serverID, agents, s.repository.WithTx(innerTx))
+	})
+}
+
+func (s attachmentService) createAgentsOnServer(ctx context.Context, serverID uuid.UUID, agents []serverapi.AgentCreateRequest, repo Repository) error {
 	for _, input := range agents {
-		if _, err := s.repository.FindByName(ctx, input.Name); err == nil {
+		if _, err := repo.FindByName(ctx, input.Name); err == nil {
 			return server.ErrAgentAlreadyExists
 		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
 			return server.ErrAttachAgents
@@ -73,12 +111,12 @@ func (s attachmentService) CreateAgentsOnServer(ctx context.Context, serverID uu
 			Metadata: metadataToEntity(convertServerMetadata(input.Metadata)),
 		}
 
-		if _, err := s.repository.CreateOnServer(ctx, serverID, agent); err != nil {
+		if _, err := repo.CreateOnServer(ctx, serverID, agent); err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				return server.ErrServerNotFound
 			}
 
-			if isUniqueViolation(err) {
+			if database.IsUniqueViolation(err) {
 				return server.ErrAgentAlreadyExists
 			}
 

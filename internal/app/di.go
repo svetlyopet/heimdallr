@@ -38,7 +38,11 @@ var Package = do.Package(
 
 func provideLoginRateLimiter(i do.Injector) (*auth.LoginRateLimiter, error) {
 	cfg := do.MustInvoke[*config.AppConfig](i)
-	return auth.NewLoginRateLimiter(cfg.Auth.LoginRateLimitMax, cfg.Auth.LoginRateLimitWindow), nil
+	return auth.NewLoginRateLimiter(
+		cfg.Auth.LoginRateLimitMax,
+		cfg.Auth.LoginRateLimitWindow,
+		cfg.Auth.LoginRateLimitMaxKeys,
+	), nil
 }
 
 func provideApp(i do.Injector) (*App, error) {

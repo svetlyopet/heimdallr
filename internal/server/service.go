@@ -7,6 +7,7 @@ import (
 	"log/slog"
 
 	"github.com/google/uuid"
+	"github.com/svetlyopet/heimdallr/internal/database"
 	"github.com/svetlyopet/heimdallr/internal/logger"
 	"github.com/svetlyopet/heimdallr/internal/server/api"
 	"gorm.io/datatypes"
@@ -35,6 +36,7 @@ type Service interface {
 type service struct {
 	repository      Repository
 	agentAttachment AgentAttachmentService
+	db              *gorm.DB
 	logger          *logger.Logger
 }
 
@@ -107,9 +109,15 @@ func (s service) Create(ctx context.Context, req api.ServerCreateRequest) (api.S
 		return api.Server{}, ErrCreateServer
 	}
 
+	agentIDs := uuidSliceValue(req.AgentIds)
+	agents := agentCreateSliceValue(req.Agents)
+	if err := validateAgentAttachments(agentIDs, agents); err != nil {
+		return api.Server{}, err
+	}
+
 	metadata := metadataToEntity(req.Metadata)
 
-	server := Server{
+	serverEntity := Server{
 		ID:              uuid.New(),
 		Hostname:        req.Hostname,
 		Metadata:        metadata,
@@ -118,22 +126,35 @@ func (s service) Create(ctx context.Context, req api.ServerCreateRequest) (api.S
 		Location:        stringValue(req.Location),
 	}
 
-	created, err := s.repository.Create(ctx, server)
-	if err != nil {
-		if isUniqueViolation(err) {
-			return api.Server{}, ErrServerAlreadyExists
+	var created Server
+
+	if err := database.WithTransaction(ctx, s.db, func(tx *gorm.DB) error {
+		txRepo := s.repository.WithTx(tx)
+
+		var createErr error
+		created, createErr = txRepo.Create(ctx, serverEntity)
+		if createErr != nil {
+			if database.IsUniqueViolation(createErr) {
+				return ErrServerAlreadyExists
+			}
+
+			return createErr
+		}
+
+		return s.attachAgents(ctx, created.ID, agentIDs, agents, tx)
+	}); err != nil {
+		if errors.Is(err, ErrServerAlreadyExists) ||
+			errors.Is(err, ErrAgentAlreadyLinked) ||
+			errors.Is(err, ErrAgentAlreadyExists) ||
+			errors.Is(err, ErrDuplicateAgentIDs) ||
+			errors.Is(err, ErrDuplicateAgentNames) {
+			return api.Server{}, err
 		}
 
 		s.logger.ErrorWithStack(ctx, "failed to create server", err,
 			slog.String("hostname", req.Hostname),
 		)
 		return api.Server{}, ErrCreateServer
-	}
-
-	agentIDs := uuidSliceValue(req.AgentIds)
-	agents := agentCreateSliceValue(req.Agents)
-	if err := s.attachAgents(ctx, created.ID, agentIDs, agents); err != nil {
-		return api.Server{}, err
 	}
 
 	return mapEntityToResponse(created), nil
@@ -155,24 +176,64 @@ func (s service) Update(ctx context.Context, serverID string, req api.ServerUpda
 
 	agentIDs := uuidSliceValue(req.AgentIds)
 	agents := agentCreateSliceValue(req.Agents)
-	if err := s.attachAgents(ctx, serverEntity.ID, agentIDs, agents); err != nil {
+	if err := validateAgentAttachments(agentIDs, agents); err != nil {
 		return api.ServerWithRelations{}, err
+	}
+
+	if len(agentIDs) > 0 || len(agents) > 0 {
+		if err := database.WithTransaction(ctx, s.db, func(tx *gorm.DB) error {
+			return s.attachAgents(ctx, serverEntity.ID, agentIDs, agents, tx)
+		}); err != nil {
+			if errors.Is(err, ErrAgentAlreadyLinked) ||
+				errors.Is(err, ErrAgentAlreadyExists) ||
+				errors.Is(err, ErrDuplicateAgentIDs) ||
+				errors.Is(err, ErrDuplicateAgentNames) {
+				return api.ServerWithRelations{}, err
+			}
+
+			s.logger.ErrorWithStack(ctx, "failed to update server agents", err,
+				slog.String("server_id", serverID),
+			)
+			return api.ServerWithRelations{}, ErrUpdateServer
+		}
 	}
 
 	return s.GetById(ctx, serverID)
 }
 
-func (s service) attachAgents(ctx context.Context, serverID uuid.UUID, agentIDs []uuid.UUID, agents []api.AgentCreateRequest) error {
+func (s service) attachAgents(ctx context.Context, serverID uuid.UUID, agentIDs []uuid.UUID, agents []api.AgentCreateRequest, tx *gorm.DB) error {
 	if len(agentIDs) > 0 {
-		if err := s.agentAttachment.AttachAgentIDs(ctx, serverID, agentIDs); err != nil {
+		if err := s.agentAttachment.AttachAgentIDs(ctx, serverID, agentIDs, tx); err != nil {
 			return err
 		}
 	}
 
 	if len(agents) > 0 {
-		if err := s.agentAttachment.CreateAgentsOnServer(ctx, serverID, agents); err != nil {
+		if err := s.agentAttachment.CreateAgentsOnServer(ctx, serverID, agents, tx); err != nil {
 			return err
 		}
+	}
+
+	return nil
+}
+
+func validateAgentAttachments(agentIDs []uuid.UUID, agents []api.AgentCreateRequest) error {
+	seenIDs := make(map[uuid.UUID]struct{}, len(agentIDs))
+	for _, agentID := range agentIDs {
+		if _, exists := seenIDs[agentID]; exists {
+			return ErrDuplicateAgentIDs
+		}
+
+		seenIDs[agentID] = struct{}{}
+	}
+
+	seenNames := make(map[string]struct{}, len(agents))
+	for _, agent := range agents {
+		if _, exists := seenNames[agent.Name]; exists {
+			return ErrDuplicateAgentNames
+		}
+
+		seenNames[agent.Name] = struct{}{}
 	}
 
 	return nil
@@ -405,7 +466,7 @@ func (s service) ensureServerExists(ctx context.Context, serverID string) error 
 	return nil
 }
 
-func NewService(repository Repository, agentAttachment AgentAttachmentService, appLogger *logger.Logger) Service {
+func NewService(repository Repository, agentAttachment AgentAttachmentService, db *gorm.DB, appLogger *logger.Logger) Service {
 	if appLogger == nil {
 		appLogger = logger.Default()
 	}
@@ -413,6 +474,7 @@ func NewService(repository Repository, agentAttachment AgentAttachmentService, a
 	return &service{
 		repository:      repository,
 		agentAttachment: agentAttachment,
+		db:              db,
 		logger:          appLogger,
 	}
 }

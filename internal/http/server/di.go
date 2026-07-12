@@ -40,13 +40,24 @@ func provideServer(i do.Injector) (*Server, error) {
 		MaxPaginationLimit:    cfg.Server.MaxPaginationLimit,
 	}))
 
+	apiRateLimiter := middleware.NewAPIRateLimiter(middleware.APIRateLimitConfig{
+		IPRate:      cfg.Auth.APIRateLimitIPRate,
+		IPBurst:     cfg.Auth.APIRateLimitIPBurst,
+		UserRate:    cfg.Auth.APIRateLimitUserRate,
+		UserBurst:   cfg.Auth.APIRateLimitUserBurst,
+		MaxKeys:     cfg.Auth.APIRateLimitMaxKeys,
+		StaleKeyTTL: cfg.Auth.APIRateLimitStaleTTL,
+	})
+
 	api := handler.Group("/api")
+	api.Use(apiRateLimiter.PreAuthMiddleware())
 	application.RegisterPublicRoutes(api)
 	api.Use(middleware.Authentication(application.TokenService(), middleware.AuthenticationConfig{
 		SessionCookieName: cfg.Auth.SessionCookieName,
 		CSRFCookieName:    cfg.Auth.CSRFCookieName,
 		OptionalPaths:     []string{"/api/v1/auth/logout"},
 	}))
+	api.Use(apiRateLimiter.PostAuthMiddleware())
 	application.RegisterProtectedAuthRoutes(api)
 	application.RegisterRoutes(api)
 

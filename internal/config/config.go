@@ -19,6 +19,13 @@ const (
 	bootstrapRootPasswordEnv = "HEIMDALLR_BOOTSTRAP_ROOT_PASSWORD"
 	loginRateLimitMaxEnv     = "HEIMDALLR_LOGIN_RATE_LIMIT_MAX"
 	loginRateLimitWindowEnv  = "HEIMDALLR_LOGIN_RATE_LIMIT_WINDOW"
+	loginRateLimitMaxKeysEnv = "HEIMDALLR_LOGIN_RATE_LIMIT_MAX_KEYS"
+	apiRateLimitIPRateEnv    = "HEIMDALLR_API_RATE_LIMIT_IP_RATE"
+	apiRateLimitIPBurstEnv   = "HEIMDALLR_API_RATE_LIMIT_IP_BURST"
+	apiRateLimitUserRateEnv  = "HEIMDALLR_API_RATE_LIMIT_USER_RATE"
+	apiRateLimitUserBurstEnv = "HEIMDALLR_API_RATE_LIMIT_USER_BURST"
+	apiRateLimitMaxKeysEnv   = "HEIMDALLR_API_RATE_LIMIT_MAX_KEYS"
+	apiRateLimitStaleTTLEnv  = "HEIMDALLR_API_RATE_LIMIT_STALE_TTL"
 	sessionTokenTTLEnv       = "HEIMDALLR_SESSION_TOKEN_TTL"
 	apiTokenDefaultTTLEnv    = "HEIMDALLR_API_TOKEN_DEFAULT_TTL"
 	apiTokenMaxTTLEnv        = "HEIMDALLR_API_TOKEN_MAX_TTL"
@@ -53,6 +60,13 @@ type AuthConfig struct {
 	BootstrapRootPassword string
 	LoginRateLimitMax     int
 	LoginRateLimitWindow  time.Duration
+	LoginRateLimitMaxKeys int
+	APIRateLimitIPRate    float64
+	APIRateLimitIPBurst   float64
+	APIRateLimitUserRate  float64
+	APIRateLimitUserBurst float64
+	APIRateLimitMaxKeys   int
+	APIRateLimitStaleTTL  time.Duration
 	SessionTokenTTL       time.Duration
 	DefaultAPITokenTTL    time.Duration
 	MaxAPITokenTTL        time.Duration
@@ -132,6 +146,13 @@ func LoadFromFlags(args []string, env func(string) string) (AppConfig, error) {
 			BootstrapRootPassword: strings.TrimSpace(env(bootstrapRootPasswordEnv)),
 			LoginRateLimitMax:     parseIntEnv(env, loginRateLimitMaxEnv, 10),
 			LoginRateLimitWindow:  parseDurationEnv(env, loginRateLimitWindowEnv, 15*time.Minute),
+			LoginRateLimitMaxKeys: parseIntEnv(env, loginRateLimitMaxKeysEnv, 10_000),
+			APIRateLimitIPRate:    parseFloatEnv(env, apiRateLimitIPRateEnv, 20),
+			APIRateLimitIPBurst:   parseFloatEnv(env, apiRateLimitIPBurstEnv, 40),
+			APIRateLimitUserRate:  parseFloatEnv(env, apiRateLimitUserRateEnv, 50),
+			APIRateLimitUserBurst: parseFloatEnv(env, apiRateLimitUserBurstEnv, 100),
+			APIRateLimitMaxKeys:   parseIntEnv(env, apiRateLimitMaxKeysEnv, 10_000),
+			APIRateLimitStaleTTL:  parseDurationEnv(env, apiRateLimitStaleTTLEnv, time.Hour),
 			SessionTokenTTL:       parseDurationEnv(env, sessionTokenTTLEnv, 24*time.Hour),
 			DefaultAPITokenTTL:    defaultAPITokenTTL,
 			MaxAPITokenTTL:        maxAPITokenTTL,
@@ -172,6 +193,13 @@ func DefaultTestConfig(output io.Writer) AppConfig {
 			BootstrapRootPassword: "IntegrationTestPassword12!",
 			LoginRateLimitMax:     100,
 			LoginRateLimitWindow:  time.Minute,
+			LoginRateLimitMaxKeys: 10_000,
+			APIRateLimitIPRate:    20,
+			APIRateLimitIPBurst:   40,
+			APIRateLimitUserRate:  50,
+			APIRateLimitUserBurst: 100,
+			APIRateLimitMaxKeys:   10_000,
+			APIRateLimitStaleTTL:  time.Hour,
 			SessionTokenTTL:       24 * time.Hour,
 			DefaultAPITokenTTL:    90 * 24 * time.Hour,
 			MaxAPITokenTTL:        365 * 24 * time.Hour,
@@ -218,6 +246,20 @@ func parseDurationEnv(env func(string) string, key string, fallback time.Duratio
 	}
 
 	parsed, err := time.ParseDuration(value)
+	if err != nil || parsed <= 0 {
+		return fallback
+	}
+
+	return parsed
+}
+
+func parseFloatEnv(env func(string) string, key string, fallback float64) float64 {
+	value := strings.TrimSpace(env(key))
+	if value == "" {
+		return fallback
+	}
+
+	parsed, err := strconv.ParseFloat(value, 64)
 	if err != nil || parsed <= 0 {
 		return fallback
 	}

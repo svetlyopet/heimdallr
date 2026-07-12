@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/svetlyopet/heimdallr/internal/application"
+	"github.com/svetlyopet/heimdallr/internal/database"
 	"github.com/svetlyopet/heimdallr/internal/logger"
 	"github.com/svetlyopet/heimdallr/internal/release/api"
 	"gorm.io/gorm"
@@ -193,6 +194,10 @@ func (s service) Create(ctx context.Context, applicationID string, req api.Relea
 
 	created, err := s.repository.Create(ctx, release)
 	if err != nil {
+		if database.IsUniqueViolation(err) {
+			return api.Release{}, ErrReleaseAlreadyExists
+		}
+
 		s.logger.ErrorWithStack(ctx, "failed to create release", err,
 			slog.String("application_id", applicationID),
 			slog.String("version", version),

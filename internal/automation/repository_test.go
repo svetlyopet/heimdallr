@@ -36,3 +36,24 @@ func TestRepositoryFindByIdReturnsNotFound(t *testing.T) {
 	_, err := repo.FindById(context.Background(), "00000000-0000-0000-0000-000000000001")
 	require.Error(t, err)
 }
+
+func TestRepositoryDeleteReturnsNotFoundForUnknownID(t *testing.T) {
+	db := newAutomationTestDB(t)
+	repo := automation.NewRepository(db)
+
+	err := repo.Delete(context.Background(), "00000000-0000-0000-0000-000000000001")
+	require.ErrorIs(t, err, gorm.ErrRecordNotFound)
+}
+
+func TestRepositoryFindAllExcludesDeletedAutomations(t *testing.T) {
+	db := newAutomationTestDB(t)
+	repo := automation.NewRepository(db)
+
+	fixture := testfixtures.SeedProviderAutomation(t, db, "awx", "deploy")
+	require.NoError(t, repo.Delete(context.Background(), fixture.Automation.ID.String()))
+
+	automations, total, err := repo.FindAll(context.Background(), 10, 0)
+	require.NoError(t, err)
+	require.Equal(t, int64(0), total)
+	require.Empty(t, automations)
+}

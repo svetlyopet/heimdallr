@@ -110,6 +110,10 @@ func (s service) Create(ctx context.Context, automationId string, req api.JobCre
 	}
 
 	if _, err := s.automationLookupService.GetById(ctx, automationId); err != nil {
+		if errors.Is(err, automation.ErrAutomationNotFound) {
+			return api.Job{}, automation.ErrAutomationNotFound
+		}
+
 		s.logger.ErrorWithStack(
 			ctx,
 			"failed to find automation before creating job",

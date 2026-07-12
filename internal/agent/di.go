@@ -22,6 +22,7 @@ func provideService(i do.Injector) (Service, error) {
 	return NewService(
 		do.MustInvoke[Repository](i),
 		do.MustInvokeAs[server.LookupService](i),
+		do.MustInvoke[*gorm.DB](i),
 		do.MustInvoke[*logger.Logger](i),
 	), nil
 }
@@ -30,6 +31,7 @@ func provideAgentAttachmentService(i do.Injector) (server.AgentAttachmentService
 	return NewAttachmentService(
 		do.MustInvoke[Repository](i),
 		do.MustInvokeAs[server.LookupService](i),
+		do.MustInvoke[*gorm.DB](i),
 		do.MustInvoke[*logger.Logger](i),
 	), nil
 }

@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
@@ -10,6 +11,22 @@ import (
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
+
+type testTokenRepository struct {
+	db *gorm.DB
+}
+
+func (testTokenRepository) DeleteByCreatedBy(context.Context, string) error {
+	return nil
+}
+
+func (testTokenRepository) DeleteSessionTokensByCreatedBy(context.Context, string) error {
+	return nil
+}
+
+func (r testTokenRepository) WithTx(tx *gorm.DB) TokenRepository {
+	return testTokenRepository{db: tx}
+}
 
 func newTestService(t *testing.T, cfg ServiceConfig) (Service, Repository, *gorm.DB) {
 	t.Helper()
@@ -21,7 +38,7 @@ func newTestService(t *testing.T, cfg ServiceConfig) (Service, Repository, *gorm
 	require.NoError(t, db.AutoMigrate(&User{}))
 
 	repo := NewRepository(db)
-	svc := NewService(repo, nil, nil, cfg)
+	svc := NewService(repo, testTokenRepository{db: db}, db, nil, cfg)
 
 	return svc, repo, db
 }
@@ -188,4 +205,57 @@ func TestServiceUpdateRejectsRootRoleChange(t *testing.T) {
 	updatedRoot, err := repo.FindByID(t.Context(), root.ID.String())
 	require.NoError(t, err)
 	require.Equal(t, []string{RoleAdmin}, updatedRoot.Roles)
+}
+
+func TestServiceUpdateConcurrentConflict(t *testing.T) {
+	svc, repo, db := newTestService(t, ServiceConfig{})
+
+	created, err := repo.Create(t.Context(), User{
+		Username:     "conflict-user",
+		Email:        "conflict-user@example.com",
+		PasswordHash: mustHashPassword(t, "StrongPassword123!"),
+		Roles:        []string{RoleReader},
+	})
+	require.NoError(t, err)
+
+	_, err = repo.UpdateByID(t.Context(), created.ID.String(), User{Email: "other@example.com"})
+	require.NoError(t, err)
+
+	concreteRepo, ok := repo.(*repository)
+	require.True(t, ok)
+
+	result := concreteRepo.db.WithContext(t.Context()).
+		Model(&User{}).
+		Where("id = ? AND version = ?", created.ID.String(), 1).
+		Updates(map[string]any{
+			"email":   "stale@example.com",
+			"version": gorm.Expr("version + 1"),
+		})
+	require.NoError(t, result.Error)
+	require.Zero(t, result.RowsAffected)
+
+	conflictSvc := NewService(errorRepository{
+		Repository: repo,
+		updateErr:  ErrConcurrentUserUpdate,
+	}, testTokenRepository{db: db}, db, nil, ServiceConfig{})
+
+	email := openapi_types.Email("service-conflict@example.com")
+	_, err = conflictSvc.Update(t.Context(), created.ID.String(), api.AuthUpdateUserRequest{Email: &email})
+	require.ErrorIs(t, err, ErrConcurrentUserUpdate)
+
+	_, err = svc.Update(t.Context(), created.ID.String(), api.AuthUpdateUserRequest{Email: &email})
+	require.NoError(t, err)
+}
+
+type errorRepository struct {
+	Repository
+	updateErr error
+}
+
+func (r errorRepository) UpdateByID(ctx context.Context, userID string, user User) (User, error) {
+	if r.updateErr != nil {
+		return User{}, r.updateErr
+	}
+
+	return r.Repository.UpdateByID(ctx, userID, user)
 }

@@ -2,7 +2,6 @@ package agent
 
 import (
 	"context"
-	"errors"
 	"strings"
 	"time"
 
@@ -22,6 +21,7 @@ type Repository interface {
 	AttachToServer(ctx context.Context, serverID uuid.UUID, agentIDs []uuid.UUID) error
 	DetachFromServer(ctx context.Context, serverID string, agentID string) error
 	DeleteGlobal(ctx context.Context, agentID string) error
+	WithTx(tx *gorm.DB) Repository
 }
 
 type repository struct {
@@ -232,34 +232,26 @@ func (r repository) CreateOnServer(ctx context.Context, serverID uuid.UUID, agen
 		return Agent{}, gorm.ErrRecordNotFound
 	}
 
+	if err := r.db.WithContext(ctx).Create(&agent).Error; err != nil {
+		return Agent{}, err
+	}
+
+	link := ServerAgent{
+		ServerID:  serverID,
+		AgentID:   agent.ID,
+		CreatedAt: time.Now().UTC(),
+	}
+
+	if err := r.db.WithContext(ctx).Create(&link).Error; err != nil {
+		return Agent{}, err
+	}
+
 	var created Agent
 
-	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Create(&agent).Error; err != nil {
-			return err
-		}
-
-		link := ServerAgent{
-			ServerID:  serverID,
-			AgentID:   agent.ID,
-			CreatedAt: time.Now().UTC(),
-		}
-
-		if err := tx.Create(&link).Error; err != nil {
-			return err
-		}
-
-		if err := tx.Table("agents").
-			Select(agentSelectColumns()).
-			Where("agents.id = ? AND agents.deleted_at IS NULL", agent.ID).
-			Take(&created).Error; err != nil {
-			return err
-		}
-
-		return nil
-	})
-
-	if err != nil {
+	if err := r.db.WithContext(ctx).Table("agents").
+		Select(agentSelectColumns()).
+		Where("agents.id = ? AND agents.deleted_at IS NULL", agent.ID).
+		Take(&created).Error; err != nil {
 		return Agent{}, err
 	}
 
@@ -271,41 +263,39 @@ func (r repository) AttachToServer(ctx context.Context, serverID uuid.UUID, agen
 		return nil
 	}
 
-	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		for _, agentID := range agentIDs {
-			if agentID == uuid.Nil {
-				return gorm.ErrRecordNotFound
-			}
-
-			var existing Agent
-			if err := tx.Where("id = ? AND deleted_at IS NULL", agentID).Take(&existing).Error; err != nil {
-				return err
-			}
-
-			var count int64
-			if err := tx.Model(&ServerAgent{}).
-				Where("server_id = ? AND agent_id = ?", serverID, agentID).
-				Count(&count).Error; err != nil {
-				return err
-			}
-
-			if count > 0 {
-				return ErrAgentAlreadyLinked
-			}
-
-			link := ServerAgent{
-				ServerID:  serverID,
-				AgentID:   agentID,
-				CreatedAt: time.Now().UTC(),
-			}
-
-			if err := tx.Create(&link).Error; err != nil {
-				return err
-			}
+	for _, agentID := range agentIDs {
+		if agentID == uuid.Nil {
+			return gorm.ErrRecordNotFound
 		}
 
-		return nil
-	})
+		var existing Agent
+		if err := r.db.WithContext(ctx).Where("id = ? AND deleted_at IS NULL", agentID).Take(&existing).Error; err != nil {
+			return err
+		}
+
+		var count int64
+		if err := r.db.WithContext(ctx).Model(&ServerAgent{}).
+			Where("server_id = ? AND agent_id = ?", serverID, agentID).
+			Count(&count).Error; err != nil {
+			return err
+		}
+
+		if count > 0 {
+			return ErrAgentAlreadyLinked
+		}
+
+		link := ServerAgent{
+			ServerID:  serverID,
+			AgentID:   agentID,
+			CreatedAt: time.Now().UTC(),
+		}
+
+		if err := r.db.WithContext(ctx).Create(&link).Error; err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (r repository) DetachFromServer(ctx context.Context, serverID string, agentID string) error {
@@ -376,14 +366,6 @@ func NewRepository(db *gorm.DB) Repository {
 	return &repository{db: db}
 }
 
-func isUniqueViolation(err error) bool {
-	if err == nil {
-		return false
-	}
-
-	if errors.Is(err, gorm.ErrDuplicatedKey) {
-		return true
-	}
-
-	return strings.Contains(strings.ToLower(err.Error()), "unique constraint")
+func (r repository) WithTx(tx *gorm.DB) Repository {
+	return &repository{db: tx}
 }

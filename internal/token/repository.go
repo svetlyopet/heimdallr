@@ -14,6 +14,7 @@ type Repository interface {
 	DeleteByCreatedBy(ctx context.Context, userID string) error
 	DeleteSessionTokensByCreatedBy(ctx context.Context, userID string) error
 	DeleteSessionByHash(ctx context.Context, tokenHash string) error
+	WithTx(tx *gorm.DB) Repository
 }
 
 type repository struct {
@@ -80,6 +81,10 @@ func (r repository) DeleteSessionTokensByCreatedBy(ctx context.Context, userID s
 func (r repository) DeleteSessionByHash(ctx context.Context, tokenHash string) error {
 	return r.db.WithContext(ctx).
 		Delete(&APIToken{}, "token_hash = ? AND kind = ?", tokenHash, TokenKindSession).Error
+}
+
+func (r repository) WithTx(tx *gorm.DB) Repository {
+	return &repository{db: tx}
 }
 
 func NewRepository(db *gorm.DB) Repository {

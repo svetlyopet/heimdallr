@@ -1,8 +1,6 @@
 package auth
 
 import (
-	"crypto/sha256"
-	"crypto/subtle"
 	"encoding/hex"
 	"strings"
 
@@ -17,26 +15,34 @@ func hashPassword(value string) (string, error) {
 		return "", err
 	}
 
-	return string(hashed), nil
+	result := string(hashed)
+	if !isBcryptHash(result) {
+		return "", ErrInvalidPasswordValue
+	}
+
+	return result, nil
 }
 
-func legacyHashPassword(value string) string {
-	sum := sha256.Sum256([]byte(value))
-	return hex.EncodeToString(sum[:])
+func isBcryptHash(hash string) bool {
+	return strings.HasPrefix(hash, "$2a$") ||
+		strings.HasPrefix(hash, "$2b$") ||
+		strings.HasPrefix(hash, "$2y$")
+}
+
+func IsLegacyPasswordHash(hash string) bool {
+	if len(hash) != 64 {
+		return false
+	}
+
+	decoded, err := hex.DecodeString(hash)
+	return err == nil && len(decoded) == 32
 }
 
 func verifyPassword(password, storedHash string) (valid bool, needsRehash bool) {
-	if strings.HasPrefix(storedHash, "$2a$") || strings.HasPrefix(storedHash, "$2b$") || strings.HasPrefix(storedHash, "$2y$") {
-		err := bcrypt.CompareHashAndPassword([]byte(storedHash), []byte(password))
-		return err == nil, false
+	if !isBcryptHash(storedHash) {
+		return false, false
 	}
 
-	if len(storedHash) == 64 {
-		legacy := legacyHashPassword(password)
-		if subtle.ConstantTimeCompare([]byte(storedHash), []byte(legacy)) == 1 {
-			return true, true
-		}
-	}
-
-	return false, false
+	err := bcrypt.CompareHashAndPassword([]byte(storedHash), []byte(password))
+	return err == nil, false
 }

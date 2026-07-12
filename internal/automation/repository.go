@@ -24,8 +24,16 @@ func (r repository) FindAll(ctx context.Context, limit int, offset int) ([]Autom
 	var automations []Automation
 	var total int64
 
-	query := r.db.WithContext(ctx).
-		Table("automations").
+	countQuery := r.db.WithContext(ctx).
+		Model(&Automation{}).
+		Joins("JOIN providers ON providers.id = automations.provider_id AND providers.deleted_at IS NULL")
+
+	if err := countQuery.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	findQuery := r.db.WithContext(ctx).
+		Model(&Automation{}).
 		Select(`
 			automations.id,
 			automations.name,
@@ -34,13 +42,7 @@ func (r repository) FindAll(ctx context.Context, limit int, offset int) ([]Autom
 			providers.name AS provider,
 			automations.cost_savings
 		`).
-		Joins("JOIN providers ON providers.id = automations.provider_id")
-
-	if err := query.Count(&total).Error; err != nil {
-		return nil, 0, err
-	}
-
-	findQuery := query
+		Joins("JOIN providers ON providers.id = automations.provider_id AND providers.deleted_at IS NULL")
 
 	if limit > 0 {
 		findQuery = findQuery.Limit(limit)
@@ -61,7 +63,7 @@ func (r repository) FindById(ctx context.Context, automationId string) (Automati
 	var automation Automation
 
 	if err := r.db.WithContext(ctx).
-		Table("automations").
+		Model(&Automation{}).
 		Select(`
 			automations.id,
 			automations.name,
@@ -70,7 +72,7 @@ func (r repository) FindById(ctx context.Context, automationId string) (Automati
 			providers.name AS provider,
 			automations.cost_savings
 		`).
-		Joins("JOIN providers ON providers.id = automations.provider_id").
+		Joins("JOIN providers ON providers.id = automations.provider_id AND providers.deleted_at IS NULL").
 		Where("automations.id = ?", automationId).
 		First(&automation).Error; err != nil {
 		return Automation{}, err
@@ -83,7 +85,7 @@ func (r repository) FindByName(ctx context.Context, automationName string) (Auto
 	var automation Automation
 
 	if err := r.db.WithContext(ctx).
-		Table("automations").
+		Model(&Automation{}).
 		Select(`
 			automations.id,
 			automations.name,
@@ -92,7 +94,7 @@ func (r repository) FindByName(ctx context.Context, automationName string) (Auto
 			providers.name AS provider,
 			automations.cost_savings
 		`).
-		Joins("JOIN providers ON providers.id = automations.provider_id").
+		Joins("JOIN providers ON providers.id = automations.provider_id AND providers.deleted_at IS NULL").
 		Where("automations.name = ?", automationName).
 		First(&automation).Error; err != nil {
 		return Automation{}, err
@@ -141,9 +143,15 @@ func (r repository) Update(ctx context.Context, automation Automation) (Automati
 }
 
 func (r repository) Delete(ctx context.Context, automationId string) error {
-	if err := r.db.WithContext(ctx).
-		Delete(&Automation{}, "id = ?", automationId).Error; err != nil {
-		return err
+	result := r.db.WithContext(ctx).
+		Delete(&Automation{}, "id = ?", automationId)
+
+	if result.Error != nil {
+		return result.Error
+	}
+
+	if result.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
 	}
 
 	return nil

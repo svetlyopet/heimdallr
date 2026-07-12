@@ -21,6 +21,7 @@ var (
 	ErrJobNotFound         = errors.New(ErrMsgJobNotFound)
 	ErrInvalidJobID        = errors.New(ErrMsgInvalidJobID)
 	ErrInvalidAutomationID = errors.New(ErrMsgInvalidAutomationID)
+	ErrInvalidInput        = errors.New("invalid input")
 	ErrInvalidMetadata     = errors.New(ErrMsgInvalidMetadata)
 	ErrInvalidOutput       = errors.New(ErrMsgInvalidOutput)
 	ErrCreateJob           = errors.New(ErrMsgCreateJob)

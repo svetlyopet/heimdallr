@@ -19,7 +19,8 @@ func provideRepository(i do.Injector) (Repository, error) {
 func provideService(i do.Injector) (Service, error) {
 	return NewService(
 		do.MustInvoke[Repository](i),
-		do.MustInvoke[APITokenService](i),
+		do.MustInvoke[TokenRepository](i),
+		do.MustInvoke[*gorm.DB](i),
 		do.MustInvoke[*logger.Logger](i),
 		do.MustInvoke[ServiceConfig](i),
 	), nil

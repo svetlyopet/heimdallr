@@ -567,6 +567,8 @@ func (sh *strictHandler) ListApplications(ctx *gin.Context, params ListApplicati
 		handler = middleware(handler, "ListApplications")
 	}
 
+	ctx.Set("operation_id", "ListApplications")
+
 	response, err := handler(ctx, request)
 
 	if err != nil {
@@ -598,6 +600,8 @@ func (sh *strictHandler) CreateApplication(ctx *gin.Context) {
 		handler = middleware(handler, "CreateApplication")
 	}
 
+	ctx.Set("operation_id", "CreateApplication")
+
 	response, err := handler(ctx, request)
 
 	if err != nil {
@@ -623,6 +627,8 @@ func (sh *strictHandler) GetApplication(ctx *gin.Context, applicationId Applicat
 	for _, middleware := range sh.middlewares {
 		handler = middleware(handler, "GetApplication")
 	}
+
+	ctx.Set("operation_id", "GetApplication")
 
 	response, err := handler(ctx, request)
 

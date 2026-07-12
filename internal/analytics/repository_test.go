@@ -3,11 +3,15 @@ package analytics
 import (
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"github.com/svetlyopet/heimdallr/internal/application"
 	"github.com/svetlyopet/heimdallr/internal/automation"
 	"github.com/svetlyopet/heimdallr/internal/job"
+	"github.com/svetlyopet/heimdallr/internal/release"
+	"github.com/svetlyopet/heimdallr/internal/report"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
@@ -96,4 +100,111 @@ func TestRepositoryGetAutomationOverviewByIDNotFound(t *testing.T) {
 
 	_, err := repo.GetAutomationOverviewByID(t.Context(), "5d8dd803-fca6-4f7c-9dd2-24417622d630")
 	require.ErrorIs(t, err, ErrAutomationNotFound)
+}
+
+func TestRepositoryGetAutomationOverviewExcludesDeletedAutomation(t *testing.T) {
+	db := newAnalyticsTestDB(t)
+	repo := NewRepository(db)
+
+	a1 := createAutomation(t, db, "Deploy app")
+	createJob(t, db, "job-1", a1, "success", "eu")
+	require.NoError(t, db.Delete(&a1).Error)
+
+	response, err := repo.GetAutomationOverview(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, 0, response.TotalAutomations)
+	require.Equal(t, 0, response.TotalJobs)
+}
+
+func newComplianceTestDB(t *testing.T) *gorm.DB {
+	t.Helper()
+
+	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name()+"-compliance")
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
+	require.NoError(t, err)
+
+	require.NoError(t, db.AutoMigrate(&application.Application{}, &release.Release{}, &report.Report{}))
+
+	return db
+}
+
+func TestRepositoryGetComplianceOverviewSelectsHigherIDOnTimestampTie(t *testing.T) {
+	db := newComplianceTestDB(t)
+	repo := NewRepository(db)
+
+	app := application.Application{Name: "payments", Description: "desc", RepositoryURL: "https://example.com/payments"}
+	require.NoError(t, db.Create(&app).Error)
+
+	createdAt := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	lowerID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+	higherID := uuid.MustParse("00000000-0000-0000-0000-000000000002")
+
+	require.NoError(t, db.Create(&release.Release{
+		ID:            lowerID,
+		ApplicationID: app.ID,
+		Application:   app.Name,
+		Version:       "1.0.0",
+		CommitSHA:     "abc",
+		PipelineURL:   "https://example.com/pipeline/1",
+		Branch:        "main",
+	}).Error)
+	require.NoError(t, db.Model(&release.Release{}).Where("id = ?", lowerID).Updates(map[string]interface{}{
+		"created_at": createdAt,
+		"updated_at": createdAt,
+	}).Error)
+
+	require.NoError(t, db.Create(&release.Release{
+		ID:            higherID,
+		ApplicationID: app.ID,
+		Application:   app.Name,
+		Version:       "1.0.1",
+		CommitSHA:     "def",
+		PipelineURL:   "https://example.com/pipeline/2",
+		Branch:        "main",
+	}).Error)
+	require.NoError(t, db.Model(&release.Release{}).Where("id = ?", higherID).Updates(map[string]interface{}{
+		"created_at": createdAt,
+		"updated_at": createdAt,
+	}).Error)
+
+	response, err := repo.GetComplianceOverview(t.Context())
+	require.NoError(t, err)
+	require.Len(t, response.ByApplication, 1)
+	require.Equal(t, higherID.String(), response.ByApplication[0].LatestReleaseId)
+	require.Equal(t, "1.0.1", response.ByApplication[0].LatestVersion)
+}
+
+func TestRepositoryGetComplianceOverviewIgnoresDeletedLatestRelease(t *testing.T) {
+	db := newComplianceTestDB(t)
+	repo := NewRepository(db)
+
+	app := application.Application{Name: "billing", Description: "desc", RepositoryURL: "https://example.com/billing"}
+	require.NoError(t, db.Create(&app).Error)
+
+	older := release.Release{
+		ID:            uuid.New(),
+		ApplicationID: app.ID,
+		Application:   app.Name,
+		Version:       "1.0.0",
+		CommitSHA:     "abc",
+		PipelineURL:   "https://example.com/pipeline/1",
+		Branch:        "main",
+	}
+	newer := release.Release{
+		ID:            uuid.New(),
+		ApplicationID: app.ID,
+		Application:   app.Name,
+		Version:       "2.0.0",
+		CommitSHA:     "def",
+		PipelineURL:   "https://example.com/pipeline/2",
+		Branch:        "main",
+	}
+	require.NoError(t, db.Create(&older).Error)
+	require.NoError(t, db.Create(&newer).Error)
+	require.NoError(t, db.Delete(&newer).Error)
+
+	response, err := repo.GetComplianceOverview(t.Context())
+	require.NoError(t, err)
+	require.Len(t, response.ByApplication, 1)
+	require.Equal(t, older.ID.String(), response.ByApplication[0].LatestReleaseId)
 }

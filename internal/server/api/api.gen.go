@@ -1496,6 +1496,8 @@ func (sh *strictHandler) ListServers(ctx *gin.Context, params ListServersParams)
 		handler = middleware(handler, "ListServers")
 	}
 
+	ctx.Set("operation_id", "ListServers")
+
 	response, err := handler(ctx, request)
 
 	if err != nil {
@@ -1527,6 +1529,8 @@ func (sh *strictHandler) CreateServer(ctx *gin.Context) {
 		handler = middleware(handler, "CreateServer")
 	}
 
+	ctx.Set("operation_id", "CreateServer")
+
 	response, err := handler(ctx, request)
 
 	if err != nil {
@@ -1552,6 +1556,8 @@ func (sh *strictHandler) GetServer(ctx *gin.Context, serverId ServerIDPath) {
 	for _, middleware := range sh.middlewares {
 		handler = middleware(handler, "GetServer")
 	}
+
+	ctx.Set("operation_id", "GetServer")
 
 	response, err := handler(ctx, request)
 
@@ -1586,6 +1592,8 @@ func (sh *strictHandler) UpdateServer(ctx *gin.Context, serverId ServerIDPath) {
 		handler = middleware(handler, "UpdateServer")
 	}
 
+	ctx.Set("operation_id", "UpdateServer")
+
 	response, err := handler(ctx, request)
 
 	if err != nil {
@@ -1612,6 +1620,8 @@ func (sh *strictHandler) ListServerJobs(ctx *gin.Context, serverId ServerIDPath,
 	for _, middleware := range sh.middlewares {
 		handler = middleware(handler, "ListServerJobs")
 	}
+
+	ctx.Set("operation_id", "ListServerJobs")
 
 	response, err := handler(ctx, request)
 
@@ -1646,6 +1656,8 @@ func (sh *strictHandler) AssociateServerJob(ctx *gin.Context, serverId ServerIDP
 		handler = middleware(handler, "AssociateServerJob")
 	}
 
+	ctx.Set("operation_id", "AssociateServerJob")
+
 	response, err := handler(ctx, request)
 
 	if err != nil {
@@ -1674,6 +1686,8 @@ func (sh *strictHandler) DissociateServerJob(ctx *gin.Context, serverId ServerID
 		handler = middleware(handler, "DissociateServerJob")
 	}
 
+	ctx.Set("operation_id", "DissociateServerJob")
+
 	response, err := handler(ctx, request)
 
 	if err != nil {
@@ -1700,6 +1714,8 @@ func (sh *strictHandler) ListServerReleases(ctx *gin.Context, serverId ServerIDP
 	for _, middleware := range sh.middlewares {
 		handler = middleware(handler, "ListServerReleases")
 	}
+
+	ctx.Set("operation_id", "ListServerReleases")
 
 	response, err := handler(ctx, request)
 
@@ -1734,6 +1750,8 @@ func (sh *strictHandler) AssociateServerRelease(ctx *gin.Context, serverId Serve
 		handler = middleware(handler, "AssociateServerRelease")
 	}
 
+	ctx.Set("operation_id", "AssociateServerRelease")
+
 	response, err := handler(ctx, request)
 
 	if err != nil {
@@ -1760,6 +1778,8 @@ func (sh *strictHandler) DissociateServerRelease(ctx *gin.Context, serverId Serv
 	for _, middleware := range sh.middlewares {
 		handler = middleware(handler, "DissociateServerRelease")
 	}
+
+	ctx.Set("operation_id", "DissociateServerRelease")
 
 	response, err := handler(ctx, request)
 

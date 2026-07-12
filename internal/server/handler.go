@@ -66,6 +66,11 @@ func (h handler) CreateServer(ctx context.Context, request api.CreateServerReque
 				ConflictJSONResponse: api.ConflictJSONResponse{Error: serverErrorMessage(err, err.Error())},
 			}, nil
 		}
+		if errors.Is(err, ErrDuplicateAgentIDs) || errors.Is(err, ErrDuplicateAgentNames) {
+			return api.CreateServer400JSONResponse{
+				BadRequestJSONResponse: api.BadRequestJSONResponse{Error: serverErrorMessage(err, err.Error())},
+			}, nil
+		}
 
 		return api.CreateServer500JSONResponse{
 			InternalServerErrorJSONResponse: api.InternalServerErrorJSONResponse{Error: serverErrorMessage(err, "failed to create server")},
@@ -109,6 +114,10 @@ func (h handler) UpdateServer(ctx context.Context, request api.UpdateServerReque
 		case errors.Is(err, ErrAgentAlreadyLinked), errors.Is(err, ErrAgentAlreadyExists):
 			return api.UpdateServer409JSONResponse{
 				ConflictJSONResponse: api.ConflictJSONResponse{Error: serverErrorMessage(err, err.Error())},
+			}, nil
+		case errors.Is(err, ErrDuplicateAgentIDs), errors.Is(err, ErrDuplicateAgentNames):
+			return api.UpdateServer400JSONResponse{
+				BadRequestJSONResponse: api.BadRequestJSONResponse{Error: serverErrorMessage(err, err.Error())},
 			}, nil
 		}
 

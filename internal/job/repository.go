@@ -29,7 +29,7 @@ type jobAutomationRelation struct {
 func (r repository) FindAll(ctx context.Context, automationId string, limit int, offset int) ([]Job, int64, error) {
 	automationId = strings.TrimSpace(automationId)
 	if automationId == "" {
-		return nil, 0, gorm.ErrRecordNotFound
+		return nil, 0, ErrInvalidInput
 	}
 
 	var jobs []Job
@@ -37,9 +37,9 @@ func (r repository) FindAll(ctx context.Context, automationId string, limit int,
 
 	query := r.db.WithContext(ctx).
 		Table("jobs").
-		Joins("JOIN automations ON automations.id = jobs.automation_id").
-		Joins("JOIN providers ON providers.id = automations.provider_id").
-		Where("jobs.automation_id = ?", automationId)
+		Joins("JOIN automations ON automations.id = jobs.automation_id AND automations.deleted_at IS NULL").
+		Joins("JOIN providers ON providers.id = automations.provider_id AND providers.deleted_at IS NULL").
+		Where("jobs.deleted_at IS NULL AND jobs.automation_id = ?", automationId)
 
 	if err := query.Count(&total).Error; err != nil {
 		return nil, 0, err
@@ -87,7 +87,7 @@ func (r repository) Create(ctx context.Context, job Job) (Job, error) {
 	job.Output = strings.TrimSpace(job.Output)
 
 	if job.ID == "" || job.AutomationID == uuid.Nil {
-		return Job{}, gorm.ErrRecordNotFound
+		return Job{}, ErrInvalidInput
 	}
 
 	var returnedJob Job
@@ -129,7 +129,7 @@ func (r repository) Update(ctx context.Context, job Job) (Job, error) {
 	job.Output = strings.TrimSpace(job.Output)
 
 	if job.ID == "" || job.AutomationID == uuid.Nil {
-		return Job{}, gorm.ErrRecordNotFound
+		return Job{}, ErrInvalidInput
 	}
 
 	var returnedJob Job
@@ -171,7 +171,7 @@ func (r repository) Update(ctx context.Context, job Job) (Job, error) {
 
 func findAutomationRelation(ctx context.Context, db *gorm.DB, automationID uuid.UUID) (jobAutomationRelation, error) {
 	if automationID == uuid.Nil {
-		return jobAutomationRelation{}, gorm.ErrRecordNotFound
+		return jobAutomationRelation{}, ErrInvalidInput
 	}
 
 	var relation jobAutomationRelation
@@ -184,8 +184,8 @@ func findAutomationRelation(ctx context.Context, db *gorm.DB, automationID uuid.
 			providers.id AS provider_id,
 			providers.name AS provider
 		`).
-		Joins("JOIN providers ON providers.id = automations.provider_id").
-		Where("automations.id = ?", automationID).
+		Joins("JOIN providers ON providers.id = automations.provider_id AND providers.deleted_at IS NULL").
+		Where("automations.deleted_at IS NULL AND automations.id = ?", automationID).
 		Take(&relation).Error; err != nil {
 		return jobAutomationRelation{}, err
 	}
@@ -202,7 +202,7 @@ func findJobById(ctx context.Context, db *gorm.DB, jobId string, automationId st
 	automationId = strings.TrimSpace(automationId)
 
 	if jobId == "" || automationId == "" {
-		return Job{}, gorm.ErrRecordNotFound
+		return Job{}, ErrInvalidInput
 	}
 
 	var job Job
@@ -223,9 +223,9 @@ func findJobById(ctx context.Context, db *gorm.DB, jobId string, automationId st
 			jobs.metadata,
 			jobs.output
 		`).
-		Joins("JOIN automations ON automations.id = jobs.automation_id").
-		Joins("JOIN providers ON providers.id = automations.provider_id").
-		Where("jobs.id = ? AND jobs.automation_id = ?", jobId, automationId).
+		Joins("JOIN automations ON automations.id = jobs.automation_id AND automations.deleted_at IS NULL").
+		Joins("JOIN providers ON providers.id = automations.provider_id AND providers.deleted_at IS NULL").
+		Where("jobs.deleted_at IS NULL AND jobs.id = ? AND jobs.automation_id = ?", jobId, automationId).
 		Take(&job).Error; err != nil {
 		return Job{}, err
 	}
