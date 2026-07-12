@@ -1,213 +1,178 @@
 # Heimdallr
 
-Central hub for **compliance artifacts** (SAST, DAST, SBOM, code coverage), **operational automation** (Ansible, AWX, etc.), and **server inventory with agent compliance** (hosts and security/monitoring agents).
+Heimdallr gives engineering and operations teams one place to see software
+compliance results, automation runs, and server inventory. Existing CI pipelines
+and automation tools push their results through the API; Heimdallr organizes
+them into searchable records and dashboard summaries.
 
-## Architecture
+## What you can track
+
+- **Software compliance** — group SAST, DAST, SBOM, code coverage, and custom
+  reports by application and release.
+- **Automation activity** — record jobs from Ansible, AWX, or another automation
+  system, including status, output, and estimated cost savings.
+- **Servers and agents** — maintain an inventory of hosts and the security or
+  monitoring agents installed on them.
+- **Cross-system context** — associate servers with releases and automation jobs
+  to understand where software ran and what changed it.
+- **Operational summaries** — view compliance success rates and automation
+  outcomes from the dashboard.
+- **Controlled API access** — use admin and reader accounts for people, and
+  scoped tokens for CI or automation clients.
+
+Heimdallr collects and presents results; it does not run scanners or automation
+jobs itself.
+
+## How it works
 
 ```mermaid
 flowchart LR
-  subgraph compliance [ComplianceTrack]
-    App[Application] --> Rel[Release] --> Rep[Report]
+  subgraph sources [Your toolchain]
+    CI["CI pipelines<br/>SAST · DAST · SBOM · coverage"]
+    Automation["Automation systems<br/>Ansible · AWX · scripts"]
+    Operators["Operators<br/>server and agent inventory"]
   end
-  subgraph operations [OperationsTrack]
-    Prov[Provider] --> Auto[Automation] --> Job[Job]
+
+  API["Heimdallr API<br/>Bearer authentication"]
+
+  subgraph heimdallr [Heimdallr]
+    Compliance["Compliance<br/>applications · releases · reports"]
+    Operations["Operations<br/>providers · automations · jobs"]
+    Fleet["Fleet<br/>servers · agents"]
+    Analytics["Dashboard<br/>compliance and job summaries"]
   end
-  subgraph inventory [InventoryTrack]
-    Srv[Server] --> Agt[Agent]
-    Srv --> Job
-    Srv --> Rel
-  end
+
+  Storage[("SQLite or PostgreSQL")]
+  UI["Web UI"]
+
+  CI --> API
+  Automation --> API
+  Operators --> API
+  API --> Compliance
+  API --> Operations
+  API --> Fleet
+  Compliance --> Analytics
+  Operations --> Analytics
+  Fleet -. context .-> Compliance
+  Fleet -. context .-> Operations
+  Compliance --> Storage
+  Operations --> Storage
+  Fleet --> Storage
+  Analytics --> UI
+  Storage --> UI
 ```
 
-- **Compliance track**: CI pipelines push scan results for a software version (release).
-- **Operations track**: Ansible and other automation platforms push job execution results.
-- **Inventory track**: Register servers and agents (orphan agents, attach via `agent_ids` or inline `agents` on create/update); associate servers with jobs and releases.
+The data model follows three connected tracks:
 
-API surface is documented in [`api/docs/openapi.yaml`](api/docs/openapi.yaml) (tags: Application, Release, Report, Provider, Automation, Job, Server, Agent, Analytics, Auth, Token).
-
-## Quick start
-
-### Local (SQLite)
-
-```bash
-make run-debug
+```mermaid
+flowchart LR
+  Application --> Release --> Report
+  Provider --> Automation --> Job
+  Server <--> Agent
+  Server -. deployed release .-> Release
+  Server -. automation history .-> Job
 ```
 
-Open http://localhost:8080. On first startup, when no `root` user exists, credentials are logged (generated password or `HEIMDALLR_BOOTSTRAP_ROOT_PASSWORD` if set).
+## Get started with Docker
 
-### Postgres (Docker)
+Docker Compose starts Heimdallr and PostgreSQL:
 
 ```bash
 make docker-up
 ```
 
-This starts Postgres and Heimdallr with `DATABASE_URL=postgres://heimdallr:heimdallr@postgres:5432/heimdallr?sslmode=disable`. Log in with `root` / `e2e-test-password` (set via `HEIMDALLR_BOOTSTRAP_ROOT_PASSWORD` in compose).
+Open [http://localhost:8080](http://localhost:8080) and sign in with:
+
+- Username: `root`
+- Password: `e2e-test-password`
+
+These credentials are intended for local use. Set
+`HEIMDALLR_BOOTSTRAP_ROOT_PASSWORD` to a strong password for any persistent
+deployment.
+
+Stop the stack with:
 
 ```bash
-make docker-down   # stop services
+make docker-down
 ```
 
-### Web frontend dev
+For a source-based setup with SQLite, frontend development, or test commands,
+see [CONTRIBUTING.md](CONTRIBUTING.md).
 
-```bash
-make web-install-deps
-cd web && npm run dev   # http://127.0.0.1:5173
-```
+## Common workflows
 
-Use `make run-debug` for the API with built assets, or point the Vite dev server at the API as needed.
+### Collect release evidence
 
-### Configuration
+Create an application once, then have each pipeline:
 
-| Variable / flag | Description |
-|-----------------|-------------|
-| `DATABASE_URL` | Postgres connection string (preferred for production) |
-| `HEIMDALLR_BOOTSTRAP_ROOT_PASSWORD` | Fixed `root` password on first bootstrap (min 12 chars); if unset, a random password is generated and logged |
-| `-database-path` | SQLite file path when `DATABASE_URL` is unset (default: `heimdallr.db`) |
-| `-server-port` | HTTP port (default: `8080`) |
-| `-server-name` | Bind host (default: `localhost`) |
-| `-log-format` | `text` or `json` |
-| `-log-level` | `debug`, `info`, `warn`, or `error` |
+1. Upsert the release for its version or commit.
+2. Create a report when the scan starts.
+3. Update the report with its final status, metadata, and output.
 
-Migrations apply automatically on startup when using Postgres (`make migrate` documents this behavior).
+Heimdallr accepts `sast`, `dast`, `sbom`, `code_coverage`, and `custom` reports.
+Ready-to-adapt examples are available for
+[GitHub Actions](tests/github-actions-sast-push.yaml) and
+[Azure DevOps](tests/azure-devops-sbom-push.yaml).
 
-## Authentication
+### Record automation jobs
 
-All API routes (except `/api/health` and `POST /api/v1/auth/login`) require a Bearer token.
+Register a provider and automation, then report each job as it starts and
+finishes. The job record keeps the result and output alongside its automation
+and related servers. See the
+[Ansible/AWX example](tests/awx-output-job.yaml).
 
-### Login (UI, scripts, Ansible)
+### Maintain fleet inventory
 
-Exchange username and password for a session token:
+Register servers with host, operating system, hypervisor, location, and custom
+metadata. Agents can be created independently and attached to one or more
+servers, making it possible to find unassigned agents and inspect each host's
+tooling.
 
-```http
-POST /api/v1/auth/login
-Content-Type: application/json
+## Web interface
 
-{
-  "username": "root",
-  "password": "<password>"
-}
-```
+The web UI is included with the API and provides:
 
-Response:
+- a dashboard for compliance and automation results;
+- application, release, and report views;
+- provider, automation, and job views;
+- server and agent inventory;
+- user administration for admins.
 
-```json
-{
-  "data": {
-    "token": "<bearer-token>"
-  }
-}
-```
+API clients can access the same data using Bearer authentication. Long-lived
+tokens can be limited to `application:write`, `automation:write`, `read`, or
+`admin` scopes.
 
-Use the token on subsequent requests:
+## API
 
-```http
-Authorization: Bearer <token>
-```
+The [OpenAPI specification](api/docs/openapi.yaml) is the source of truth for
+routes, request bodies, responses, and authentication requirements. Apart from
+the health check and login endpoint, all routes require a Bearer token.
 
-### API tokens (CI runners)
+Example API and integration material:
 
-Create a long-lived token as admin (using a Bearer token from login):
+- [Postman collection](api/postman_collection.json)
+- [GitHub Actions SAST push](tests/github-actions-sast-push.yaml)
+- [Azure DevOps SBOM push](tests/azure-devops-sbom-push.yaml)
+- [Ansible/AWX job reporting](tests/awx-output-job.yaml)
 
-```http
-POST /api/v1/auth/tokens
-Authorization: Bearer <admin-token>
+## Configuration
 
-{
-  "name": "ci-github-actions",
-  "scopes": ["application:write", "read"]
-}
-```
+- `DATABASE_URL` — PostgreSQL connection string; omit it to use SQLite.
+- `HEIMDALLR_BOOTSTRAP_ROOT_PASSWORD` — initial `root` password (minimum 12
+  characters). If unset, a generated password is written to the startup log.
+- `-database-path` — SQLite database path; defaults to `heimdallr.db`.
+- `-server-name` and `-server-port` — bind address; defaults to
+  `localhost:8080`.
+- `-log-format` — `text` or `json`.
+- `-log-level` — `debug`, `info`, `warn`, or `error`.
 
-**Scopes**: `application:write`, `automation:write`, `read`, `admin`
+Database migrations run automatically when the application starts.
 
-## API flows
+## Contributing
 
-### Compliance
+See [CONTRIBUTING.md](CONTRIBUTING.md) for local setup, generated API code,
+development guidelines, and the checks required before opening a pull request.
 
-1. Upsert a release: `POST /api/v1/application/{id}/release?upsert=true`
-2. Create report (started): `POST .../release/{release_id}/report`
-3. Patch report with results: `PATCH .../report/{report_id}`
+## License
 
-See examples:
-
-- [`tests/github-actions-sast-push.yaml`](tests/github-actions-sast-push.yaml)
-- [`tests/azure-devops-sbom-push.yaml`](tests/azure-devops-sbom-push.yaml)
-
-### Operations
-
-See [`tests/awx-output-job.yaml`](tests/awx-output-job.yaml).
-
-### Server / agent
-
-1. `POST /api/v1/agent` — create an orphan agent (no server)
-2. `POST /api/v1/server` — register a host with `agent_ids` and/or inline `agents`
-3. `PUT /api/v1/server/{id}` — attach additional orphan agents
-4. Nested routes: `GET` / `DELETE /api/v1/server/{id}/agent/{agent_id}`; global list/create: `GET` / `POST /api/v1/agent`; filter unassigned: `GET /api/v1/agent?unassigned=true`
-
-Go E2E: [`tests/e2e/fleet/`](tests/e2e/fleet/).
-
-## Web UI
-
-Vue 3 SPA served with the API. Main areas:
-
-- Dashboard
-- Applications, releases, and reports (compliance)
-- Servers and agents (inventory)
-- Providers, automations, and jobs (operations)
-- Users (admin)
-
-## API documentation
-
-OpenAPI spec: [`api/docs/openapi.yaml`](api/docs/openapi.yaml)
-
-Automation, job, application, release, report, provider, and analytics HTTP handlers are generated from the spec with [oapi-codegen](https://github.com/oapi-codegen/oapi-codegen) (strict Gin server). Regenerate after spec changes:
-
-```bash
-make generate-api
-```
-
-## Development
-
-### Git hooks
-
-Enable the repo pre-commit hook (format, lint, secrets scan):
-
-```bash
-make setup-hooks
-```
-
-On commit, when staged `.go` files are present, the hook runs `make fmt` and `make lint-api`; every commit also runs a `gitleaks` secrets scan. Requires [gitleaks](https://github.com/gitleaks/gitleaks) on your PATH. To disable: `git config --unset core.hooksPath`.
-
-```bash
-make generate-api         # Regenerate OpenAPI handlers (automation, job, application, release, report, provider, analytics)
-make test                 # Go unit tests
-make test-integration     # In-process API integration tests
-make lint-api             # golangci-lint
-make check-fmt            # verify gofmt/goimports (CI)
-make check-generated      # verify OpenAPI codegen is up to date (CI)
-make govulncheck          # vulnerability scan (also in CI)
-make build                # Web + API binary
-make e2e                  # All E2E suites (operations + compliance + fleet)
-make e2e-operations       # Ansible job lifecycle
-make e2e-compliance       # Release/report push
-make e2e-fleet            # Server–agent attach/detach flow
-make help                 # Full target list
-```
-
-E2E prerequisites: Docker and Ansible (operations flow only). Go E2E tests live under [`tests/e2e/`](tests/e2e/) with shared flows in [`tests/flows/`](tests/flows/); external CI and Ansible templates under [`tests/`](tests/).
-
-## CI
-
-GitHub Actions (push/PR to `main`/`master`) runs unit tests, lint/format/generated checks, SAST (govulncheck + gosec), integration tests, then parallel Docker E2E jobs (operations, compliance, fleet) and authenticated OWASP ZAP DAST.
-
-## Project layout
-
-```
-cmd/           API entrypoint
-internal/      Domain packages (application, server, agent, job, …)
-web/           Vue 3 + Vite frontend
-api/docs/      OpenAPI spec and oapi-codegen configs
-tests/         Integration tests, E2E scripts, CI/Ansible examples
-```
-
-**Stack**: Go 1.26, Gin, GORM, Postgres/SQLite, Vue 3, Vite, samber/do DI.
+Heimdallr is available under the [MIT License](LICENSE).
