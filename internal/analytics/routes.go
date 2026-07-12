@@ -8,8 +8,8 @@ import (
 
 func RegisterRoutes(rg *gin.RouterGroup, handler Handler, authorizer rbac.Authorizer) {
 	policies := map[string]string{
-		"GetAutomationAnalyticsOverview":       rbac.ScopeRead,
-		"GetAutomationAnalyticsOverviewByID":   rbac.ScopeRead,
+		"GetAutomationAnalyticsOverview":     rbac.ScopeRead,
+		"GetAutomationAnalyticsOverviewByID": rbac.ScopeRead,
 		"GetComplianceAnalyticsOverview":     rbac.ScopeRead,
 	}
 

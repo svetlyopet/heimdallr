@@ -48,10 +48,10 @@ type App struct {
 	analyticsService analytics.Service
 	analyticsHandler analytics.Handler
 
-	authService       auth.Service
-	authHandler       auth.Handler
-	loginRateLimiter  *auth.LoginRateLimiter
-	authorizer        rbac.Authorizer
+	authService      auth.Service
+	authHandler      auth.Handler
+	loginRateLimiter *auth.LoginRateLimiter
+	authorizer       rbac.Authorizer
 
 	tokenService token.Service
 	tokenHandler token.Handler

@@ -168,6 +168,16 @@ make generate-api
 
 ## Development
 
+### Git hooks
+
+Enable the repo pre-commit hook (format, lint, secrets scan):
+
+```bash
+make setup-hooks
+```
+
+On commit, when staged `.go` files are present, the hook runs `make fmt` and `make lint-api`; every commit also runs a `gitleaks` secrets scan. Requires [gitleaks](https://github.com/gitleaks/gitleaks) on your PATH. To disable: `git config --unset core.hooksPath`.
+
 ```bash
 make generate-api         # Regenerate OpenAPI handlers (automation, job, application, release, report, provider, analytics)
 make test                 # Go unit tests

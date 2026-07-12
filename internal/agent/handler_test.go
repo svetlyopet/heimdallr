@@ -11,9 +11,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/svetlyopet/heimdallr/internal/agent/api"
+	"github.com/svetlyopet/heimdallr/internal/rbac"
 	"github.com/svetlyopet/heimdallr/internal/server"
 	"github.com/svetlyopet/heimdallr/internal/testutil"
-	"github.com/svetlyopet/heimdallr/internal/rbac"
 )
 
 type stubAgentService struct {

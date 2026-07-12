@@ -28,7 +28,7 @@ func (tokenServiceStub) CreateSession(context.Context, SessionTokenCreateRequest
 }
 
 func (tokenServiceStub) RevokeSessionTokens(context.Context, string) error { return nil }
-func (tokenServiceStub) RevokeAllUserTokens(context.Context, string) error   { return nil }
+func (tokenServiceStub) RevokeAllUserTokens(context.Context, string) error { return nil }
 
 func TestLoginRateLimiterBlocksRepeatedAttempts(t *testing.T) {
 	gin.SetMode(gin.TestMode)

@@ -36,7 +36,7 @@ func (s tokenServiceStub) Delete(context.Context, string) error {
 }
 
 func (s tokenServiceStub) RevokeSessionTokens(context.Context, string) error { return nil }
-func (s tokenServiceStub) RevokeAllUserTokens(context.Context, string) error   { return nil }
+func (s tokenServiceStub) RevokeAllUserTokens(context.Context, string) error { return nil }
 
 func (s tokenServiceStub) Authenticate(_ context.Context, plainToken string) (authapi.AuthUser, error) {
 	if s.err != nil {

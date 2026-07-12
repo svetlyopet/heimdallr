@@ -11,9 +11,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/svetlyopet/heimdallr/internal/application"
+	"github.com/svetlyopet/heimdallr/internal/rbac"
 	"github.com/svetlyopet/heimdallr/internal/release/api"
 	"github.com/svetlyopet/heimdallr/internal/testutil"
-	"github.com/svetlyopet/heimdallr/internal/rbac"
 )
 
 type stubReleaseService struct {

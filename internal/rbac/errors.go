@@ -24,7 +24,3 @@ func unauthorizedError() error {
 func forbiddenScopeError() error {
 	return &HTTPError{Status: 403, Message: ErrInsufficientScope.Error()}
 }
-
-func forbiddenRoleError() error {
-	return &HTTPError{Status: 403, Message: ErrInsufficientRole.Error()}
-}

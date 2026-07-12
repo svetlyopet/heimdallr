@@ -46,6 +46,10 @@ check-fmt: ## Verifies code is gofmt/goimports clean (CI)
 	@test -z "$$(gofmt -l . | grep -v '^vendor/' || true)"
 	@test -z "$$(go tool goimports -l . | grep -v '^vendor/' || true)"
 
+.PHONY: setup-hooks
+setup-hooks: ## Enable local git pre-commit hooks (.githooks)
+	@./scripts/setup-hooks.sh
+
 .PHONY: govulncheck
 govulncheck: ## Vulnerability detection using govulncheck
 	@go tool govulncheck ./...

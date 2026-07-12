@@ -52,7 +52,7 @@ func (s stubTokenService) Authenticate(_ context.Context, _ string) (authapi.Aut
 }
 
 func (s stubTokenService) RevokeSessionTokens(context.Context, string) error { return nil }
-func (s stubTokenService) RevokeAllUserTokens(context.Context, string) error   { return nil }
+func (s stubTokenService) RevokeAllUserTokens(context.Context, string) error { return nil }
 
 func newTokenRouter(t *testing.T, svc Service) *gin.Engine {
 	t.Helper()

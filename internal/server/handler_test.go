@@ -10,9 +10,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"github.com/svetlyopet/heimdallr/internal/rbac"
 	"github.com/svetlyopet/heimdallr/internal/server/api"
 	"github.com/svetlyopet/heimdallr/internal/testutil"
-	"github.com/svetlyopet/heimdallr/internal/rbac"
 )
 
 type stubServerService struct {
