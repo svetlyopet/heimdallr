@@ -34,7 +34,6 @@ func TestRepositoryCreateOnServer(t *testing.T) {
 		ID:       uuid.New(),
 		Name:     "datadog",
 		Type:     "monitoring",
-		Version:  "7.0.0",
 		Metadata: datatypes.JSON([]byte(`{}`)),
 	})
 	require.NoError(t, err)
@@ -49,7 +48,6 @@ func TestRepositoryCreateUnassigned(t *testing.T) {
 		ID:       uuid.New(),
 		Name:     "orphan-agent",
 		Type:     "monitoring",
-		Version:  "1.0.0",
 		Metadata: datatypes.JSON([]byte(`{}`)),
 	})
 	require.NoError(t, err)

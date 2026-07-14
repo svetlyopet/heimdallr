@@ -22,6 +22,8 @@ import (
 	releaseapi "github.com/svetlyopet/heimdallr/internal/modules/release/api"
 	"github.com/svetlyopet/heimdallr/internal/modules/report"
 	reportapi "github.com/svetlyopet/heimdallr/internal/modules/report/api"
+	"github.com/svetlyopet/heimdallr/internal/modules/requiredagent"
+	requiredagentapi "github.com/svetlyopet/heimdallr/internal/modules/requiredagent/api"
 	"github.com/svetlyopet/heimdallr/internal/modules/server"
 	serverapi "github.com/svetlyopet/heimdallr/internal/modules/server/api"
 	"github.com/svetlyopet/heimdallr/internal/rbac"
@@ -45,6 +47,7 @@ func ValidatePolicies() error {
 		{"provider", reflect.TypeFor[providerapi.StrictServerInterface](), provider.Policies, nil},
 		{"release", reflect.TypeFor[releaseapi.StrictServerInterface](), release.Policies, nil},
 		{"report", reflect.TypeFor[reportapi.StrictServerInterface](), report.Policies, nil},
+		{"requiredagent", reflect.TypeFor[requiredagentapi.StrictServerInterface](), requiredagent.Policies, nil},
 		{"server", reflect.TypeFor[serverapi.StrictServerInterface](), server.Policies, nil},
 		{"token", reflect.TypeFor[tokenapi.StrictServerInterface](), token.Policies, nil},
 	}

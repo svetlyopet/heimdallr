@@ -338,7 +338,6 @@ func agentSelectColumns() string {
 		agents.id,
 		agents.name,
 		agents.type,
-		agents.version,
 		agents.metadata,
 		agents.created_at,
 		agents.updated_at
@@ -350,7 +349,6 @@ func agentWithCountSelectColumns() string {
 		agents.id,
 		agents.name,
 		agents.type,
-		agents.version,
 		agents.metadata,
 		agents.created_at,
 		agents.updated_at,

@@ -11,3 +11,7 @@ export function getAutomationAnalyticsById(automationId) {
 export function getComplianceAnalytics() {
     return apiRequest("/v1/analytics/compliance");
 }
+
+export function getFleetComplianceAnalytics() {
+    return apiRequest("/v1/analytics/fleet");
+}

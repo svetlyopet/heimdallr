@@ -123,8 +123,12 @@ generate-auth-api: ## Generate auth API from OpenAPI
 generate-token-api: ## Generate token API from OpenAPI
 	@$(OAPI_CODEGEN) -config api/oapi-codegen/token.cfg.yaml $(OPENAPI_SPEC)
 
+.PHONY: generate-required-agent-api
+generate-required-agent-api: ## Generate required agent API from OpenAPI
+	@$(OAPI_CODEGEN) -config api/oapi-codegen/requiredagent.cfg.yaml $(OPENAPI_SPEC)
+
 .PHONY: generate-api
-generate-api: generate-automation-api generate-job-api generate-application-api generate-release-api generate-report-api generate-provider-api generate-analytics-api generate-server-api generate-agent-api generate-auth-api generate-token-api ## Generate all OpenAPI server code
+generate-api: generate-automation-api generate-job-api generate-application-api generate-release-api generate-report-api generate-provider-api generate-analytics-api generate-server-api generate-agent-api generate-required-agent-api generate-auth-api generate-token-api ## Generate all OpenAPI server code
 
 .PHONY: check-generated
 check-generated: generate-api ## Verifies generated OpenAPI code is up to date (CI)

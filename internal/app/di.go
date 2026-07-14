@@ -13,6 +13,7 @@ import (
 	"github.com/svetlyopet/heimdallr/internal/modules/provider"
 	"github.com/svetlyopet/heimdallr/internal/modules/release"
 	"github.com/svetlyopet/heimdallr/internal/modules/report"
+	"github.com/svetlyopet/heimdallr/internal/modules/requiredagent"
 	"github.com/svetlyopet/heimdallr/internal/modules/server"
 	"github.com/svetlyopet/heimdallr/internal/rbac"
 	"github.com/svetlyopet/heimdallr/internal/token"
@@ -31,6 +32,7 @@ var Package = do.Package(
 	job.Package,
 	analytics.Package,
 	agent.Package,
+	requiredagent.Package,
 	server.Package,
 	do.Lazy(provideLoginRateLimiter),
 	do.Lazy(provideApp),
@@ -96,5 +98,8 @@ func provideApp(i do.Injector) (*App, error) {
 
 		agentService: do.MustInvoke[agent.Service](i),
 		agentHandler: do.MustInvoke[agent.Handler](i),
+
+		requiredAgentService: do.MustInvoke[requiredagent.Service](i),
+		requiredAgentHandler: do.MustInvoke[requiredagent.Handler](i),
 	}, nil
 }

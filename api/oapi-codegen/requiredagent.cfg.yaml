@@ -1,0 +1,11 @@
+package: api
+generate:
+  models: true
+  gin-server: true
+  strict-server: true
+output: internal/modules/requiredagent/api/api.gen.go
+output-options:
+  user-templates:
+    strict/strict-gin.tmpl: ./api/oapi-codegen/templates/strict-gin.tmpl
+  include-tags:
+    - RequiredAgent

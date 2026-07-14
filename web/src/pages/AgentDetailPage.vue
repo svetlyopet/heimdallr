@@ -81,11 +81,6 @@
           </div>
 
           <div>
-            <dt>Version</dt>
-            <dd>{{ agent.version || "—" }}</dd>
-          </div>
-
-          <div>
             <dt>Servers</dt>
             <dd>{{ agent.server_count ?? 0 }}</dd>
           </div>

@@ -73,7 +73,6 @@ func (s stubAgentService) GetByIdGlobal(_ context.Context, _ string) (api.AgentD
 		Id:          s.getResponse.Id,
 		Name:        s.getResponse.Name,
 		Type:        s.getResponse.Type,
-		Version:     s.getResponse.Version,
 		Metadata:    s.getResponse.Metadata,
 		ServerCount: s.getResponse.ServerCount,
 	}, nil

@@ -1,7 +1,13 @@
 package flows
 
-// FleetState holds IDs produced during the fleet seed/run phases.
-type FleetState struct {
+// FleetComplianceState holds IDs produced during fleet compliance E2E seed.
+type FleetComplianceState struct {
+	RunID    string
+	AgentIDs map[string]string
+}
+
+// FleetLifecycleState holds IDs for the attach/detach integration scenario.
+type FleetLifecycleState struct {
 	RunID          string
 	OrphanID       string
 	SecondOrphanID string

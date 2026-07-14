@@ -17,6 +17,7 @@ import (
 	"github.com/svetlyopet/heimdallr/internal/modules/provider"
 	"github.com/svetlyopet/heimdallr/internal/modules/release"
 	"github.com/svetlyopet/heimdallr/internal/modules/report"
+	"github.com/svetlyopet/heimdallr/internal/modules/requiredagent"
 	"github.com/svetlyopet/heimdallr/internal/modules/server"
 	"github.com/svetlyopet/heimdallr/internal/rbac"
 	"github.com/svetlyopet/heimdallr/internal/token"
@@ -62,6 +63,9 @@ type App struct {
 
 	agentService agent.Service
 	agentHandler agent.Handler
+
+	requiredAgentService requiredagent.Service
+	requiredAgentHandler requiredagent.Handler
 }
 
 func (a *App) RegisterRoutes(rg *gin.RouterGroup) {
@@ -74,6 +78,7 @@ func (a *App) RegisterRoutes(rg *gin.RouterGroup) {
 	analytics.RegisterRoutes(rg, a.analyticsHandler, a.authorizer, a.logger)
 	server.RegisterRoutes(rg, a.serverHandler, a.authorizer, a.logger)
 	agent.RegisterRoutes(rg, a.agentHandler, a.authorizer, a.logger)
+	requiredagent.RegisterRoutes(rg, a.requiredAgentHandler, a.authorizer, a.logger)
 	token.RegisterRoutes(rg, a.tokenHandler, a.authorizer, a.logger)
 }
 

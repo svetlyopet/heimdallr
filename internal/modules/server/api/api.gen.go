@@ -50,7 +50,6 @@ type AgentCreateRequest struct {
 	Metadata *ServerMetadata `json:"metadata,omitempty"`
 	Name     string          `json:"name"`
 	Type     *string         `json:"type,omitempty"`
-	Version  *string         `json:"version,omitempty"`
 }
 
 // ErrorResponse defines model for ErrorResponse.

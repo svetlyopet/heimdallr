@@ -56,11 +56,9 @@ func TestAttachmentServiceCreateAgentsOnServer(t *testing.T) {
 	}, db, nil)
 
 	agentType := "security"
-	agentVersion := "1.0.0"
 	require.NoError(t, attachment.CreateAgentsOnServer(context.Background(), serverID, []serverapi.AgentCreateRequest{{
-		Name:    "crowdstrike",
-		Type:    &agentType,
-		Version: &agentVersion,
+		Name: "crowdstrike",
+		Type: &agentType,
 	}}, nil))
 
 	agents, total, err := repo.FindAll(context.Background(), serverID.String(), 10, 0)

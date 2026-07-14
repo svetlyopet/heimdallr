@@ -21,6 +21,8 @@ type stubService struct {
 	getOverviewByIDError    error
 	getComplianceResponse   api.ComplianceAnalytics
 	getComplianceError      error
+	getFleetResponse        api.FleetComplianceAnalytics
+	getFleetError           error
 }
 
 func (s stubService) GetAutomationOverview(_ context.Context) (api.AutomationAnalytics, error) {
@@ -45,6 +47,14 @@ func (s stubService) GetComplianceOverview(_ context.Context) (api.ComplianceAna
 	}
 
 	return s.getComplianceResponse, nil
+}
+
+func (s stubService) GetFleetComplianceOverview(_ context.Context) (api.FleetComplianceAnalytics, error) {
+	if s.getFleetError != nil {
+		return api.FleetComplianceAnalytics{}, s.getFleetError
+	}
+
+	return s.getFleetResponse, nil
 }
 
 func newAnalyticsRouter(t *testing.T, svc Service) *gin.Engine {

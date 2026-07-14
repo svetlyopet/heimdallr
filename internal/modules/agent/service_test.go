@@ -50,11 +50,9 @@ func TestServiceCreateOnServerReturnsAgent(t *testing.T) {
 
 	name := "datadog"
 	agentType := "monitoring"
-	agentVersion := "7.0.0"
 	created, err := svc.CreateOnServer(context.Background(), serverID.String(), api.ServerAgentRequest{
-		Name:    &name,
-		Type:    &agentType,
-		Version: &agentVersion,
+		Name: &name,
+		Type: &agentType,
 	})
 	require.NoError(t, err)
 	require.Equal(t, "datadog", created.Name)

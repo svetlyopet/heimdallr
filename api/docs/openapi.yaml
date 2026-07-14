@@ -17,6 +17,7 @@ tags:
   - name: Job
   - name: Server
   - name: Agent
+  - name: RequiredAgent
   - name: Analytics
   - name: Auth
   - name: Token
@@ -1182,6 +1183,141 @@ paths:
         "500":
           $ref: "#/components/responses/InternalServerError"
 
+  /v1/analytics/fleet:
+    get:
+      tags:
+        - Analytics
+      summary: Get fleet compliance analytics overview
+      operationId: getFleetComplianceAnalyticsOverview
+      responses:
+        "200":
+          description: Fleet compliance analytics overview returned successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FleetComplianceAnalyticsDataResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /v1/required-agent:
+    get:
+      tags:
+        - RequiredAgent
+      summary: List required agents
+      operationId: listRequiredAgents
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Required agents returned successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RequiredAgentListResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+    post:
+      tags:
+        - RequiredAgent
+      summary: Create a required agent policy
+      operationId: createRequiredAgent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RequiredAgentCreateRequest"
+      responses:
+        "201":
+          description: Required agent created successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RequiredAgentDataResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /v1/required-agent/{required_agent_id}:
+    get:
+      tags:
+        - RequiredAgent
+      summary: Get a required agent policy by ID
+      operationId: getRequiredAgent
+      parameters:
+        - $ref: "#/components/parameters/RequiredAgentIDPath"
+      responses:
+        "200":
+          description: Required agent returned successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RequiredAgentDataResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+    put:
+      tags:
+        - RequiredAgent
+      summary: Update a required agent policy
+      operationId: updateRequiredAgent
+      parameters:
+        - $ref: "#/components/parameters/RequiredAgentIDPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RequiredAgentUpdateRequest"
+      responses:
+        "200":
+          description: Required agent updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RequiredAgentDataResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+    delete:
+      tags:
+        - RequiredAgent
+      summary: Delete a required agent policy
+      operationId: deleteRequiredAgent
+      parameters:
+        - $ref: "#/components/parameters/RequiredAgentIDPath"
+      responses:
+        "204":
+          description: Required agent deleted successfully
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
   /v1/auth/login:
     post:
       tags:
@@ -1481,6 +1617,14 @@ components:
 
     AgentIDPath:
       name: agent_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+    RequiredAgentIDPath:
+      name: required_agent_id
       in: path
       required: true
       schema:
@@ -1980,7 +2124,6 @@ components:
         - id
         - name
         - type
-        - version
         - metadata
         - server_count
       properties:
@@ -1991,8 +2134,6 @@ components:
           minLength: 1
           maxLength: 255
         type:
-          type: string
-        version:
           type: string
         metadata:
           $ref: "#/components/schemas/ServerMetadata"
@@ -2037,9 +2178,6 @@ components:
         type:
           type: string
           maxLength: 255
-        version:
-          type: string
-          maxLength: 255
         metadata:
           $ref: "#/components/schemas/ServerMetadata"
 
@@ -2053,9 +2191,6 @@ components:
           minLength: 1
           maxLength: 255
         type:
-          type: string
-          maxLength: 255
-        version:
           type: string
           maxLength: 255
         metadata:
@@ -2811,6 +2946,179 @@ components:
       properties:
         data:
           $ref: "#/components/schemas/ComplianceAnalytics"
+
+    FleetComplianceAnalytics:
+      type: object
+      required:
+        - total_servers
+        - compliant_servers
+        - non_compliant_servers
+        - compliance_rate
+        - total_required_agents
+        - required_agent_coverage
+        - by_location
+        - non_compliant_server_details
+      properties:
+        total_servers:
+          type: integer
+          minimum: 0
+        compliant_servers:
+          type: integer
+          minimum: 0
+        non_compliant_servers:
+          type: integer
+          minimum: 0
+        compliance_rate:
+          type: number
+          format: double
+        total_required_agents:
+          type: integer
+          minimum: 0
+        required_agent_coverage:
+          type: array
+          items:
+            $ref: "#/components/schemas/RequiredAgentCoverage"
+        by_location:
+          type: array
+          items:
+            $ref: "#/components/schemas/LocationFleetCompliance"
+        non_compliant_server_details:
+          type: array
+          items:
+            $ref: "#/components/schemas/ServerFleetComplianceDetail"
+
+    RequiredAgentCoverage:
+      type: object
+      required:
+        - agent_name
+        - servers_with
+        - servers_missing
+        - coverage_rate
+      properties:
+        agent_name:
+          type: string
+        servers_with:
+          type: integer
+          minimum: 0
+        servers_missing:
+          type: integer
+          minimum: 0
+        coverage_rate:
+          type: number
+          format: double
+
+    LocationFleetCompliance:
+      type: object
+      required:
+        - location
+        - total_servers
+        - compliant_servers
+        - non_compliant_servers
+        - compliance_rate
+      properties:
+        location:
+          type: string
+        total_servers:
+          type: integer
+          minimum: 0
+        compliant_servers:
+          type: integer
+          minimum: 0
+        non_compliant_servers:
+          type: integer
+          minimum: 0
+        compliance_rate:
+          type: number
+          format: double
+
+    ServerFleetComplianceDetail:
+      type: object
+      required:
+        - server_id
+        - hostname
+        - location
+        - missing_agents
+      properties:
+        server_id:
+          $ref: "#/components/schemas/UUID"
+        hostname:
+          type: string
+        location:
+          type: string
+        missing_agents:
+          type: array
+          items:
+            type: string
+
+    FleetComplianceAnalyticsDataResponse:
+      type: object
+      required:
+        - data
+      properties:
+        data:
+          $ref: "#/components/schemas/FleetComplianceAnalytics"
+
+    RequiredAgent:
+      type: object
+      required:
+        - id
+        - agent_name
+        - agent_type
+      properties:
+        id:
+          $ref: "#/components/schemas/UUID"
+        agent_name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        agent_type:
+          type: string
+          maxLength: 255
+
+    RequiredAgentCreateRequest:
+      type: object
+      required:
+        - agent_name
+      properties:
+        agent_name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        agent_type:
+          type: string
+          maxLength: 255
+
+    RequiredAgentUpdateRequest:
+      type: object
+      properties:
+        agent_name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        agent_type:
+          type: string
+          maxLength: 255
+
+    RequiredAgentDataResponse:
+      type: object
+      required:
+        - data
+      properties:
+        data:
+          $ref: "#/components/schemas/RequiredAgent"
+
+    RequiredAgentListResponse:
+      type: object
+      required:
+        - data
+        - pagination
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/RequiredAgent"
+        pagination:
+          $ref: "#/components/schemas/Pagination"
 
     TokenScope:
       type: string

@@ -261,14 +261,12 @@ func TestServiceCreateInvokesAgentAttachment(t *testing.T) {
 
 	orphanID := uuid.New()
 	agentType := "security"
-	agentVersion := "1.0.0"
 	_, err := svc.Create(context.Background(), api.ServerCreateRequest{
 		Hostname: "attach-create.example.com",
 		AgentIds: &[]uuid.UUID{orphanID},
 		Agents: &[]api.AgentCreateRequest{{
-			Name:    "crowdstrike",
-			Type:    &agentType,
-			Version: &agentVersion,
+			Name: "crowdstrike",
+			Type: &agentType,
 		}},
 	})
 	require.NoError(t, err)

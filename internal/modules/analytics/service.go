@@ -13,6 +13,7 @@ type Service interface {
 	GetAutomationOverview(ctx context.Context) (api.AutomationAnalytics, error)
 	GetAutomationOverviewByID(ctx context.Context, automationID string) (api.AutomationAnalytics, error)
 	GetComplianceOverview(ctx context.Context) (api.ComplianceAnalytics, error)
+	GetFleetComplianceOverview(ctx context.Context) (api.FleetComplianceAnalytics, error)
 }
 
 type service struct {
@@ -58,6 +59,16 @@ func (s service) GetComplianceOverview(ctx context.Context) (api.ComplianceAnaly
 	if err != nil {
 		s.logger.ErrorWithStack(ctx, "failed to get compliance analytics", err)
 		return api.ComplianceAnalytics{}, ErrGetComplianceAnalytics
+	}
+
+	return response, nil
+}
+
+func (s service) GetFleetComplianceOverview(ctx context.Context) (api.FleetComplianceAnalytics, error) {
+	response, err := s.repository.GetFleetComplianceOverview(ctx)
+	if err != nil {
+		s.logger.ErrorWithStack(ctx, "failed to get fleet compliance analytics", err)
+		return api.FleetComplianceAnalytics{}, ErrGetFleetAnalytics
 	}
 
 	return response, nil

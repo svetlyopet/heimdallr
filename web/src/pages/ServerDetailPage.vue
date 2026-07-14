@@ -124,7 +124,6 @@
               <tr>
                 <th>Name</th>
                 <th>Type</th>
-                <th>Version</th>
                 <th>ID</th>
                 <th></th>
               </tr>
@@ -133,7 +132,6 @@
               <tr v-for="agent in agents" :key="agent.id">
                 <td><strong>{{ agent.name }}</strong></td>
                 <td>{{ agent.type || "—" }}</td>
-                <td>{{ agent.version || "—" }}</td>
                 <td><code>{{ agent.id }}</code></td>
                 <td>
                   <div class="row-actions">

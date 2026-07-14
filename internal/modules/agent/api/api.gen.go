@@ -28,7 +28,6 @@ type Agent struct {
 	Name        string         `json:"name"`
 	ServerCount int            `json:"server_count"`
 	Type        string         `json:"type"`
-	Version     string         `json:"version"`
 }
 
 // AgentCreateRequest defines model for AgentCreateRequest.
@@ -36,7 +35,6 @@ type AgentCreateRequest struct {
 	Metadata *ServerMetadata `json:"metadata,omitempty"`
 	Name     string          `json:"name"`
 	Type     *string         `json:"type,omitempty"`
-	Version  *string         `json:"version,omitempty"`
 }
 
 // AgentDataResponse defines model for AgentDataResponse.
@@ -52,7 +50,6 @@ type AgentDetail struct {
 	ServerCount int            `json:"server_count"`
 	Servers     []AgentServer  `json:"servers"`
 	Type        string         `json:"type"`
-	Version     string         `json:"version"`
 }
 
 // AgentDetailDataResponse defines model for AgentDetailDataResponse.
@@ -97,7 +94,6 @@ type ServerAgentRequest struct {
 	Metadata *ServerMetadata `json:"metadata,omitempty"`
 	Name     *string         `json:"name,omitempty"`
 	Type     *string         `json:"type,omitempty"`
-	Version  *string         `json:"version,omitempty"`
 }
 
 // ServerMetadata defines model for ServerMetadata.

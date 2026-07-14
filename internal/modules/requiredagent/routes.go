@@ -1,17 +1,18 @@
-package analytics
+package requiredagent
 
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/svetlyopet/heimdallr/internal/logger"
-	"github.com/svetlyopet/heimdallr/internal/modules/analytics/api"
+	"github.com/svetlyopet/heimdallr/internal/modules/requiredagent/api"
 	"github.com/svetlyopet/heimdallr/internal/rbac"
 )
 
 var Policies = map[string]string{
-	"GetAutomationAnalyticsOverview":      rbac.ScopeRead,
-	"GetAutomationAnalyticsOverviewByID":  rbac.ScopeRead,
-	"GetComplianceAnalyticsOverview":      rbac.ScopeRead,
-	"GetFleetComplianceAnalyticsOverview": rbac.ScopeRead,
+	"ListRequiredAgents":  rbac.ScopeRead,
+	"GetRequiredAgent":    rbac.ScopeRead,
+	"CreateRequiredAgent": rbac.ScopeAdmin,
+	"UpdateRequiredAgent": rbac.ScopeAdmin,
+	"DeleteRequiredAgent": rbac.ScopeAdmin,
 }
 
 func RegisterRoutes(rg *gin.RouterGroup, handler Handler, authorizer rbac.Authorizer, appLogger *logger.Logger) {

@@ -94,6 +94,142 @@
 
       <section class="stats-grid">
         <article class="stat-card">
+          <span>Total servers</span>
+          <strong>{{ fleet.total_servers }}</strong>
+        </article>
+        <article class="stat-card">
+          <span>Compliant servers</span>
+          <strong>{{ fleet.compliant_servers }}</strong>
+        </article>
+        <article class="stat-card">
+          <span>Non-compliant servers</span>
+          <strong>{{ fleet.non_compliant_servers }}</strong>
+        </article>
+        <article class="stat-card">
+          <span>Fleet compliance rate</span>
+          <strong>{{ formatPercent(fleet.compliance_rate) }}</strong>
+        </article>
+      </section>
+
+      <section class="dashboard-grid">
+        <article class="panel table-panel">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">Fleet</p>
+              <h3>Required agent coverage</h3>
+            </div>
+            <RouterLink class="button button-secondary" to="/servers">All servers</RouterLink>
+          </div>
+
+          <div v-if="loading" class="empty-state">Loading fleet analytics...</div>
+          <div v-else-if="fleet.required_agent_coverage.length === 0" class="empty-state">
+            <strong>No required agents configured</strong>
+            <span>Add required agent policies to track fleet compliance.</span>
+          </div>
+          <div v-else class="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>Agent</th>
+                  <th>Installed on</th>
+                  <th>Missing from</th>
+                  <th>Rate</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="row in fleet.required_agent_coverage" :key="row.agent_name">
+                  <td data-label="Agent"><strong>{{ row.agent_name }}</strong></td>
+                  <td data-label="Installed on">{{ row.servers_with }}</td>
+                  <td data-label="Missing from">{{ row.servers_missing }}</td>
+                  <td data-label="Rate">{{ formatPercent(row.coverage_rate) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </article>
+
+        <article class="panel table-panel">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">Fleet</p>
+              <h3>Compliance by location</h3>
+            </div>
+          </div>
+
+          <div v-if="loading" class="empty-state">Loading fleet analytics...</div>
+          <div v-else-if="fleet.by_location.length === 0" class="empty-state">
+            <strong>No fleet location data</strong>
+            <span>Create servers to populate this section.</span>
+          </div>
+          <div v-else class="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>Location</th>
+                  <th>Total</th>
+                  <th>Compliant</th>
+                  <th>Non-compliant</th>
+                  <th>Rate</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="row in fleet.by_location" :key="row.location">
+                  <td data-label="Location"><strong>{{ row.location }}</strong></td>
+                  <td data-label="Total">{{ row.total_servers }}</td>
+                  <td data-label="Compliant">{{ row.compliant_servers }}</td>
+                  <td data-label="Non-compliant">{{ row.non_compliant_servers }}</td>
+                  <td data-label="Rate">{{ formatPercent(row.compliance_rate) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </article>
+      </section>
+
+      <article class="panel table-panel">
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">Fleet</p>
+            <h3>Non-compliant servers</h3>
+          </div>
+        </div>
+
+        <div v-if="loading" class="empty-state">Loading fleet analytics...</div>
+        <div v-else-if="fleet.non_compliant_server_details.length === 0" class="empty-state">
+          <strong>All servers compliant</strong>
+          <span>Every tracked server has the required agents installed.</span>
+        </div>
+        <div v-else class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>Hostname</th>
+                <th>Location</th>
+                <th>Missing agents</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in fleet.non_compliant_server_details" :key="row.server_id">
+                <td data-label="Hostname"><strong>{{ row.hostname }}</strong></td>
+                <td data-label="Location">{{ row.location }}</td>
+                <td data-label="Missing agents">{{ row.missing_agents.join(", ") }}</td>
+                <td data-label="Actions">
+                  <RouterLink
+                    class="button button-secondary"
+                    :to="{ name: 'server-detail', params: { id: row.server_id } }"
+                  >
+                    View
+                  </RouterLink>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </article>
+
+      <section class="stats-grid">
+        <article class="stat-card">
           <span>Total automations</span>
           <strong>{{ analytics.total_automations }}</strong>
         </article>
@@ -199,7 +335,7 @@
 <script setup>
 import { onMounted, reactive, ref } from "vue";
 import { RouterLink } from "vue-router";
-import { getAutomationAnalytics, getComplianceAnalytics } from "../api/analytics";
+import { getAutomationAnalytics, getComplianceAnalytics, getFleetComplianceAnalytics } from "../api/analytics";
 import AppAlert from "../components/AppAlert.vue";
 import { formatPercent } from "../utils/format";
 
@@ -228,6 +364,17 @@ const compliance = reactive({
   by_application: [],
 });
 
+const fleet = reactive({
+  total_servers: 0,
+  compliant_servers: 0,
+  non_compliant_servers: 0,
+  compliance_rate: 0,
+  total_required_agents: 0,
+  required_agent_coverage: [],
+  by_location: [],
+  non_compliant_server_details: [],
+});
+
 onMounted(loadAnalytics);
 
 async function loadAnalytics() {
@@ -235,13 +382,15 @@ async function loadAnalytics() {
   errorMessage.value = "";
 
   try {
-    const [automationResponse, complianceResponse] = await Promise.all([
+    const [automationResponse, complianceResponse, fleetResponse] = await Promise.all([
       getAutomationAnalytics(),
       getComplianceAnalytics(),
+      getFleetComplianceAnalytics(),
     ]);
 
     Object.assign(analytics, automationResponse.data || {});
     Object.assign(compliance, complianceResponse.data || {});
+    Object.assign(fleet, fleetResponse.data || {});
   } catch (error) {
     errorMessage.value = error.message;
   } finally {

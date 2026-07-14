@@ -36,11 +36,6 @@
           <input v-model.trim="form.type" type="text" maxlength="255" />
         </label>
 
-        <label>
-          Version
-          <input v-model.trim="form.version" type="text" maxlength="255" />
-        </label>
-
         <button class="button button-full" type="submit" :disabled="submitting">
           Create agent
         </button>
@@ -80,7 +75,6 @@
               <tr>
                 <th>Name</th>
                 <th>Type</th>
-                <th>Version</th>
                 <th>ID</th>
                 <th></th>
               </tr>
@@ -90,7 +84,6 @@
               <tr v-for="agent in agents" :key="agent.id">
                 <td data-label="Name"><strong>{{ agent.name }}</strong></td>
                 <td data-label="Type">{{ agent.type || "—" }}</td>
-                <td data-label="Version">{{ agent.version || "—" }}</td>
                 <td data-label="ID"><code>{{ agent.id }}</code></td>
                 <td data-label="Actions">
                   <div class="row-actions">
@@ -138,7 +131,6 @@ const showCreateDialog = ref(false);
 const form = reactive({
   name: "",
   type: "",
-  version: "",
 });
 
 const pagination = reactive({
@@ -199,7 +191,6 @@ function closeCreateDialog() {
 function resetForm() {
   form.name = "";
   form.type = "";
-  form.version = "";
 }
 
 async function submitAgent() {
@@ -210,7 +201,6 @@ async function submitAgent() {
     await createAgent({
       name: form.name,
       type: form.type,
-      version: form.version,
       metadata: {},
     });
 

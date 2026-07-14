@@ -162,7 +162,6 @@ func (s service) CreateOnServer(ctx context.Context, serverID string, req api.Se
 		ID:       uuid.New(),
 		Name:     name,
 		Type:     stringValue(req.Type),
-		Version:  stringValue(req.Version),
 		Metadata: metadata,
 	}
 
@@ -270,7 +269,6 @@ func (s service) GetByIdGlobal(ctx context.Context, agentID string) (api.AgentDe
 		Id:          base.Id,
 		Name:        base.Name,
 		Type:        base.Type,
-		Version:     base.Version,
 		Metadata:    base.Metadata,
 		ServerCount: base.ServerCount,
 		Servers:     mapLinkedServersToResponses(servers),
@@ -314,7 +312,6 @@ func (s service) CreateUnassigned(ctx context.Context, req api.AgentCreateReques
 		ID:       uuid.New(),
 		Name:     req.Name,
 		Type:     stringValue(req.Type),
-		Version:  stringValue(req.Version),
 		Metadata: metadata,
 	}
 
@@ -395,7 +392,6 @@ func mapEntityToResponse(ctx context.Context, agent Agent, serverCount int, boun
 		Id:          agent.ID,
 		Name:        agent.Name,
 		Type:        agent.Type,
-		Version:     agent.Version,
 		Metadata:    metadata,
 		ServerCount: serverCount,
 	}, nil

@@ -8,19 +8,18 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// FleetSeed creates an orphan agent and a server with an inline agent.
-func FleetSeed(t *testing.T, c *Client, runID string) FleetState {
+// FleetLifecycleSeed creates an orphan agent and a server with an inline agent.
+func FleetLifecycleSeed(t *testing.T, c *Client, runID string) FleetLifecycleState {
 	t.Helper()
 
-	state := FleetState{
+	state := FleetLifecycleState{
 		RunID:    runID,
 		Hostname: fmt.Sprintf("e2e-server-%s.example.com", runID),
 	}
 
 	resp, orphanBody := c.Request(http.MethodPost, "/api/v1/agent", map[string]any{
-		"name":    "datadog",
-		"type":    "monitoring",
-		"version": "7.0.0",
+		"name": "datadog",
+		"type": "monitoring",
 	}, nil)
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
 	orphanData := DataField(t, orphanBody)
@@ -34,9 +33,8 @@ func FleetSeed(t *testing.T, c *Client, runID string) FleetState {
 		"location":         "dc1",
 		"agent_ids":        []string{state.OrphanID},
 		"agents": []map[string]any{{
-			"name":    "crowdstrike",
-			"type":    "security",
-			"version": "1.0.0",
+			"name": "CrowdStrike",
+			"type": "security",
 		}},
 	}, nil)
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
@@ -45,8 +43,8 @@ func FleetSeed(t *testing.T, c *Client, runID string) FleetState {
 	return state
 }
 
-// FleetVerifyAfterSeed asserts the desired state after seeding via GET requests.
-func FleetVerifyAfterSeed(t *testing.T, c *Client, state FleetState) {
+// FleetLifecycleVerifyAfterSeed asserts the desired state after seeding via GET requests.
+func FleetLifecycleVerifyAfterSeed(t *testing.T, c *Client, state FleetLifecycleState) {
 	t.Helper()
 
 	resp, serverDetail := c.Request(http.MethodGet, "/api/v1/server/"+state.ServerID, nil, nil)
@@ -60,14 +58,13 @@ func FleetVerifyAfterSeed(t *testing.T, c *Client, state FleetState) {
 	require.Empty(t, ListDataField(t, unassignedBody))
 }
 
-// FleetRun attaches a second orphan, shares an agent across two servers.
-func FleetRun(t *testing.T, c *Client, state *FleetState) {
+// FleetLifecycleRun attaches a second orphan and shares an agent across two servers.
+func FleetLifecycleRun(t *testing.T, c *Client, state *FleetLifecycleState) {
 	t.Helper()
 
 	resp, secondOrphanBody := c.Request(http.MethodPost, "/api/v1/agent", map[string]any{
-		"name":    "sentinel",
-		"type":    "security",
-		"version": "2.0.0",
+		"name": "sentinel",
+		"type": "security",
 	}, nil)
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
 	state.SecondOrphanID = DataField(t, secondOrphanBody)["id"].(string)
@@ -87,8 +84,8 @@ func FleetRun(t *testing.T, c *Client, state *FleetState) {
 	state.SecondServerID = DataField(t, secondServerBody)["id"].(string)
 }
 
-// FleetVerifyAfterRun asserts the desired state after attach operations via GET requests.
-func FleetVerifyAfterRun(t *testing.T, c *Client, state FleetState) {
+// FleetLifecycleVerifyAfterRun asserts the desired state after attach operations via GET requests.
+func FleetLifecycleVerifyAfterRun(t *testing.T, c *Client, state FleetLifecycleState) {
 	t.Helper()
 
 	resp, serverDetail := c.Request(http.MethodGet, "/api/v1/server/"+state.ServerID, nil, nil)
@@ -115,8 +112,8 @@ func FleetVerifyAfterRun(t *testing.T, c *Client, state FleetState) {
 	require.Len(t, ListDataField(t, filteredServersBody), 2)
 }
 
-// FleetDetach removes the shared agent from the first server.
-func FleetDetach(t *testing.T, c *Client, state FleetState) {
+// FleetLifecycleDetach removes the shared agent from the first server.
+func FleetLifecycleDetach(t *testing.T, c *Client, state FleetLifecycleState) {
 	t.Helper()
 
 	agentPath := "/api/v1/server/" + state.ServerID + "/agent/" + state.OrphanID
@@ -124,8 +121,8 @@ func FleetDetach(t *testing.T, c *Client, state FleetState) {
 	require.Equal(t, http.StatusNoContent, resp.StatusCode)
 }
 
-// FleetVerifyFinal asserts the desired state after detach via GET requests.
-func FleetVerifyFinal(t *testing.T, c *Client, state FleetState) {
+// FleetLifecycleVerifyFinal asserts the desired state after detach via GET requests.
+func FleetLifecycleVerifyFinal(t *testing.T, c *Client, state FleetLifecycleState) {
 	t.Helper()
 
 	resp, serverAfterDetach := c.Request(http.MethodGet, "/api/v1/server/"+state.ServerID, nil, nil)
@@ -149,14 +146,14 @@ func FleetVerifyFinal(t *testing.T, c *Client, state FleetState) {
 	require.Equal(t, float64(1), secondRelations["agent_count"])
 }
 
-// RunFleetFlow executes the full fleet seed/run/verify flow.
-func RunFleetFlow(t *testing.T, c *Client, runID string) {
+// RunFleetLifecycleFlow executes the full attach/detach integration flow.
+func RunFleetLifecycleFlow(t *testing.T, c *Client, runID string) {
 	t.Helper()
 
-	state := FleetSeed(t, c, runID)
-	FleetVerifyAfterSeed(t, c, state)
-	FleetRun(t, c, &state)
-	FleetVerifyAfterRun(t, c, state)
-	FleetDetach(t, c, state)
-	FleetVerifyFinal(t, c, state)
+	state := FleetLifecycleSeed(t, c, runID)
+	FleetLifecycleVerifyAfterSeed(t, c, state)
+	FleetLifecycleRun(t, c, &state)
+	FleetLifecycleVerifyAfterRun(t, c, state)
+	FleetLifecycleDetach(t, c, state)
+	FleetLifecycleVerifyFinal(t, c, state)
 }

@@ -20,7 +20,6 @@ type testAgent struct {
 	ID       uuid.UUID      `gorm:"type:uuid;primary_key"`
 	Name     string         `gorm:"type:varchar(255);not null"`
 	Type     string         `gorm:"type:varchar(255);not null"`
-	Version  string         `gorm:"type:varchar(255);not null"`
 	Metadata datatypes.JSON `gorm:"type:json;not null"`
 }
 
@@ -92,7 +91,6 @@ func TestRepositoryGetRelationCountsIncludesAgents(t *testing.T) {
 		ID:       agentID,
 		Name:     "crowdstrike",
 		Type:     "security",
-		Version:  "1.0.0",
 		Metadata: datatypes.JSON([]byte(`{}`)),
 	}).Error)
 	require.NoError(t, db.Create(&testServerAgent{

@@ -11,6 +11,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	uuid "github.com/google/uuid"
 	"github.com/oapi-codegen/runtime"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
@@ -84,6 +85,32 @@ type ErrorResponse struct {
 	Error string `json:"error"`
 }
 
+// FleetComplianceAnalytics defines model for FleetComplianceAnalytics.
+type FleetComplianceAnalytics struct {
+	ByLocation                []LocationFleetCompliance     `json:"by_location"`
+	ComplianceRate            float64                       `json:"compliance_rate"`
+	CompliantServers          int                           `json:"compliant_servers"`
+	NonCompliantServerDetails []ServerFleetComplianceDetail `json:"non_compliant_server_details"`
+	NonCompliantServers       int                           `json:"non_compliant_servers"`
+	RequiredAgentCoverage     []RequiredAgentCoverage       `json:"required_agent_coverage"`
+	TotalRequiredAgents       int                           `json:"total_required_agents"`
+	TotalServers              int                           `json:"total_servers"`
+}
+
+// FleetComplianceAnalyticsDataResponse defines model for FleetComplianceAnalyticsDataResponse.
+type FleetComplianceAnalyticsDataResponse struct {
+	Data FleetComplianceAnalytics `json:"data"`
+}
+
+// LocationFleetCompliance defines model for LocationFleetCompliance.
+type LocationFleetCompliance struct {
+	ComplianceRate      float64 `json:"compliance_rate"`
+	CompliantServers    int     `json:"compliant_servers"`
+	Location            string  `json:"location"`
+	NonCompliantServers int     `json:"non_compliant_servers"`
+	TotalServers        int     `json:"total_servers"`
+}
+
 // LocationJobAnalytics defines model for LocationJobAnalytics.
 type LocationJobAnalytics struct {
 	FailedJobs     int     `json:"failed_jobs"`
@@ -93,6 +120,25 @@ type LocationJobAnalytics struct {
 	SuccessfulJobs int     `json:"successful_jobs"`
 	TotalJobs      int     `json:"total_jobs"`
 }
+
+// RequiredAgentCoverage defines model for RequiredAgentCoverage.
+type RequiredAgentCoverage struct {
+	AgentName      string  `json:"agent_name"`
+	CoverageRate   float64 `json:"coverage_rate"`
+	ServersMissing int     `json:"servers_missing"`
+	ServersWith    int     `json:"servers_with"`
+}
+
+// ServerFleetComplianceDetail defines model for ServerFleetComplianceDetail.
+type ServerFleetComplianceDetail struct {
+	Hostname      string   `json:"hostname"`
+	Location      string   `json:"location"`
+	MissingAgents []string `json:"missing_agents"`
+	ServerId      UUID     `json:"server_id"`
+}
+
+// UUID defines model for UUID.
+type UUID = uuid.UUID
 
 // AutomationIDPath defines model for AutomationIDPath.
 type AutomationIDPath = openapi_types.UUID
@@ -126,6 +172,9 @@ type ServerInterface interface {
 	// Get compliance analytics overview
 	// (GET /v1/analytics/compliance)
 	GetComplianceAnalyticsOverview(c *gin.Context)
+	// Get fleet compliance analytics overview
+	// (GET /v1/analytics/fleet)
+	GetFleetComplianceAnalyticsOverview(c *gin.Context)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -200,6 +249,23 @@ func (siw *ServerInterfaceWrapper) GetComplianceAnalyticsOverview(c *gin.Context
 	siw.Handler.GetComplianceAnalyticsOverview(c)
 }
 
+// GetFleetComplianceAnalyticsOverview operation middleware
+func (siw *ServerInterfaceWrapper) GetFleetComplianceAnalyticsOverview(c *gin.Context) {
+
+	c.Set(string(BearerAuthScopes), []string{})
+
+	c.Set(string(SessionCookieScopes), []string{})
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.GetFleetComplianceAnalyticsOverview(c)
+}
+
 // GinServerOptions provides options for the Gin server.
 type GinServerOptions struct {
 	BaseURL      string
@@ -230,6 +296,7 @@ func RegisterHandlersWithOptions(router gin.IRouter, si ServerInterface, options
 	router.GET(options.BaseURL+"/v1/analytics/automation", wrapper.GetAutomationAnalyticsOverview)
 	router.GET(options.BaseURL+"/v1/analytics/automation/:automation_id", wrapper.GetAutomationAnalyticsOverviewByID)
 	router.GET(options.BaseURL+"/v1/analytics/compliance", wrapper.GetComplianceAnalyticsOverview)
+	router.GET(options.BaseURL+"/v1/analytics/fleet", wrapper.GetFleetComplianceAnalyticsOverview)
 }
 
 type BadRequestJSONResponse ErrorResponse
@@ -394,6 +461,57 @@ func (response GetComplianceAnalyticsOverview500JSONResponse) VisitGetCompliance
 	return err
 }
 
+type GetFleetComplianceAnalyticsOverviewRequestObject struct {
+}
+
+type GetFleetComplianceAnalyticsOverviewResponseObject interface {
+	VisitGetFleetComplianceAnalyticsOverviewResponse(w http.ResponseWriter) error
+}
+
+type GetFleetComplianceAnalyticsOverview200JSONResponse FleetComplianceAnalyticsDataResponse
+
+func (response GetFleetComplianceAnalyticsOverview200JSONResponse) VisitGetFleetComplianceAnalyticsOverviewResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetFleetComplianceAnalyticsOverview401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response GetFleetComplianceAnalyticsOverview401JSONResponse) VisitGetFleetComplianceAnalyticsOverviewResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetFleetComplianceAnalyticsOverview500JSONResponse struct {
+	InternalServerErrorJSONResponse
+}
+
+func (response GetFleetComplianceAnalyticsOverview500JSONResponse) VisitGetFleetComplianceAnalyticsOverviewResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
 	// Get automation analytics overview
@@ -405,6 +523,9 @@ type StrictServerInterface interface {
 	// Get compliance analytics overview
 	// (GET /v1/analytics/compliance)
 	GetComplianceAnalyticsOverview(ctx context.Context, request GetComplianceAnalyticsOverviewRequestObject) (GetComplianceAnalyticsOverviewResponseObject, error)
+	// Get fleet compliance analytics overview
+	// (GET /v1/analytics/fleet)
+	GetFleetComplianceAnalyticsOverview(ctx context.Context, request GetFleetComplianceAnalyticsOverviewRequestObject) (GetFleetComplianceAnalyticsOverviewResponseObject, error)
 }
 
 type StrictHandlerFunc func(ctx *gin.Context, request any) (any, error)
@@ -541,6 +662,32 @@ func (sh *strictHandler) GetComplianceAnalyticsOverview(ctx *gin.Context) {
 		sh.options.HandlerErrorFunc(ctx, err)
 	} else if validResponse, ok := response.(GetComplianceAnalyticsOverviewResponseObject); ok {
 		if err := validResponse.VisitGetComplianceAnalyticsOverviewResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetFleetComplianceAnalyticsOverview operation middleware
+func (sh *strictHandler) GetFleetComplianceAnalyticsOverview(ctx *gin.Context) {
+	var request GetFleetComplianceAnalyticsOverviewRequestObject
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.GetFleetComplianceAnalyticsOverview(ctx.Request.Context(), request.(GetFleetComplianceAnalyticsOverviewRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetFleetComplianceAnalyticsOverview")
+	}
+
+	ctx.Set("operation_id", "GetFleetComplianceAnalyticsOverview")
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(GetFleetComplianceAnalyticsOverviewResponseObject); ok {
+		if err := validResponse.VisitGetFleetComplianceAnalyticsOverviewResponse(ctx.Writer); err != nil {
 			sh.options.ResponseErrorHandlerFunc(ctx, err)
 		}
 	} else if response != nil {

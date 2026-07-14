@@ -13,7 +13,6 @@ type Agent struct {
 	ID       uuid.UUID      `gorm:"type:uuid;primary_key" json:"id"`
 	Name     string         `gorm:"type:varchar(255);not null;uniqueIndex;check:name <> ''" json:"name"`
 	Type     string         `gorm:"type:varchar(255);not null" json:"type"`
-	Version  string         `gorm:"type:varchar(255);not null" json:"version"`
 	Metadata datatypes.JSON `gorm:"type:json;not null" json:"metadata"`
 	model.Timestamp
 }

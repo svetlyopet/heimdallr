@@ -112,7 +112,6 @@ func (s attachmentService) createAgentsOnServer(ctx context.Context, serverID uu
 			ID:       uuid.New(),
 			Name:     input.Name,
 			Type:     stringValue(input.Type),
-			Version:  stringValue(input.Version),
 			Metadata: metadata,
 		}
 

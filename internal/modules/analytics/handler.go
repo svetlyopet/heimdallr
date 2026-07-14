@@ -54,6 +54,17 @@ func (h handler) GetComplianceAnalyticsOverview(ctx context.Context, _ api.GetCo
 	return api.GetComplianceAnalyticsOverview200JSONResponse{Data: response}, nil
 }
 
+func (h handler) GetFleetComplianceAnalyticsOverview(ctx context.Context, _ api.GetFleetComplianceAnalyticsOverviewRequestObject) (api.GetFleetComplianceAnalyticsOverviewResponseObject, error) {
+	response, err := h.service.GetFleetComplianceOverview(ctx)
+	if err != nil {
+		return api.GetFleetComplianceAnalyticsOverview500JSONResponse{
+			InternalServerErrorJSONResponse: api.InternalServerErrorJSONResponse{Error: analyticsErrorMessage(err, "failed to get fleet compliance analytics")},
+		}, nil
+	}
+
+	return api.GetFleetComplianceAnalyticsOverview200JSONResponse{Data: response}, nil
+}
+
 func NewHandler(service Service) (Handler, error) {
 	if service == nil {
 		return nil, errors.New("analytics service is required")

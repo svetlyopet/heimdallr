@@ -83,7 +83,7 @@ func TestHealthEndpoint(t *testing.T) {
 
 func TestFleetFlow(t *testing.T) {
 	ts := startTestServer(t)
-	flows.RunFleetFlow(t, newFlowsClient(t, ts), "integration")
+	flows.RunFleetLifecycleFlow(t, newFlowsClient(t, ts), "integration")
 }
 
 func TestAgentNameMustBeUnique(t *testing.T) {
@@ -91,16 +91,14 @@ func TestAgentNameMustBeUnique(t *testing.T) {
 	headers := authHeaders(ts)
 
 	resp, _ := doRequest(t, ts, http.MethodPost, "/api/v1/agent", map[string]any{
-		"name":    "unique-agent",
-		"type":    "monitoring",
-		"version": "1.0.0",
+		"name": "unique-agent",
+		"type": "monitoring",
 	}, headers)
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
 
 	resp, _ = doRequest(t, ts, http.MethodPost, "/api/v1/agent", map[string]any{
-		"name":    "unique-agent",
-		"type":    "monitoring",
-		"version": "2.0.0",
+		"name": "unique-agent",
+		"type": "monitoring",
 	}, headers)
 	require.Equal(t, http.StatusConflict, resp.StatusCode)
 }
