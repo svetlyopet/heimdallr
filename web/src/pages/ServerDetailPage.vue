@@ -45,22 +45,62 @@
       </form>
     </FormDialog>
 
-    <section v-if="server" class="stats-grid">
-      <article class="stat-card">
-        <span>Server ID</span>
-        <strong><code>{{ server.id }}</code></strong>
+    <section v-if="server" class="job-detail-grid">
+      <article class="panel detail-panel">
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">Overview</p>
+            <h3>{{ server.hostname }}</h3>
+          </div>
+        </div>
+
+        <dl class="detail-grid">
+          <div>
+            <dt>Server ID</dt>
+            <dd><code>{{ server.id }}</code></dd>
+          </div>
+
+          <div>
+            <dt>Operating system</dt>
+            <dd>{{ server.operating_system || "—" }}</dd>
+          </div>
+
+          <div>
+            <dt>Hypervisor</dt>
+            <dd>{{ server.hypervisor || "—" }}</dd>
+          </div>
+
+          <div>
+            <dt>Location</dt>
+            <dd>{{ server.location || "—" }}</dd>
+          </div>
+
+          <div>
+            <dt>Agents</dt>
+            <dd>{{ server.relations?.agent_count ?? 0 }}</dd>
+          </div>
+
+          <div>
+            <dt>Jobs</dt>
+            <dd>{{ server.relations?.job_count ?? 0 }}</dd>
+          </div>
+
+          <div>
+            <dt>Releases</dt>
+            <dd>{{ server.relations?.release_count ?? 0 }}</dd>
+          </div>
+        </dl>
       </article>
-      <article class="stat-card">
-        <span>Agents</span>
-        <strong>{{ server.relations?.agent_count ?? 0 }}</strong>
-      </article>
-      <article class="stat-card">
-        <span>Jobs</span>
-        <strong>{{ server.relations?.job_count ?? 0 }}</strong>
-      </article>
-      <article class="stat-card">
-        <span>Releases</span>
-        <strong>{{ server.relations?.release_count ?? 0 }}</strong>
+
+      <article class="panel detail-panel">
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">Metadata</p>
+            <h3>JSON data</h3>
+          </div>
+        </div>
+
+        <pre class="json-block">{{ formattedMetadata }}</pre>
       </article>
     </section>
 
@@ -134,7 +174,8 @@
 </template>
 
 <script setup>
-import { onMounted, reactive, ref } from "vue";
+import { computed, onMounted, reactive, ref } from "vue";
+import "../stylesheets/detail.css";
 import "../stylesheets/dialog.css";
 import { RouterLink, useRoute } from "vue-router";
 import {
@@ -166,6 +207,21 @@ const pagination = reactive({
   limit: 10,
   total: 0,
   total_pages: 0,
+});
+
+const formattedMetadata = computed(() => {
+  const metadata = server.value?.metadata;
+  if (!metadata) return "{}";
+
+  if (typeof metadata === "string") {
+    try {
+      return JSON.stringify(JSON.parse(metadata), null, 2);
+    } catch {
+      return metadata;
+    }
+  }
+
+  return JSON.stringify(metadata, null, 2);
 });
 
 onMounted(loadData);
