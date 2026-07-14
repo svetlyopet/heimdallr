@@ -130,6 +130,10 @@ generate-api: generate-automation-api generate-job-api generate-application-api 
 check-generated: generate-api ## Verifies generated OpenAPI code is up to date (CI)
 	@git diff --exit-code -- internal/*/api/api.gen.go
 
+.PHONY: generate-postman ## Generates the Postman collection from the OpenAPI spec
+generate-postman:
+	@python3 ./scripts/postprocess-postman-collection.py /tmp/heimdallr_postman_generated.json api/postman_collection.json
+
 .PHONY: lint-api
 lint-api: test-web-stub ## Lints all code with golangci-lint
 	@go tool golangci-lint run
