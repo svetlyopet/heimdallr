@@ -17,8 +17,8 @@ type FleetLifecycleState struct {
 	SecondHostname string
 }
 
-// ComplianceState holds IDs produced during the compliance seed/run phases.
-type ComplianceState struct {
+// SoftwareState holds IDs produced during the software seed/run phases.
+type SoftwareState struct {
 	ApplicationID  string
 	Token          string
 	ReleaseID      string

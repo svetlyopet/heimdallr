@@ -9,12 +9,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// ComplianceSeed creates an application and a scoped API token.
-func ComplianceSeed(t *testing.T, c *Client, runID string) ComplianceState {
+// SoftwareSeed creates an application and a scoped API token.
+func SoftwareSeed(t *testing.T, c *Client, runID string) SoftwareState {
 	t.Helper()
 
-	appName := fmt.Sprintf("e2e-compliance-app-%s", runID)
-	tokenName := fmt.Sprintf("e2e-compliance-token-%s", runID)
+	appName := fmt.Sprintf("e2e-software-app-%s", runID)
+	tokenName := fmt.Sprintf("e2e-software-token-%s", runID)
 
 	resp, appBody := c.Request(http.MethodPost, "/api/v1/application", map[string]any{
 		"name":           appName,
@@ -34,7 +34,7 @@ func ComplianceSeed(t *testing.T, c *Client, runID string) ComplianceState {
 	resp, _ = c.Request(http.MethodGet, "/api/v1/application/"+appID, nil, nil)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
-	return ComplianceState{
+	return SoftwareState{
 		ApplicationID:  appID,
 		Token:          token,
 		ReleaseVersion: "v1.0.0-e2e",
@@ -43,8 +43,8 @@ func ComplianceSeed(t *testing.T, c *Client, runID string) ComplianceState {
 	}
 }
 
-// ComplianceRun pushes a release and report using the application token.
-func ComplianceRun(t *testing.T, c *Client, state *ComplianceState) {
+// SoftwareRun pushes a release and report using the application token.
+func SoftwareRun(t *testing.T, c *Client, state *SoftwareState) {
 	t.Helper()
 
 	tokenClient := c.WithToken(state.Token)
@@ -80,8 +80,8 @@ func ComplianceRun(t *testing.T, c *Client, state *ComplianceState) {
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 }
 
-// ComplianceVerify asserts the desired compliance state via GET requests.
-func ComplianceVerify(t *testing.T, c *Client, state ComplianceState) {
+// SoftwareVerify asserts the desired software catalog state via GET requests.
+func SoftwareVerify(t *testing.T, c *Client, state SoftwareState) {
 	t.Helper()
 
 	releasePath := fmt.Sprintf("/api/v1/application/%s/release/%s", state.ApplicationID, state.ReleaseID)
@@ -110,11 +110,11 @@ func ComplianceVerify(t *testing.T, c *Client, state ComplianceState) {
 	require.True(t, found, "report %s not found in success list", state.ReportID)
 }
 
-// RunComplianceFlow executes the full compliance seed/run/verify flow.
-func RunComplianceFlow(t *testing.T, c *Client, runID string) {
+// RunSoftwareFlow executes the full software seed/run/verify flow.
+func RunSoftwareFlow(t *testing.T, c *Client, runID string) {
 	t.Helper()
 
-	state := ComplianceSeed(t, c, runID)
-	ComplianceRun(t, c, &state)
-	ComplianceVerify(t, c, state)
+	state := SoftwareSeed(t, c, runID)
+	SoftwareRun(t, c, &state)
+	SoftwareVerify(t, c, state)
 }

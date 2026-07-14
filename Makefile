@@ -80,54 +80,54 @@ web-install-deps: ## Install web dependencies
 	cd $(WEB_DIR) && npm install
 
 .PHONY: generate-automation-api
-generate-automation-api: ## Generate automation API from OpenAPI
+generate-automation-api:
 	@$(OAPI_CODEGEN) -config api/oapi-codegen/automation.cfg.yaml $(OPENAPI_SPEC)
 
 .PHONY: generate-job-api
-generate-job-api: ## Generate job API from OpenAPI
+generate-job-api:
 	@$(OAPI_CODEGEN) -config api/oapi-codegen/job.cfg.yaml $(OPENAPI_SPEC)
 
 .PHONY: generate-application-api
-generate-application-api: ## Generate application API from OpenAPI
+generate-application-api:
 	@$(OAPI_CODEGEN) -config api/oapi-codegen/application.cfg.yaml $(OPENAPI_SPEC)
 
 .PHONY: generate-release-api
-generate-release-api: ## Generate release API from OpenAPI
+generate-release-api:
 	@$(OAPI_CODEGEN) -config api/oapi-codegen/release.cfg.yaml $(OPENAPI_SPEC)
 
 .PHONY: generate-report-api
-generate-report-api: ## Generate report API from OpenAPI
+generate-report-api:
 	@$(OAPI_CODEGEN) -config api/oapi-codegen/report.cfg.yaml $(OPENAPI_SPEC)
 
 .PHONY: generate-provider-api
-generate-provider-api: ## Generate provider API from OpenAPI
+generate-provider-api:
 	@$(OAPI_CODEGEN) -config api/oapi-codegen/provider.cfg.yaml $(OPENAPI_SPEC)
 
 .PHONY: generate-analytics-api
-generate-analytics-api: ## Generate analytics API from OpenAPI
+generate-analytics-api:
 	@$(OAPI_CODEGEN) -config api/oapi-codegen/analytics.cfg.yaml $(OPENAPI_SPEC)
 
 .PHONY: generate-server-api
-generate-server-api: ## Generate server API from OpenAPI
+generate-server-api:
 	@$(OAPI_CODEGEN) -config api/oapi-codegen/server.cfg.yaml $(OPENAPI_SPEC)
 
 .PHONY: generate-agent-api
-generate-agent-api: ## Generate agent API from OpenAPI
+generate-agent-api:
 	@$(OAPI_CODEGEN) -config api/oapi-codegen/agent.cfg.yaml $(OPENAPI_SPEC)
 
 .PHONY: generate-auth-api
-generate-auth-api: ## Generate auth API from OpenAPI
+generate-auth-api:
 	@$(OAPI_CODEGEN) -config api/oapi-codegen/auth.cfg.yaml $(OPENAPI_SPEC)
 
 .PHONY: generate-token-api
-generate-token-api: ## Generate token API from OpenAPI
+generate-token-api:
 	@$(OAPI_CODEGEN) -config api/oapi-codegen/token.cfg.yaml $(OPENAPI_SPEC)
 
 .PHONY: generate-required-agent-api
-generate-required-agent-api: ## Generate required agent API from OpenAPI
+generate-required-agent-api:
 	@$(OAPI_CODEGEN) -config api/oapi-codegen/requiredagent.cfg.yaml $(OPENAPI_SPEC)
 
-.PHONY: generate-api
+.PHONY: generate-api ## Generate modules API's from OpenAPI spec
 generate-api: generate-automation-api generate-job-api generate-application-api generate-release-api generate-report-api generate-provider-api generate-analytics-api generate-server-api generate-agent-api generate-required-agent-api generate-auth-api generate-token-api ## Generate all OpenAPI server code
 
 .PHONY: check-generated
@@ -143,18 +143,18 @@ lint-api: test-web-stub ## Lints all code with golangci-lint
 	@go tool golangci-lint run
 
 .PHONY: test-db-up
-test-db-up: ## Start ephemeral Postgres for local tests
+test-db-up:
 	@if [ "$(TEST_DB_MANAGED)" = "1" ]; then \
 		docker compose -f docker-compose.test.yml up -d --wait; \
 	fi
 
 .PHONY: test-db-down
-test-db-down: ## Stop ephemeral Postgres used for local tests
+test-db-down:
 	@if [ "$(TEST_DB_MANAGED)" = "1" ]; then \
 		docker compose -f docker-compose.test.yml down -v --remove-orphans; \
 	fi
 
-test: test-web-stub test-db-up ## Run unit tests
+test-unit: test-web-stub test-db-up ## Run unit tests
 	@go test -race -shuffle=on -count=1 -v -covermode=atomic ./...
 
 .PHONY: test-integration
@@ -168,7 +168,7 @@ e2e-up: ## Start docker-compose stack and wait for health
 	@HEIMDALLR_PASSWORD=e2e-test-password ./scripts/wait-for-health.sh
 
 .PHONY: e2e-up-ci
-e2e-up-ci: ## Start pre-built CI image (no rebuild)
+e2e-up-ci:
 	@docker compose -f docker-compose.yml -f docker-compose.ci.yml down -v --remove-orphans 2>/dev/null || true
 	@docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d
 	@HEIMDALLR_PASSWORD=e2e-test-password ./scripts/wait-for-health.sh
@@ -182,35 +182,35 @@ e2e-down-ci: ## Stop CI docker-compose stack
 	@docker compose -f docker-compose.yml -f docker-compose.ci.yml down -v
 
 .PHONY: e2e-operations-run
-e2e-operations-run: ## Run operations E2E scripts (stack must already be up)
+e2e-operations-run: ## Run operations E2E scripts
 	@HEIMDALLR_PASSWORD=e2e-test-password ./tests/e2e/operations/run.sh
 
-.PHONY: e2e-compliance-run
-e2e-compliance-run: ## Run compliance E2E tests (stack must already be up)
-	@HEIMDALLR_PASSWORD=e2e-test-password go test -tags=e2e -v -count=1 ./tests/e2e/compliance/...
+.PHONY: e2e-software-run
+e2e-software-run:
+	@HEIMDALLR_PASSWORD=e2e-test-password go test -tags=e2e -v -count=1 ./tests/e2e/software/...
 
 .PHONY: e2e-fleet-run
-e2e-fleet-run: ## Run fleet E2E tests (stack must already be up)
+e2e-fleet-run:
 	@HEIMDALLR_PASSWORD=e2e-test-password go test -tags=e2e -v -count=1 ./tests/e2e/fleet/...
 
 .PHONY: e2e-operations
-e2e-operations: e2e-up e2e-operations-run ## Run operations E2E (Ansible job flow)
+e2e-operations: e2e-up e2e-operations-run ## Run operations E2E
 
-.PHONY: e2e-compliance
-e2e-compliance: e2e-up e2e-compliance-run ## Run compliance E2E (release/report flow)
+.PHONY: e2e-software
+e2e-software: e2e-up e2e-software-run ## Run software E2E
 
 .PHONY: e2e-fleet
 e2e-fleet: e2e-up e2e-fleet-run ## Run fleet E2E
 
 .PHONY: e2e
-e2e: e2e-operations e2e-compliance e2e-fleet e2e-down ## Run all E2E suites
+e2e: e2e-operations e2e-software e2e-fleet e2e-down ## Run all E2E suites
 
 .PHONY: build-web
-build-web: out-web ## Build web assets
+build-web: out-web
 	@cd $(WEB_DIR) && npm run build
 
 .PHONY: build-api
-build-api: out-api generate-api ## Build api release
+build-api: out-api generate-api
 	@go build -ldflags="-w -s" -o $(APP_PATH) $(MAIN_PATH)
 
 build: build-web build-api ## Build api and web assets
@@ -228,23 +228,23 @@ docker-up: ## Start Postgres and Heimdallr via docker-compose
 	@docker compose up --build -d
 
 .PHONY: docker-down
-docker-down: ## Stop docker-compose services
+docker-down: ## Stop Postgres and Heimdallr docker services
 	@docker compose down
 
 .PHONY: migrate
 migrate: ## Migrations run automatically on startup (Postgres via DATABASE_URL)
 	@echo "Migrations are applied automatically when the server starts with DATABASE_URL set."
 
-clean-deps:	## Cleans up web dependencies
+clean-deps:
 	@rm -rf $(WEB_DEPS_DIR)
 
-clean-web: ## Cleans up web generated assets
+clean-web:
 	@rm -rf $(WEB_DIST_DIR)
 
-clean-api: ## Cleans up api generated output
+clean-api:
 	@rm -rf $(BIN_DIR)
 
-clean-reports: ## Cleans up coverage reports
+clean-reports:
 	@rm -rf $(REPORTS_DIR)
 
 clean: clean-api clean-web clean-deps clean-reports ## Cleans up all produced artifacts

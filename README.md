@@ -15,7 +15,7 @@ them into searchable records and dashboard summaries.
   monitoring agents installed on them.
 - **Cross-system context** — associate servers with releases and automation jobs
   to understand where software ran and what changed it.
-- **Operational summaries** — view compliance success rates and automation
+- **Operational summaries** — view software catalog totals, compliance success rates, and automation
   outcomes from the dashboard.
 - **Controlled API access** — use admin and reader accounts for people, and
   scoped tokens for CI or automation clients.
@@ -36,10 +36,10 @@ flowchart LR
   API["Heimdallr API<br/>Bearer authentication"]
 
   subgraph heimdallr [Heimdallr]
-    Compliance["Compliance<br/>applications · releases · reports"]
+    Software["Software<br/>applications · releases · reports"]
     Operations["Operations<br/>providers · automations · jobs"]
     Fleet["Fleet<br/>servers · agents"]
-    Analytics["Dashboard<br/>compliance and job summaries"]
+    Analytics["Dashboard<br/>software, compliance, and job summaries"]
   end
 
   Storage[("PostgreSQL")]
@@ -48,14 +48,14 @@ flowchart LR
   CI --> API
   Automation --> API
   Operators --> API
-  API --> Compliance
+  API --> Software
   API --> Operations
   API --> Fleet
-  Compliance --> Analytics
+  Software --> Analytics
   Operations --> Analytics
-  Fleet -. context .-> Compliance
+  Fleet -. context .-> Software
   Fleet -. context .-> Operations
-  Compliance --> Storage
+  Software --> Storage
   Operations --> Storage
   Fleet --> Storage
   Analytics --> UI
@@ -132,7 +132,7 @@ tooling.
 
 The web UI is included with the API and provides:
 
-- a dashboard for compliance and automation results;
+- a dashboard for software catalog, compliance, and automation results;
 - application, release, and report views;
 - provider, automation, and job views;
 - server and agent inventory;

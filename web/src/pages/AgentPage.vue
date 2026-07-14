@@ -66,7 +66,7 @@
 
         <div v-else-if="agents.length === 0" class="empty-state">
           <strong>No agents yet</strong>
-          <span>Create your first agent to track compliance tooling.</span>
+          <span>Create your first security or monitoring agent.</span>
         </div>
 
         <div v-else class="table-wrapper">

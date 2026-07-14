@@ -1,6 +1,6 @@
 //go:build e2e
 
-package compliance_test
+package software_test
 
 import (
 	"fmt"
@@ -11,21 +11,21 @@ import (
 	"github.com/svetlyopet/heimdallr/tests/flows"
 )
 
-func TestComplianceE2E(t *testing.T) {
+func TestSoftwareE2E(t *testing.T) {
 	c := flows.NewLiveClient(t)
 	runID := fmt.Sprintf("%d-%d", time.Now().Unix(), os.Getpid())
 
-	var state flows.ComplianceState
+	var state flows.SoftwareState
 
 	t.Run("Seed", func(t *testing.T) {
-		state = flows.ComplianceSeed(t, c, runID)
+		state = flows.SoftwareSeed(t, c, runID)
 	})
 
 	t.Run("Run", func(t *testing.T) {
-		flows.ComplianceRun(t, c, &state)
+		flows.SoftwareRun(t, c, &state)
 	})
 
 	t.Run("Verify", func(t *testing.T) {
-		flows.ComplianceVerify(t, c, state)
+		flows.SoftwareVerify(t, c, state)
 	})
 }

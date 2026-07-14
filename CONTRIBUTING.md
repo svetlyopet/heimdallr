@@ -158,14 +158,14 @@ every backend change.
 
 ## Testing
 
-Run checks that match the area you changed. `make test` and
+Run checks that match the area you changed. `make test-unit` and
 `make test-integration` start ephemeral PostgreSQL automatically via Docker
 Compose when needed. The normal backend baseline is:
 
 ```bash
 make check-fmt
 make lint-api
-make test
+make test-unit
 make test-integration
 make govulncheck
 ```
@@ -174,7 +174,7 @@ Also run:
 
 - `make check-generated` after OpenAPI or generated-handler changes.
 - `make build-web` after frontend changes.
-- `make e2e-compliance` after application, release, or report flow changes.
+- `make e2e-software` after application, release, or report flow changes.
 - `make e2e-operations` after provider, automation, or job flow changes.
 - `make e2e-fleet` after server or agent flow changes.
 - `make e2e` when a change crosses several domains.
@@ -214,7 +214,7 @@ Run `make help` for the full list. Common targets:
 make run-debug          # Build the UI and run the API with PostgreSQL
 make build              # Build the web app and Go binary
 make fmt                # Format Go code and imports
-make test               # Unit tests with race detection and shuffled order
+make test-unit          # Unit tests with race detection and shuffled order
 make test-integration   # In-process API tests
 make lint-api           # golangci-lint
 make generate-api       # Regenerate handlers from OpenAPI

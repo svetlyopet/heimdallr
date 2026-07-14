@@ -10,9 +10,9 @@ import (
 	"github.com/svetlyopet/heimdallr/tests/flows"
 )
 
-func TestComplianceFlow(t *testing.T) {
+func TestSoftwareFlow(t *testing.T) {
 	ts := startTestServer(t)
-	flows.RunComplianceFlow(t, newFlowsClient(t, ts), "integration")
+	flows.RunSoftwareFlow(t, newFlowsClient(t, ts), "integration")
 }
 
 func TestOperationsFlow(t *testing.T) {

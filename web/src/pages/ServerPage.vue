@@ -97,7 +97,7 @@
 
         <div v-else-if="servers.length === 0" class="empty-state">
           <strong>No servers yet</strong>
-          <span>Create your first server to track compliance agents.</span>
+          <span>Create your first server to track security agents.</span>
         </div>
 
         <div v-else class="table-wrapper">

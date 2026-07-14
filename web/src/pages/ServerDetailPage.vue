@@ -116,7 +116,7 @@
         <div v-if="loading" class="empty-state">Loading agents...</div>
         <div v-else-if="agents.length === 0" class="empty-state">
           <strong>No agents yet</strong>
-          <span>Attach an agent to track compliance tooling on this server.</span>
+          <span>Attach a security or monitoring agent to this server.</span>
         </div>
         <div v-else class="table-wrapper">
           <table>

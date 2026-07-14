@@ -4,7 +4,7 @@
 
     <header class="topbar">
       <div>
-        <p class="eyebrow">Compliance</p>
+        <p class="eyebrow">Software</p>
         <h2>Report {{ report?.id }}</h2>
       </div>
 

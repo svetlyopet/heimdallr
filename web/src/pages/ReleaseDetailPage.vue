@@ -4,7 +4,7 @@
 
     <header class="topbar">
       <div>
-        <p class="eyebrow">Compliance</p>
+        <p class="eyebrow">Software</p>
         <h2>{{ release?.application }} · {{ release?.version }}</h2>
       </div>
 

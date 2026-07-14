@@ -2,7 +2,7 @@
   <section>
     <header class="topbar">
       <div>
-        <p class="eyebrow">Compliance</p>
+        <p class="eyebrow">Software</p>
         <h2>{{ application?.name || "Application" }}</h2>
       </div>
 

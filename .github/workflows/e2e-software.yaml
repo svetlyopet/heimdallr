@@ -1,4 +1,4 @@
-name: E2E Compliance
+name: E2E Software
 
 on:
   workflow_dispatch:
@@ -7,7 +7,7 @@ permissions:
   contents: read
 
 jobs:
-  compliance-e2e:
+  software-e2e:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -29,8 +29,8 @@ jobs:
           cache-to: type=gha,mode=max
       - name: Start Heimdallr stack
         run: make e2e-up-ci
-      - name: Run compliance E2E
-        run: make e2e-compliance-run
+      - name: Run software E2E
+        run: make e2e-software-run
       - name: Stop stack
         if: always()
         run: make e2e-down-ci

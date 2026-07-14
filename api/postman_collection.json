@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Heimdallr API",
-    "description": "API for managing applications, releases, compliance reports, servers, agents, providers, automations, and automation jobs.",
+    "description": "API for managing software applications, releases, reports, servers, agents, providers, automations, and automation jobs.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
     "version": "1.0.0"
   },

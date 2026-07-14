@@ -7,7 +7,7 @@
         <div class="brand-icon">H</div>
         <div>
           <h1>Heimdallr</h1>
-          <p>Automation & Compliance Hub</p>
+          <p>Fleet, Software & Operations Hub</p>
         </div>
       </div>
 
@@ -87,8 +87,8 @@ const navGroups = [
     ],
   },
   {
-    id: "compliance",
-    title: "Compliance",
+    id: "software",
+    title: "Software",
     routes: ["/applications", "/releases", "/reports"],
     items: [
       { to: "/applications", label: "Applications", icon: "📦" },

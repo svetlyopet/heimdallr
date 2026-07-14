@@ -2,7 +2,7 @@
   <section>
     <header class="topbar">
       <div>
-        <p class="eyebrow">Compliance</p>
+        <p class="eyebrow">Software</p>
         <h2>Applications</h2>
       </div>
 
@@ -60,7 +60,7 @@
 
         <div v-else-if="applications.length === 0" class="empty-state">
           <strong>No applications yet</strong>
-          <span>Create your first application to track release compliance.</span>
+          <span>Create your first application to track software releases and reports.</span>
         </div>
 
         <div v-else class="table-wrapper">

@@ -2,7 +2,7 @@ openapi: 3.0.0
 info:
   title: Heimdallr API
   version: 1.0.0
-  description: API for managing applications, releases, compliance reports, servers, agents, providers, automations, and automation jobs.
+  description: API for managing software applications, releases, reports, servers, agents, providers, automations, and automation jobs.
 
 servers:
   - url: /api
