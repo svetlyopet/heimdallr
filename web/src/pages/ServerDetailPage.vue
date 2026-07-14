@@ -45,7 +45,7 @@
       </form>
     </FormDialog>
 
-    <section v-if="server" class="job-detail-grid">
+    <section v-if="server" class="job-detail-grid job-detail-grid--split">
       <article class="panel detail-panel">
         <div class="panel-header">
           <div>

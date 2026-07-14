@@ -316,7 +316,18 @@
               </thead>
               <tbody>
                 <tr v-for="row in analytics.by_automation" :key="row.automation_id">
-                  <td data-label="Automation"><strong>{{ row.automation }}</strong></td>
+                  <td data-label="Automation">
+                    <RouterLink
+                      v-if="row.automation_id"
+                      :to="{
+                        name: 'automation-detail',
+                        params: { automationId: row.automation_id },
+                      }"
+                    >
+                      <strong>{{ row.automation }}</strong>
+                    </RouterLink>
+                    <strong v-else>{{ row.automation }}</strong>
+                  </td>
                   <td data-label="Provider"><span class="badge">{{ row.provider }}</span></td>
                   <td data-label="Total">{{ row.total_jobs }}</td>
                   <td data-label="Success">{{ row.successful_jobs }}</td>

@@ -7,8 +7,14 @@
       </div>
 
       <div class="topbar-actions">
-        <RouterLink class="button button-secondary" to="/jobs">
-          Back to jobs
+        <RouterLink
+          class="button button-secondary"
+          :to="{
+            name: 'automation-detail',
+            params: { automationId: route.params.automationId },
+          }"
+        >
+          Back to automation
         </RouterLink>
 
         <button class="button button-secondary" type="button" @click="loadJob">

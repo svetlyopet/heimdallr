@@ -3,6 +3,7 @@ import AgentDetailPage from "./pages/AgentDetailPage.vue";
 import AgentPage from "./pages/AgentPage.vue";
 import ApplicationDetailPage from "./pages/ApplicationDetailPage.vue";
 import ApplicationPage from "./pages/ApplicationPage.vue";
+import AutomationDetailPage from "./pages/AutomationDetailPage.vue";
 import AutomationPage from "./pages/AutomationPage.vue";
 import DashboardPage from "./pages/DashboardPage.vue";
 import JobDetailPage from "./pages/JobDetailPage.vue";
@@ -156,6 +157,14 @@ const routes = [
         path: "/jobs",
         name: "jobs",
         component: JobPage,
+        meta: {
+            requiresAuth: true,
+        },
+    },
+    {
+        path: "/automations/:automationId",
+        name: "automation-detail",
+        component: AutomationDetailPage,
         meta: {
             requiresAuth: true,
         },

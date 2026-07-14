@@ -144,6 +144,16 @@
 
                 <td data-label="Actions">
                   <div class="row-actions">
+                    <RouterLink
+                      class="button button-small button-secondary"
+                      :to="{
+                        name: 'automation-detail',
+                        params: { automationId: automation.id },
+                      }"
+                    >
+                      View
+                    </RouterLink>
+
                     <button
                       class="button button-small button-secondary"
                       type="button"
@@ -180,6 +190,7 @@
 
 <script setup>
 import { onMounted, reactive, ref } from "vue";
+import { RouterLink } from "vue-router";
 import "../stylesheets/automation-table.css";
 import {
   createAutomation,
