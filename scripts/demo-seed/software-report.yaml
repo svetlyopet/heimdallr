@@ -1,0 +1,33 @@
+---
+- name: Register report
+  ansible.builtin.uri:
+    url: "{{ heimdallr_url }}/api/v1/application/{{ current_app_id }}/release/{{ current_release_id }}/report"
+    method: POST
+    headers: "{{ app_auth_headers }}"
+    body_format: json
+    body:
+      id: "{{ report_item.id }}"
+      type: "{{ report_item.type }}"
+      status: started
+      location: ci
+      url: "https://example.com/run/{{ report_item.id }}"
+      metadata:
+        tool: demo
+        application: "{{ app_item.name }}"
+    status_code: [201, 409, 500]
+  register: report_create
+
+- name: Finalize report
+  ansible.builtin.uri:
+    url: "{{ heimdallr_url }}/api/v1/application/{{ current_app_id }}/release/{{ current_release_id }}/report/{{ report_item.id }}"
+    method: PATCH
+    headers: "{{ app_auth_headers }}"
+    body_format: json
+    body:
+      status: "{{ report_item.final_status }}"
+      metadata:
+        findings: 0
+        tool: demo
+      output: "{{ ('<h2>Demo ' ~ report_item.type ~ ' report</h2>') | b64encode }}"
+    status_code: 200
+  when: report_item.final_status != 'started'

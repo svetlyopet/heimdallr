@@ -205,6 +205,15 @@ e2e-fleet: e2e-up e2e-fleet-run ## Run fleet E2E
 .PHONY: e2e
 e2e: e2e-operations e2e-software e2e-fleet e2e-down ## Run all E2E suites
 
+.PHONY: demo-seed
+demo-seed: ## Seed demo data (fleet, software, operations) via Ansible
+	@HEIMDALLR_PASSWORD=$${HEIMDALLR_PASSWORD:-e2e-test-password} \
+	  ./scripts/wait-for-health.sh && \
+	  ansible-playbook scripts/demo-seed.yaml
+
+.PHONY: demo-up
+demo-up: e2e-up demo-seed ## Start stack and seed demo data
+
 .PHONY: build-web
 build-web: out-web
 	@cd $(WEB_DIR) && npm run build

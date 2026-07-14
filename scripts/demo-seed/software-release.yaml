@@ -1,0 +1,31 @@
+---
+- name: Upsert release
+  ansible.builtin.uri:
+    url: "{{ heimdallr_url }}/api/v1/application/{{ current_app_id }}/release?upsert=true"
+    method: POST
+    headers: "{{ app_auth_headers }}"
+    body_format: json
+    body:
+      version: "{{ release_version }}"
+      commit_sha: "demo{{ release_index }}"
+      branch: main
+      pipeline_url: "https://example.com/pipeline/{{ app_item.name }}/{{ release_version }}"
+    status_code: [200, 201]
+  register: release_create
+
+- name: Set current release id
+  ansible.builtin.set_fact:
+    current_release_id: "{{ release_create.json.data.id }}"
+
+- name: Seed reports for release
+  ansible.builtin.include_tasks: software-report.yaml
+  loop:
+    - id: "{{ app_item.name }}-{{ release_version }}-sast"
+      type: sast
+      final_status: "{{ ['success', 'failed', 'started'][(release_index + 0) % 3] }}"
+    - id: "{{ app_item.name }}-{{ release_version }}-sbom"
+      type: sbom
+      final_status: "{{ ['success', 'started', 'failed'][(release_index + 1) % 3] }}"
+  loop_control:
+    loop_var: report_item
+    label: "{{ report_item.id }}"

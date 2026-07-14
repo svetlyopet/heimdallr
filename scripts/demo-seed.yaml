@@ -1,0 +1,41 @@
+---
+- name: Seed Heimdallr demo data
+  hosts: localhost
+  vars_files:
+    - demo-seed/vars.yaml
+  vars:
+    heimdallr_url: "{{ lookup('env', 'HEIMDALLR_URL') | default('http://localhost:8080', true) }}"
+    heimdallr_user: "{{ lookup('env', 'HEIMDALLR_USER') | default('root', true) }}"
+    heimdallr_password: "{{ lookup('env', 'HEIMDALLR_PASSWORD') | default('e2e-test-password', true) }}"
+  tasks:
+    - name: Login and obtain bearer token
+      ansible.builtin.uri:
+        url: "{{ heimdallr_url }}/api/v1/auth/login"
+        method: POST
+        body_format: json
+        body:
+          username: "{{ heimdallr_user }}"
+          password: "{{ heimdallr_password }}"
+        status_code: 200
+      register: login_response
+
+    - name: Set auth headers
+      ansible.builtin.set_fact:
+        auth_headers:
+          Authorization: "Bearer {{ login_response.json.data.token }}"
+          Content-Type: application/json
+
+    - name: Seed fleet demo data
+      ansible.builtin.include_tasks: demo-seed/fleet.yaml
+      tags:
+        - fleet
+
+    - name: Seed software demo data
+      ansible.builtin.include_tasks: demo-seed/software.yaml
+      tags:
+        - software
+
+    - name: Seed operations demo data
+      ansible.builtin.include_tasks: demo-seed/operations.yaml
+      tags:
+        - operations

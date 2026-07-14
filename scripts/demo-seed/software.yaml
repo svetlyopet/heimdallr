@@ -1,0 +1,7 @@
+---
+- name: Seed software applications
+  ansible.builtin.include_tasks: software-application.yaml
+  loop: "{{ demo_applications }}"
+  loop_control:
+    loop_var: app_item
+    label: "{{ app_item.name }}"

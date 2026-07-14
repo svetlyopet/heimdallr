@@ -1,0 +1,53 @@
+---
+- name: Create application
+  ansible.builtin.uri:
+    url: "{{ heimdallr_url }}/api/v1/application"
+    method: POST
+    headers: "{{ auth_headers }}"
+    body_format: json
+    body:
+      name: "{{ app_item.name }}"
+      description: "{{ app_item.description }}"
+      repository_url: "{{ app_item.repository_url }}"
+    status_code: [201, 409]
+  register: application_create
+
+- name: List applications for id lookup
+  ansible.builtin.uri:
+    url: "{{ heimdallr_url }}/api/v1/application"
+    method: GET
+    headers: "{{ auth_headers }}"
+    status_code: 200
+  register: applications_list
+  when: application_create.status == 409
+
+- name: Resolve application id
+  ansible.builtin.set_fact:
+    current_app_id: "{{ application_create.json.data.id if application_create.status == 201 else (applications_list.json.data | selectattr('name', 'equalto', app_item.name) | map(attribute='id') | list | first) }}"
+
+- name: Create application scoped token
+  ansible.builtin.uri:
+    url: "{{ heimdallr_url }}/api/v1/auth/tokens"
+    method: POST
+    headers: "{{ auth_headers }}"
+    body_format: json
+    body:
+      name: "demo-token-{{ app_item.name }}"
+      scopes:
+        - application:write
+    status_code: 201
+  register: application_token
+
+- name: Set application auth headers
+  ansible.builtin.set_fact:
+    app_auth_headers:
+      Authorization: "Bearer {{ application_token.json.data.token }}"
+      Content-Type: application/json
+
+- name: Seed releases and reports
+  ansible.builtin.include_tasks: software-release.yaml
+  loop: "{{ demo_release_versions }}"
+  loop_control:
+    loop_var: release_version
+    index_var: release_index
+    label: "{{ app_item.name }} {{ release_version }}"

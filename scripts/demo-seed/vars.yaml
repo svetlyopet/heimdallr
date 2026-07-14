@@ -1,0 +1,245 @@
+---
+demo_required_agents:
+  - name: Flexera
+    type: inventory
+  - name: CrowdStrike
+    type: security
+  - name: Tenable
+    type: vulnerability
+  - name: Nagios
+    type: monitoring
+  - name: Tanium
+    type: endpoint
+
+demo_agents:
+  - name: Flexera
+    type: inventory
+  - name: CrowdStrike
+    type: security
+  - name: Tenable
+    type: vulnerability
+  - name: Nagios
+    type: monitoring
+  - name: Tanium
+    type: endpoint
+
+demo_servers:
+  - suffix: "01"
+    location: dc1
+    exclude: []
+  - suffix: "02"
+    location: dc1
+    exclude: []
+  - suffix: "03"
+    location: dc1
+    exclude: []
+  - suffix: "04"
+    location: dc2
+    exclude: []
+  - suffix: "05"
+    location: dc2
+    exclude: []
+  - suffix: "06"
+    location: dc2
+    exclude: []
+  - suffix: "07"
+    location: dc3
+    exclude: []
+  - suffix: "08"
+    location: dc3
+    exclude: []
+  - suffix: "09"
+    location: dc3
+    exclude: []
+  - suffix: "10"
+    location: dc3
+    exclude: []
+  - suffix: "11"
+    location: dc1
+    exclude:
+      - Flexera
+  - suffix: "12"
+    location: dc1
+    exclude:
+      - TrendMicro
+  - suffix: "13"
+    location: dc2
+    exclude:
+      - Qualys
+  - suffix: "14"
+    location: dc2
+    exclude:
+      - Zabbix
+  - suffix: "15"
+    location: dc3
+    exclude:
+      - Tanium
+  - suffix: "16"
+    location: dc1
+    exclude:
+      - Flexera
+      - TrendMicro
+  - suffix: "17"
+    location: dc2
+    exclude:
+      - Qualys
+      - Zabbix
+  - suffix: "18"
+    location: dc3
+    exclude:
+      - Flexera
+      - CrowdStrike
+      - Tenable
+      - Nagios
+  - suffix: "19"
+    location: dc3
+    exclude:
+      - Flexera
+      - CrowdStrike
+      - Tenable
+      - Nagios
+      - Tanium
+  - suffix: "20"
+    location: dc1
+    exclude:
+      - Zabbix
+
+demo_applications:
+  - name: demo-payments
+    description: Demo payments service
+    repository_url: https://example.com/demo-payments
+  - name: demo-auth
+    description: Demo authentication service
+    repository_url: https://example.com/demo-auth
+  - name: demo-notifications
+    description: Demo notifications service
+    repository_url: https://example.com/demo-notifications
+  - name: demo-gateway
+    description: Demo API gateway
+    repository_url: https://example.com/demo-gateway
+  - name: demo-admin
+    description: Demo admin portal
+    repository_url: https://example.com/demo-admin
+
+demo_release_versions:
+  - v1.0.0
+  - v1.1.0
+  - v1.2.0
+  - v1.3.0
+
+demo_providers:
+  - name: demo-awx
+    url: https://awx.example.com
+
+demo_automations:
+  - name: demo-deploy
+    provider: demo-awx
+    url: https://awx.example.com/#/templates/job_template/1
+  - name: demo-patch
+    provider: demo-awx
+    url: https://awx.example.com/#/templates/job_template/2
+  - name: demo-backup
+    provider: demo-awx
+    url: https://awx.example.com/#/templates/job_template/3
+
+demo_jobs:
+  - id: demo-job-001
+    automation: demo-deploy
+    location: dc1
+    status: success
+    url: https://example.com/#/jobs/playbook/200
+  - id: demo-job-002
+    automation: demo-deploy
+    location: dc1
+    status: success
+    url: https://example.com/#/jobs/playbook/201
+  - id: demo-job-003
+    automation: demo-deploy
+    location: dc2
+    status: success
+    url: https://example.com/#/jobs/playbook/202
+  - id: demo-job-004
+    automation: demo-deploy
+    location: dc2
+    status: failed
+    url: https://example.com/#/jobs/playbook/203
+  - id: demo-job-005
+    automation: demo-deploy
+    location: dc3
+    status: success
+    url: https://example.com/#/jobs/playbook/204
+  - id: demo-job-006
+    automation: demo-deploy
+    location: global
+    status: success
+    url: https://example.com/#/jobs/playbook/205
+  - id: demo-job-007
+    automation: demo-deploy
+    location: dc1
+    status: started
+    url: https://example.com/#/jobs/playbook/206
+  - id: demo-job-008
+    automation: demo-patch
+    location: dc1
+    status: success
+    url: https://example.com/#/jobs/playbook/207
+  - id: demo-job-009
+    automation: demo-patch
+    location: dc2
+    status: success
+    url: https://example.com/#/jobs/playbook/208
+  - id: demo-job-010
+    automation: demo-patch
+    location: dc2
+    status: failed
+    url: https://example.com/#/jobs/playbook/209
+  - id: demo-job-011
+    automation: demo-patch
+    location: dc3
+    status: success
+    url: https://example.com/#/jobs/playbook/210
+  - id: demo-job-012
+    automation: demo-patch
+    location: global
+    status: success
+    url: https://example.com/#/jobs/playbook/211
+  - id: demo-job-013
+    automation: demo-patch
+    location: dc1
+    status: success
+    url: https://example.com/#/jobs/playbook/212
+  - id: demo-job-014
+    automation: demo-patch
+    location: dc2
+    status: started
+    url: https://example.com/#/jobs/playbook/213
+  - id: demo-job-015
+    automation: demo-backup
+    location: dc3
+    status: success
+    url: https://example.com/#/jobs/playbook/214
+  - id: demo-job-016
+    automation: demo-backup
+    location: dc1
+    status: success
+    url: https://example.com/#/jobs/playbook/215
+  - id: demo-job-017
+    automation: demo-backup
+    location: dc2
+    status: failed
+    url: https://example.com/#/jobs/playbook/216
+  - id: demo-job-018
+    automation: demo-backup
+    location: global
+    status: success
+    url: https://example.com/#/jobs/playbook/217
+  - id: demo-job-019
+    automation: demo-backup
+    location: dc3
+    status: failed
+    url: https://example.com/#/jobs/playbook/218
+  - id: demo-job-020
+    automation: demo-backup
+    location: dc1
+    status: success
+    url: https://example.com/#/jobs/playbook/219

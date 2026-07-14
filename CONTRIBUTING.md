@@ -97,6 +97,29 @@ This starts PostgreSQL and a production-style Heimdallr container at
 The Compose credentials are for local development only:
 `root` / `e2e-test-password`.
 
+### Demo data
+
+With Heimdallr already running (`make run-debug`, `make docker-up`, or
+`make e2e-up`), seed demo fleet, software, and operations data:
+
+```bash
+make demo-seed
+```
+
+To start a fresh Docker stack and seed it in one step:
+
+```bash
+make demo-up
+```
+
+Requires Ansible (`pip install ansible`). The playbook is idempotent: re-running
+it may return HTTP 409 for entities that already exist. Seed only one domain
+with tags, for example:
+
+```bash
+ansible-playbook scripts/demo-seed.yaml --tags software
+```
+
 ## Repository map
 
 ```text

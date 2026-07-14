@@ -1,0 +1,67 @@
+---
+- name: Create required agents
+  ansible.builtin.uri:
+    url: "{{ heimdallr_url }}/api/v1/required-agent"
+    method: POST
+    headers: "{{ auth_headers }}"
+    body_format: json
+    body:
+      agent_name: "{{ item.name }}"
+      agent_type: "{{ item.type }}"
+    status_code: [201, 409]
+  loop: "{{ demo_required_agents }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Create catalog agents
+  ansible.builtin.uri:
+    url: "{{ heimdallr_url }}/api/v1/agent"
+    method: POST
+    headers: "{{ auth_headers }}"
+    body_format: json
+    body:
+      name: "{{ item.name }}"
+      type: "{{ item.type }}"
+    status_code: [201, 409]
+  loop: "{{ demo_agents }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: List catalog agents
+  ansible.builtin.uri:
+    url: "{{ heimdallr_url }}/api/v1/agent"
+    method: GET
+    headers: "{{ auth_headers }}"
+    status_code: 200
+  register: catalog_agents_response
+
+- name: Build demo agent id map
+  ansible.builtin.set_fact:
+    demo_agent_ids: "{{ demo_agent_ids | default({}) | combine({item.name: (catalog_agents_response.json.data | selectattr('name', 'equalto', item.name) | map(attribute='id') | list | first)}) }}"
+  loop: "{{ demo_agents }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Create fleet servers
+  ansible.builtin.uri:
+    url: "{{ heimdallr_url }}/api/v1/server"
+    method: POST
+    headers: "{{ auth_headers }}"
+    body_format: json
+    body:
+      hostname: "demo-fleet-server-{{ item.suffix }}.example.com"
+      operating_system: linux
+      hypervisor: kvm
+      location: "{{ item.location }}"
+      agent_ids: >-
+        {%- set ids = [] -%}
+        {%- for agent in demo_agents -%}
+        {%-   if agent.name not in (item.exclude | default([])) -%}
+        {%-     set _ = ids.append(demo_agent_ids[agent.name]) -%}
+        {%-   endif -%}
+        {%- endfor -%}
+        {{ ids }}
+    status_code: [201, 409]
+  loop: "{{ demo_servers }}"
+  loop_control:
+    label: "{{ item.suffix }}"

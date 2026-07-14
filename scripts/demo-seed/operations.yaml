@@ -1,0 +1,107 @@
+---
+- name: Create providers
+  ansible.builtin.uri:
+    url: "{{ heimdallr_url }}/api/v1/provider"
+    method: POST
+    headers: "{{ auth_headers }}"
+    body_format: json
+    body:
+      name: "{{ item.name }}"
+      url: "{{ item.url }}"
+    status_code: [201, 409]
+  loop: "{{ demo_providers }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: List providers
+  ansible.builtin.uri:
+    url: "{{ heimdallr_url }}/api/v1/provider"
+    method: GET
+    headers: "{{ auth_headers }}"
+    status_code: 200
+  register: providers_response
+
+- name: Build demo provider id map
+  ansible.builtin.set_fact:
+    demo_provider_ids: "{{ demo_provider_ids | default({}) | combine({item.name: (providers_response.json.data | selectattr('name', 'equalto', item.name) | map(attribute='id') | list | first)}) }}"
+  loop: "{{ demo_providers }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Create automations
+  ansible.builtin.uri:
+    url: "{{ heimdallr_url }}/api/v1/automation"
+    method: POST
+    headers: "{{ auth_headers }}"
+    body_format: json
+    body:
+      name: "{{ item.name }}"
+      url: "{{ item.url }}"
+      provider_id: "{{ demo_provider_ids[item.provider] }}"
+    status_code: [201, 409]
+  loop: "{{ demo_automations }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: List automations
+  ansible.builtin.uri:
+    url: "{{ heimdallr_url }}/api/v1/automation"
+    method: GET
+    headers: "{{ auth_headers }}"
+    status_code: 200
+  register: automations_response
+
+- name: Build demo automation id map
+  ansible.builtin.set_fact:
+    demo_automation_ids: "{{ demo_automation_ids | default({}) | combine({item.name: (automations_response.json.data | selectattr('name', 'equalto', item.name) | map(attribute='id') | list | first)}) }}"
+  loop: "{{ demo_automations }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Register jobs
+  ansible.builtin.uri:
+    url: "{{ heimdallr_url }}/api/v1/automation/{{ demo_automation_ids[item.automation] }}/job"
+    method: POST
+    headers: "{{ auth_headers }}"
+    body_format: json
+    body:
+      id: "{{ item.id }}"
+      status: started
+      location: "{{ item.location }}"
+      url: "{{ item.url }}"
+      metadata:
+        hypervisor: kvm
+        inventory: "true"
+    status_code: [201, 409, 500]
+  loop: "{{ demo_jobs }}"
+  loop_control:
+    label: "{{ item.id }}"
+
+- name: Finalize jobs
+  ansible.builtin.uri:
+    url: "{{ heimdallr_url }}/api/v1/automation/{{ demo_automation_ids[item.automation] }}/job/{{ item.id }}"
+    method: PATCH
+    headers: "{{ auth_headers }}"
+    body_format: json
+    body:
+      status: "{{ item.status }}"
+      output: "{{ '<h2>Demo job output</h2>' | b64encode }}"
+    status_code: 200
+  loop: "{{ demo_jobs }}"
+  loop_control:
+    label: "{{ item.id }}"
+  when: item.status == 'success'
+
+- name: Mark failed jobs
+  ansible.builtin.uri:
+    url: "{{ heimdallr_url }}/api/v1/automation/{{ demo_automation_ids[item.automation] }}/job/{{ item.id }}"
+    method: PATCH
+    headers: "{{ auth_headers }}"
+    body_format: json
+    body:
+      status: failed
+    status_code: 200
+  loop: "{{ demo_jobs }}"
+  loop_control:
+    label: "{{ item.id }}"
+  when: item.status == 'failed'
