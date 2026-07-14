@@ -20,10 +20,19 @@ func (a authTokenRepositoryAdapter) DeleteSessionTokensByCreatedBy(ctx context.C
 	return a.repository.DeleteSessionTokensByCreatedBy(ctx, userID)
 }
 
+func (a authTokenRepositoryAdapter) DeleteSessionTokensByCreatedByExceptCredential(ctx context.Context, userID string, excludePlainToken string) error {
+	return a.repository.DeleteSessionTokensByCreatedByExceptHash(ctx, userID, hashToken(excludePlainToken))
+}
+
 func (a authTokenRepositoryAdapter) WithTx(tx *gorm.DB) auth.TokenRepository {
 	return authTokenRepositoryAdapter{repository: a.repository.WithTx(tx)}
 }
 
 func provideAuthTokenRepository(i do.Injector) (auth.TokenRepository, error) {
 	return authTokenRepositoryAdapter{repository: do.MustInvoke[Repository](i)}, nil
+}
+
+// NewAuthTokenRepository adapts token.Repository for auth service use.
+func NewAuthTokenRepository(repository Repository) auth.TokenRepository {
+	return authTokenRepositoryAdapter{repository: repository}
 }

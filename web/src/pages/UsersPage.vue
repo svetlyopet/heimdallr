@@ -50,6 +50,32 @@
       </form>
     </FormDialog>
 
+    <FormDialog
+      :open="showPasswordDialog"
+      eyebrow="Security"
+      title="Change password"
+      @close="closePasswordDialog"
+    >
+      <form class="form" @submit.prevent="submitPasswordChange">
+        <label>
+          Username
+          <input :value="passwordTarget?.username ?? ''" type="text" readonly />
+        </label>
+
+        <label>
+          New password
+          <input v-model="passwordForm.password" type="password" required minlength="12" />
+        </label>
+
+        <label>
+          Confirm password
+          <input v-model="passwordForm.confirmPassword" type="password" required minlength="12" />
+        </label>
+
+        <button class="button button-full" type="submit" :disabled="loading">Change password</button>
+      </form>
+    </FormDialog>
+
     <section class="dashboard-grid">
       <article class="panel table-panel">
         <div class="panel-header">
@@ -94,6 +120,15 @@
                     <button class="button button-secondary" type="button" :disabled="loading" @click="saveUser(user.id)">
                       Save
                     </button>
+                    <button
+                      v-if="canChangePassword(user)"
+                      class="button button-secondary"
+                      type="button"
+                      :disabled="loading"
+                      @click="openPasswordDialog(user)"
+                    >
+                      Change password
+                    </button>
                     <button class="button button-danger" type="button" :disabled="loading" @click="removeUser(user.id)">
                       Delete
                     </button>
@@ -114,12 +149,15 @@ import "../stylesheets/users-table.css";
 import { createUser, deleteUser, listUsers, updateUser } from "../api/users";
 import AppAlert from "../components/AppAlert.vue";
 import FormDialog from "../components/FormDialog.vue";
+import { sessionState } from "../auth/session";
 
 const loading = ref(false);
 const errorMessage = ref("");
 const users = ref([]);
 const editById = reactive({});
 const showCreateDialog = ref(false);
+const showPasswordDialog = ref(false);
+const passwordTarget = ref(null);
 
 const createForm = reactive({
   username: "",
@@ -127,6 +165,15 @@ const createForm = reactive({
   password: "",
   role: "reader",
 });
+
+const passwordForm = reactive({
+  password: "",
+  confirmPassword: "",
+});
+
+function canChangePassword(user) {
+  return user.username !== "root" || sessionState.username === "root";
+}
 
 function syncEditState() {
   users.value.forEach((user) => {
@@ -181,6 +228,41 @@ function openCreateDialog() {
 
 function closeCreateDialog() {
   showCreateDialog.value = false;
+}
+
+function openPasswordDialog(user) {
+  passwordTarget.value = user;
+  passwordForm.password = "";
+  passwordForm.confirmPassword = "";
+  showPasswordDialog.value = true;
+}
+
+function closePasswordDialog() {
+  showPasswordDialog.value = false;
+  passwordTarget.value = null;
+  passwordForm.password = "";
+  passwordForm.confirmPassword = "";
+}
+
+async function submitPasswordChange() {
+  if (passwordForm.password !== passwordForm.confirmPassword) {
+    errorMessage.value = "Passwords do not match";
+    return;
+  }
+
+  loading.value = true;
+  errorMessage.value = "";
+
+  try {
+    await updateUser(passwordTarget.value.id, {
+      password: passwordForm.password,
+    });
+    closePasswordDialog();
+    await loadUsers();
+  } catch (error) {
+    errorMessage.value = error.message || "Failed to change password";
+    loading.value = false;
+  }
 }
 
 async function saveUser(userId) {

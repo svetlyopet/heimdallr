@@ -20,6 +20,7 @@ type SessionTokenCreateResponse struct {
 type TokenRepository interface {
 	DeleteByCreatedBy(ctx context.Context, userID string) error
 	DeleteSessionTokensByCreatedBy(ctx context.Context, userID string) error
+	DeleteSessionTokensByCreatedByExceptCredential(ctx context.Context, userID string, excludePlainToken string) error
 	WithTx(tx *gorm.DB) TokenRepository
 }
 

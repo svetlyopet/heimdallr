@@ -13,6 +13,7 @@ type Repository interface {
 	DeleteByID(ctx context.Context, tokenID string) error
 	DeleteByCreatedBy(ctx context.Context, userID string) error
 	DeleteSessionTokensByCreatedBy(ctx context.Context, userID string) error
+	DeleteSessionTokensByCreatedByExceptHash(ctx context.Context, userID string, excludeHash string) error
 	DeleteSessionByHash(ctx context.Context, tokenHash string) error
 	WithTx(tx *gorm.DB) Repository
 }
@@ -76,6 +77,11 @@ func (r repository) DeleteByCreatedBy(ctx context.Context, userID string) error 
 func (r repository) DeleteSessionTokensByCreatedBy(ctx context.Context, userID string) error {
 	return r.db.WithContext(ctx).
 		Delete(&APIToken{}, "created_by = ? AND kind = ?", userID, TokenKindSession).Error
+}
+
+func (r repository) DeleteSessionTokensByCreatedByExceptHash(ctx context.Context, userID string, excludeHash string) error {
+	return r.db.WithContext(ctx).
+		Delete(&APIToken{}, "created_by = ? AND kind = ? AND token_hash <> ?", userID, TokenKindSession, excludeHash).Error
 }
 
 func (r repository) DeleteSessionByHash(ctx context.Context, tokenHash string) error {

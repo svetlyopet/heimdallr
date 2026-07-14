@@ -23,6 +23,10 @@ func (testTokenRepository) DeleteSessionTokensByCreatedBy(context.Context, strin
 	return nil
 }
 
+func (testTokenRepository) DeleteSessionTokensByCreatedByExceptCredential(context.Context, string, string) error {
+	return nil
+}
+
 func (r testTokenRepository) WithTx(tx *gorm.DB) TokenRepository {
 	return testTokenRepository{db: tx}
 }
@@ -200,6 +204,66 @@ func TestServiceUpdateRejectsRootRoleChange(t *testing.T) {
 	updatedRoot, err := repo.FindByID(t.Context(), root.ID.String())
 	require.NoError(t, err)
 	require.Equal(t, []string{RoleAdmin}, updatedRoot.Roles)
+}
+
+func TestServiceUpdateRejectsRootPasswordChangeByOtherUser(t *testing.T) {
+	svc, repo, _ := newTestService(t, ServiceConfig{})
+
+	rootPassword, err := svc.EnsureRootUser(t.Context())
+	require.NoError(t, err)
+	require.NotEmpty(t, rootPassword)
+
+	root, err := repo.FindByUsername(t.Context(), rootUsername)
+	require.NoError(t, err)
+
+	admin, err := svc.Create(t.Context(), api.AuthCreateUserRequest{
+		Username: "other-admin",
+		Email:    openapi_types.Email("other-admin@example.com"),
+		Password: "StrongPassword123!",
+		Roles:    &[]api.AuthRole{api.Admin},
+	})
+	require.NoError(t, err)
+
+	newPassword := "AnotherStrongPassword123!"
+	adminCtx := ContextWithAuthentication(
+		t.Context(),
+		admin,
+		AuthenticationBearer,
+		"admin-token",
+	)
+	_, err = svc.Update(adminCtx, root.ID.String(), api.AuthUpdateUserRequest{Password: &newPassword})
+	require.ErrorIs(t, err, ErrRootPasswordForbidden)
+
+	unchangedRoot, err := repo.FindByID(t.Context(), root.ID.String())
+	require.NoError(t, err)
+	valid, _ := verifyPassword(rootPassword, unchangedRoot.PasswordHash)
+	require.True(t, valid)
+}
+
+func TestServiceUpdateAllowsRootPasswordChangeBySelf(t *testing.T) {
+	svc, repo, _ := newTestService(t, ServiceConfig{})
+
+	rootPassword, err := svc.EnsureRootUser(t.Context())
+	require.NoError(t, err)
+	require.NotEmpty(t, rootPassword)
+
+	root, err := repo.FindByUsername(t.Context(), rootUsername)
+	require.NoError(t, err)
+
+	newPassword := "NewRootPassword123!"
+	rootCtx := ContextWithAuthentication(
+		t.Context(),
+		mapEntityToResponse(root),
+		AuthenticationBearer,
+		"root-token",
+	)
+	_, err = svc.Update(rootCtx, root.ID.String(), api.AuthUpdateUserRequest{Password: &newPassword})
+	require.NoError(t, err)
+
+	updatedRoot, err := repo.FindByID(t.Context(), root.ID.String())
+	require.NoError(t, err)
+	valid, _ := verifyPassword(newPassword, updatedRoot.PasswordHash)
+	require.True(t, valid)
 }
 
 func TestServiceUpdateConcurrentConflict(t *testing.T) {

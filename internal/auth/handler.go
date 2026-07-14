@@ -122,7 +122,7 @@ func (h handler) UpdateUser(ctx context.Context, request api.UpdateUserRequestOb
 			return api.UpdateUser404JSONResponse{
 				NotFoundJSONResponse: api.NotFoundJSONResponse{Error: authErrorMessage(err, "user not found")},
 			}, nil
-		case errors.Is(err, ErrInvalidRole), errors.Is(err, ErrInvalidPasswordValue), errors.Is(err, ErrInvalidCredentials), errors.Is(err, ErrInvalidUserID), errors.Is(err, ErrRootRoleForbidden):
+		case errors.Is(err, ErrInvalidRole), errors.Is(err, ErrInvalidPasswordValue), errors.Is(err, ErrInvalidCredentials), errors.Is(err, ErrInvalidUserID), errors.Is(err, ErrRootRoleForbidden), errors.Is(err, ErrRootPasswordForbidden):
 			return api.UpdateUser400JSONResponse{
 				BadRequestJSONResponse: api.BadRequestJSONResponse{Error: authErrorMessage(err, err.Error())},
 			}, nil

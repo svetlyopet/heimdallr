@@ -167,6 +167,13 @@ func (s service) Update(ctx context.Context, userID string, req api.AuthUpdateUs
 	}
 
 	if req.Password != nil {
+		if existing.Username == rootUsername {
+			actor, actorErr := UserFromContext(ctx)
+			if actorErr != nil || actor.Username != rootUsername {
+				return api.AuthUser{}, ErrRootPasswordForbidden
+			}
+		}
+
 		if len(*req.Password) < minimumPasswordSize || strings.TrimSpace(*req.Password) == "" {
 			return api.AuthUser{}, ErrInvalidPasswordValue
 		}
@@ -211,7 +218,16 @@ func (s service) Update(ctx context.Context, userID string, req api.AuthUpdateUs
 				return updateErr
 			}
 
-			return s.tokenRepo.WithTx(tx).DeleteSessionTokensByCreatedBy(ctx, userID)
+			tokenRepo := s.tokenRepo.WithTx(tx)
+			if req.Password != nil {
+				if actor, actorErr := UserFromContext(ctx); actorErr == nil && actor.Id == userID {
+					if _, credential, credErr := AuthenticationFromContext(ctx); credErr == nil && credential != "" {
+						return tokenRepo.DeleteSessionTokensByCreatedByExceptCredential(ctx, userID, credential)
+					}
+				}
+			}
+
+			return tokenRepo.DeleteSessionTokensByCreatedBy(ctx, userID)
 		})
 	} else {
 		updated, err = s.repository.UpdateByID(ctx, userID, update)
