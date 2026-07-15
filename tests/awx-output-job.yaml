@@ -1,7 +1,7 @@
 # Required extra vars for testing
-# ansible-playbook -e "job_id=INTEGER" -e "job_status=STATUS" -e "automation_id=UUID" tests/awx-simple-job.yaml
+# ansible-playbook -e "job_id=INTEGER" -e "job_status=STATUS" -e "automation_id=UUID" tests/awx-output-job.yaml
 #
-# Available statuses: started, success, failed
+# Available statuses: success, failed, skipped
 
 - name: Test Ansible Playbook
   hosts: localhost
@@ -37,52 +37,49 @@
           - automation_id is defined and automation_id != ""
         fail_msg: "job_status or automation_id are not set"
 
-    - name: Register job
-      ansible.builtin.uri:
-        url: "{{ heimdallr_url }}/api/v1/automation/{{ automation_id }}/job"
-        method: POST
-        headers: "{{ auth_headers }}"
-        body_format: json
-        body:
-          id: "{{ job_id }}"
-          status: "started"
-          location: "{{ job_location }}"
-          url: "{{ job_url }}"
-          metadata:
-            hypervisor: "kvm"
-            inventory: "true"
-        status_code: 201
-
     - block:
         - name: Do work
           ansible.builtin.debug:
             msg: "Doing work"
           failed_when: job_status != "success"
 
-        - name: Set success job status
+        - name: Push successful job
           ansible.builtin.uri:
-            url: "{{ heimdallr_url }}/api/v1/automation/{{ automation_id }}/job/{{ job_id }}"
-            method: PATCH
+            url: "{{ heimdallr_url }}/api/v1/automation/{{ automation_id }}/job"
+            method: POST
             headers: "{{ auth_headers }}"
             body_format: json
             body:
+              id: "{{ job_id }}"
               status: "{{ job_status }}"
+              location: "{{ job_location }}"
+              url: "{{ job_url }}"
+              metadata:
+                hypervisor: "kvm"
+                inventory: "true"
               output: "{{ '<h2>This is a test output.</h2><br>Placeholder for output report.</br>' | b64encode }}"
-            status_code: 200
+            status_code: 201
 
         - name: Handle success job work
           ansible.builtin.debug:
             msg: "Job succeeded"
       rescue:
-        - name: Set failed job status
+        - name: Push failed job
           ansible.builtin.uri:
-            url: "{{ heimdallr_url }}/api/v1/automation/{{ automation_id }}/job/{{ job_id }}"
-            method: PATCH
+            url: "{{ heimdallr_url }}/api/v1/automation/{{ automation_id }}/job"
+            method: POST
             headers: "{{ auth_headers }}"
             body_format: json
             body:
-              status: "failed"
-            status_code: 200
+              id: "{{ job_id }}"
+              status: failed
+              location: "{{ job_location }}"
+              url: "{{ job_url }}"
+              metadata:
+                hypervisor: "kvm"
+                inventory: "true"
+              output: "{{ '<h2>Job failed.</h2>' | b64encode }}"
+            status_code: 201
 
         - name: Handle failed job work
           ansible.builtin.debug:

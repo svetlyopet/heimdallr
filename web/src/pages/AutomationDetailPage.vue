@@ -43,10 +43,6 @@
           <span>Failed jobs</span>
           <strong>{{ analytics.failed_jobs }}</strong>
         </article>
-        <article class="stat-card">
-          <span>Started jobs</span>
-          <strong>{{ analytics.started_jobs }}</strong>
-        </article>
       </section>
 
       <section class="dashboard-grid">
@@ -106,7 +102,6 @@
                   <th>Total</th>
                   <th>Success</th>
                   <th>Failed</th>
-                  <th>Started</th>
                   <th>Rate</th>
                 </tr>
               </thead>
@@ -116,7 +111,6 @@
                   <td data-label="Total">{{ row.total_jobs }}</td>
                   <td data-label="Success">{{ row.successful_jobs }}</td>
                   <td data-label="Failed">{{ row.failed_jobs }}</td>
-                  <td data-label="Started">{{ row.started_jobs }}</td>
                   <td data-label="Rate">{{ formatPercent(row.success_rate) }}</td>
                 </tr>
               </tbody>
@@ -228,7 +222,6 @@ const analytics = reactive({
   total_jobs: 0,
   successful_jobs: 0,
   failed_jobs: 0,
-  started_jobs: 0,
   success_rate: 0,
   by_location: [],
 });

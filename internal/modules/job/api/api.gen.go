@@ -24,7 +24,6 @@ const (
 const (
 	Failed  JobStatus = "failed"
 	Skipped JobStatus = "skipped"
-	Started JobStatus = "started"
 	Success JobStatus = "success"
 )
 
@@ -34,8 +33,6 @@ func (e JobStatus) Valid() bool {
 	case Failed:
 		return true
 	case Skipped:
-		return true
-	case Started:
 		return true
 	case Success:
 		return true
@@ -95,15 +92,6 @@ type JobOutput = string
 // JobStatus defines model for JobStatus.
 type JobStatus string
 
-// JobUpdateRequest defines model for JobUpdateRequest.
-type JobUpdateRequest struct {
-	Metadata *JobMetadata `json:"metadata,omitempty"`
-
-	// Output Base64-encoded output. Decoded content is limited to 4 MiB by default.
-	Output *JobOutput `json:"output,omitempty"`
-	Status JobStatus  `json:"status"`
-}
-
 // Pagination defines model for Pagination.
 type Pagination struct {
 	Limit      int `json:"limit"`
@@ -151,9 +139,6 @@ type ListAutomationJobsParams struct {
 // CreateAutomationJobJSONRequestBody defines body for CreateAutomationJob for application/json ContentType.
 type CreateAutomationJobJSONRequestBody = JobCreateRequest
 
-// UpdateAutomationJobJSONRequestBody defines body for UpdateAutomationJob for application/json ContentType.
-type UpdateAutomationJobJSONRequestBody = JobUpdateRequest
-
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
 	// List jobs for automation
@@ -165,9 +150,6 @@ type ServerInterface interface {
 	// Get job by composite ID
 	// (GET /v1/automation/{automation_id}/job/{job_id})
 	GetAutomationJob(c *gin.Context, automationId AutomationIDPath, jobId JobID)
-	// Update job status
-	// (PATCH /v1/automation/{automation_id}/job/{job_id})
-	UpdateAutomationJob(c *gin.Context, automationId AutomationIDPath, jobId JobID)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -294,44 +276,6 @@ func (siw *ServerInterfaceWrapper) GetAutomationJob(c *gin.Context) {
 	siw.Handler.GetAutomationJob(c, automationId, jobId)
 }
 
-// UpdateAutomationJob operation middleware
-func (siw *ServerInterfaceWrapper) UpdateAutomationJob(c *gin.Context) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "automation_id" -------------
-	var automationId AutomationIDPath
-
-	err = runtime.BindStyledParameterWithOptions("simple", "automation_id", c.Param("automation_id"), &automationId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
-	if err != nil {
-		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter automation_id: %w", err), http.StatusBadRequest)
-		return
-	}
-
-	// ------------- Path parameter "job_id" -------------
-	var jobId JobID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "job_id", c.Param("job_id"), &jobId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
-	if err != nil {
-		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter job_id: %w", err), http.StatusBadRequest)
-		return
-	}
-
-	c.Set(string(BearerAuthScopes), []string{})
-
-	c.Set(string(SessionCookieScopes), []string{})
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		middleware(c)
-		if c.IsAborted() {
-			return
-		}
-	}
-
-	siw.Handler.UpdateAutomationJob(c, automationId, jobId)
-}
-
 // GinServerOptions provides options for the Gin server.
 type GinServerOptions struct {
 	BaseURL      string
@@ -362,7 +306,6 @@ func RegisterHandlersWithOptions(router gin.IRouter, si ServerInterface, options
 	router.GET(options.BaseURL+"/v1/automation/:automation_id/job", wrapper.ListAutomationJobs)
 	router.POST(options.BaseURL+"/v1/automation/:automation_id/job", wrapper.CreateAutomationJob)
 	router.GET(options.BaseURL+"/v1/automation/:automation_id/job/:job_id", wrapper.GetAutomationJob)
-	router.PATCH(options.BaseURL+"/v1/automation/:automation_id/job/:job_id", wrapper.UpdateAutomationJob)
 }
 
 type BadRequestJSONResponse ErrorResponse
@@ -572,74 +515,6 @@ func (response GetAutomationJob500JSONResponse) VisitGetAutomationJobResponse(w 
 	return err
 }
 
-type UpdateAutomationJobRequestObject struct {
-	AutomationId AutomationIDPath `json:"automation_id"`
-	JobId        JobID            `json:"job_id"`
-	Body         *UpdateAutomationJobJSONRequestBody
-}
-
-type UpdateAutomationJobResponseObject interface {
-	VisitUpdateAutomationJobResponse(w http.ResponseWriter) error
-}
-
-type UpdateAutomationJob200JSONResponse JobDataResponse
-
-func (response UpdateAutomationJob200JSONResponse) VisitUpdateAutomationJobResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(200)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type UpdateAutomationJob400JSONResponse struct{ BadRequestJSONResponse }
-
-func (response UpdateAutomationJob400JSONResponse) VisitUpdateAutomationJobResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(400)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type UpdateAutomationJob404JSONResponse struct{ NotFoundJSONResponse }
-
-func (response UpdateAutomationJob404JSONResponse) VisitUpdateAutomationJobResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(404)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type UpdateAutomationJob500JSONResponse struct {
-	InternalServerErrorJSONResponse
-}
-
-func (response UpdateAutomationJob500JSONResponse) VisitUpdateAutomationJobResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(500)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
 	// List jobs for automation
@@ -651,9 +526,6 @@ type StrictServerInterface interface {
 	// Get job by composite ID
 	// (GET /v1/automation/{automation_id}/job/{job_id})
 	GetAutomationJob(ctx context.Context, request GetAutomationJobRequestObject) (GetAutomationJobResponseObject, error)
-	// Update job status
-	// (PATCH /v1/automation/{automation_id}/job/{job_id})
-	UpdateAutomationJob(ctx context.Context, request UpdateAutomationJobRequestObject) (UpdateAutomationJobResponseObject, error)
 }
 
 type StrictHandlerFunc func(ctx *gin.Context, request any) (any, error)
@@ -803,42 +675,6 @@ func (sh *strictHandler) GetAutomationJob(ctx *gin.Context, automationId Automat
 		sh.options.HandlerErrorFunc(ctx, err)
 	} else if validResponse, ok := response.(GetAutomationJobResponseObject); ok {
 		if err := validResponse.VisitGetAutomationJobResponse(ctx.Writer); err != nil {
-			sh.options.ResponseErrorHandlerFunc(ctx, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// UpdateAutomationJob operation middleware
-func (sh *strictHandler) UpdateAutomationJob(ctx *gin.Context, automationId AutomationIDPath, jobId JobID) {
-	var request UpdateAutomationJobRequestObject
-
-	request.AutomationId = automationId
-	request.JobId = jobId
-
-	var body UpdateAutomationJobJSONRequestBody
-	if err := ctx.ShouldBindJSON(&body); err != nil {
-		sh.options.RequestErrorHandlerFunc(ctx, err)
-		return
-	}
-	request.Body = &body
-
-	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
-		return sh.ssi.UpdateAutomationJob(ctx.Request.Context(), request.(UpdateAutomationJobRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "UpdateAutomationJob")
-	}
-
-	ctx.Set("operation_id", "UpdateAutomationJob")
-
-	response, err := handler(ctx, request)
-
-	if err != nil {
-		sh.options.HandlerErrorFunc(ctx, err)
-	} else if validResponse, ok := response.(UpdateAutomationJobResponseObject); ok {
-		if err := validResponse.VisitUpdateAutomationJobResponse(ctx.Writer); err != nil {
 			sh.options.ResponseErrorHandlerFunc(ctx, err)
 		}
 	} else if response != nil {

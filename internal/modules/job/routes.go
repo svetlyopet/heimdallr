@@ -11,7 +11,6 @@ var Policies = map[string]string{
 	"ListAutomationJobs":  rbac.ScopeRead,
 	"CreateAutomationJob": rbac.ScopeAutomationWrite,
 	"GetAutomationJob":    rbac.ScopeRead,
-	"UpdateAutomationJob": rbac.ScopeAutomationWrite,
 }
 
 func RegisterRoutes(rg *gin.RouterGroup, handler Handler, authorizer rbac.Authorizer, appLogger *logger.Logger) {

@@ -25,33 +25,24 @@
           Authorization: "Bearer {{ login_response.json.data.token }}"
           Content-Type: application/json
 
-    - name: Register job
-      ansible.builtin.uri:
-        url: "{{ heimdallr_url }}/api/v1/automation/{{ automation_id }}/job"
-        method: POST
-        headers: "{{ auth_headers }}"
-        body_format: json
-        body:
-          id: "{{ job_id }}"
-          status: started
-          location: global
-          url: "https://example.com/#/jobs/playbook/201"
-          metadata:
-            inventory: "true"
-        status_code: 201
-
     - block:
         - name: Force failure
           ansible.builtin.fail:
             msg: "Simulated job failure"
 
       rescue:
-        - name: Set failed job status
+        - name: Push failed job
           ansible.builtin.uri:
-            url: "{{ heimdallr_url }}/api/v1/automation/{{ automation_id }}/job/{{ job_id }}"
-            method: PATCH
+            url: "{{ heimdallr_url }}/api/v1/automation/{{ automation_id }}/job"
+            method: POST
             headers: "{{ auth_headers }}"
             body_format: json
             body:
+              id: "{{ job_id }}"
               status: failed
-            status_code: 200
+              location: global
+              url: "https://example.com/#/jobs/playbook/201"
+              metadata:
+                inventory: "true"
+              output: "{{ '<h2>E2E job failure</h2>' | b64encode }}"
+            status_code: 201

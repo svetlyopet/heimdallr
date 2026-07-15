@@ -546,35 +546,6 @@ paths:
         "500":
           $ref: "#/components/responses/InternalServerError"
 
-    patch:
-      tags:
-        - Job
-      summary: Update job status
-      description: Updates a job scoped by automation ID and job ID.
-      operationId: updateAutomationJob
-      parameters:
-        - $ref: "#/components/parameters/AutomationIDPath"
-        - $ref: "#/components/parameters/JobID"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/JobUpdateRequest"
-      responses:
-        "200":
-          description: Job updated successfully
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/JobDataResponse"
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "404":
-          $ref: "#/components/responses/NotFound"
-        "500":
-          $ref: "#/components/responses/InternalServerError"
-
   /v1/report:
     get:
       tags:
@@ -1919,23 +1890,11 @@ components:
           $ref: "#/components/schemas/JobMetadata"
         output:
           $ref: "#/components/schemas/JobOutput"
-
-    JobUpdateRequest:
-      type: object
-      required:
-        - status
-      properties:
-        status:
-          $ref: "#/components/schemas/JobStatus"
-        metadata:
-          $ref: "#/components/schemas/JobMetadata"
-        output:
-          $ref: "#/components/schemas/JobOutput"
+          description: Required when status is success or failed. Decoded content is limited to 4 MiB by default.
 
     JobStatus:
       type: string
       enum:
-        - started
         - skipped
         - success
         - failed
@@ -2550,7 +2509,6 @@ components:
         - total_jobs
         - successful_jobs
         - failed_jobs
-        - started_jobs
         - success_rate
       properties:
         location:
@@ -2562,9 +2520,6 @@ components:
           type: integer
           minimum: 0
         failed_jobs:
-          type: integer
-          minimum: 0
-        started_jobs:
           type: integer
           minimum: 0
         success_rate:
@@ -2580,7 +2535,6 @@ components:
         - total_jobs
         - successful_jobs
         - failed_jobs
-        - started_jobs
         - success_rate
       properties:
         automation_id:
@@ -2598,9 +2552,6 @@ components:
         failed_jobs:
           type: integer
           minimum: 0
-        started_jobs:
-          type: integer
-          minimum: 0
         success_rate:
           type: number
           format: double
@@ -2612,7 +2563,6 @@ components:
         - total_jobs
         - successful_jobs
         - failed_jobs
-        - started_jobs
         - success_rate
         - by_location
         - by_automation
@@ -2627,9 +2577,6 @@ components:
           type: integer
           minimum: 0
         failed_jobs:
-          type: integer
-          minimum: 0
-        started_jobs:
           type: integer
           minimum: 0
         success_rate:

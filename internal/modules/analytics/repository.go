@@ -26,7 +26,6 @@ type jobTotals struct {
 	TotalJobs      int64
 	SuccessfulJobs int64
 	FailedJobs     int64
-	StartedJobs    int64
 }
 
 type locationJobRow struct {
@@ -34,7 +33,6 @@ type locationJobRow struct {
 	TotalJobs      int64
 	SuccessfulJobs int64
 	FailedJobs     int64
-	StartedJobs    int64
 }
 
 type automationJobRow struct {
@@ -44,7 +42,6 @@ type automationJobRow struct {
 	TotalJobs      int64
 	SuccessfulJobs int64
 	FailedJobs     int64
-	StartedJobs    int64
 }
 
 type reportTotals struct {
@@ -129,8 +126,7 @@ func (r repository) getTotals(ctx context.Context, automationID string) (jobTota
 		Select(`
 			COUNT(*) AS total_jobs,
 			SUM(CASE WHEN jobs.status = 'success' THEN 1 ELSE 0 END) AS successful_jobs,
-			SUM(CASE WHEN jobs.status = 'failed' THEN 1 ELSE 0 END) AS failed_jobs,
-			SUM(CASE WHEN jobs.status = 'started' THEN 1 ELSE 0 END) AS started_jobs
+			SUM(CASE WHEN jobs.status = 'failed' THEN 1 ELSE 0 END) AS failed_jobs
 		`)
 
 	if automationID != "" {
@@ -155,8 +151,7 @@ func (r repository) getByLocation(ctx context.Context, automationID string) ([]a
 			jobs.location AS location,
 			COUNT(*) AS total_jobs,
 			SUM(CASE WHEN jobs.status = 'success' THEN 1 ELSE 0 END) AS successful_jobs,
-			SUM(CASE WHEN jobs.status = 'failed' THEN 1 ELSE 0 END) AS failed_jobs,
-			SUM(CASE WHEN jobs.status = 'started' THEN 1 ELSE 0 END) AS started_jobs
+			SUM(CASE WHEN jobs.status = 'failed' THEN 1 ELSE 0 END) AS failed_jobs
 		`).
 		Group("jobs.location").
 		Order("total_jobs DESC")
@@ -185,8 +180,7 @@ func (r repository) getByAutomation(ctx context.Context, automationID string) ([
 			jobs.provider,
 			COUNT(*) AS total_jobs,
 			SUM(CASE WHEN jobs.status = 'success' THEN 1 ELSE 0 END) AS successful_jobs,
-			SUM(CASE WHEN jobs.status = 'failed' THEN 1 ELSE 0 END) AS failed_jobs,
-			SUM(CASE WHEN jobs.status = 'started' THEN 1 ELSE 0 END) AS started_jobs
+			SUM(CASE WHEN jobs.status = 'failed' THEN 1 ELSE 0 END) AS failed_jobs
 		`).
 		Group("jobs.automation_id, jobs.automation, jobs.provider").
 		Order("total_jobs DESC")
@@ -221,7 +215,6 @@ func buildAutomationAnalytics(
 		TotalJobs:        int(totals.TotalJobs),
 		SuccessfulJobs:   int(totals.SuccessfulJobs),
 		FailedJobs:       int(totals.FailedJobs),
-		StartedJobs:      int(totals.StartedJobs),
 		SuccessRate:      calculateSuccessRate(totals.SuccessfulJobs, totals.TotalJobs),
 		ByLocation:       byLocation,
 		ByAutomation:     byAutomation,
@@ -236,7 +229,6 @@ func mapLocationRows(rows []locationJobRow) []api.LocationJobAnalytics {
 			TotalJobs:      int(row.TotalJobs),
 			SuccessfulJobs: int(row.SuccessfulJobs),
 			FailedJobs:     int(row.FailedJobs),
-			StartedJobs:    int(row.StartedJobs),
 			SuccessRate:    calculateSuccessRate(row.SuccessfulJobs, row.TotalJobs),
 		})
 	}
@@ -254,7 +246,6 @@ func mapAutomationRows(rows []automationJobRow) []api.AutomationJobAnalytics {
 			TotalJobs:      int(row.TotalJobs),
 			SuccessfulJobs: int(row.SuccessfulJobs),
 			FailedJobs:     int(row.FailedJobs),
-			StartedJobs:    int(row.StartedJobs),
 			SuccessRate:    calculateSuccessRate(row.SuccessfulJobs, row.TotalJobs),
 		})
 	}

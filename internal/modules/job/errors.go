@@ -12,7 +12,6 @@ const (
 	ErrMsgInvalidMetadata     = "invalid metadata structure"
 	ErrMsgInvalidOutput       = "invalid output encoding"
 	ErrMsgCreateJob           = "failed to create job"
-	ErrMsgUpdateJob           = "failed to update job"
 	ErrMsgGetJob              = "failed to get job"
 	ErrMsgListJobs            = "failed to list jobs"
 )
@@ -25,7 +24,6 @@ var (
 	ErrInvalidMetadata     = errors.New(ErrMsgInvalidMetadata)
 	ErrInvalidOutput       = errors.New(ErrMsgInvalidOutput)
 	ErrCreateJob           = errors.New(ErrMsgCreateJob)
-	ErrUpdateJob           = errors.New(ErrMsgUpdateJob)
 	ErrGetJob              = errors.New(ErrMsgGetJob)
 	ErrListJobs            = errors.New(ErrMsgListJobs)
 )
@@ -76,10 +74,6 @@ func NewInvalidOutputError(err error) error { return NewJobError(ErrInvalidOutpu
 
 func NewCreateJobError(err error) error {
 	return NewJobError(ErrCreateJob.Error(), err)
-}
-
-func NewUpdateJobError(err error) error {
-	return NewJobError(ErrUpdateJob.Error(), err)
 }
 
 func NewGetJobError(err error) error {

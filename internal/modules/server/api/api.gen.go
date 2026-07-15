@@ -25,7 +25,6 @@ const (
 const (
 	Failed  JobStatus = "failed"
 	Skipped JobStatus = "skipped"
-	Started JobStatus = "started"
 	Success JobStatus = "success"
 )
 
@@ -35,8 +34,6 @@ func (e JobStatus) Valid() bool {
 	case Failed:
 		return true
 	case Skipped:
-		return true
-	case Started:
 		return true
 	case Success:
 		return true

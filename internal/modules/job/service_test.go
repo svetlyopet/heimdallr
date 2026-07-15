@@ -30,7 +30,7 @@ func newJobService(t *testing.T) (Service, automation.Service, provider.Service)
 	return jobSvc, automationSvc, providerSvc
 }
 
-func TestServiceCreateAndUpdateJobLifecycle(t *testing.T) {
+func TestServiceCreateJob(t *testing.T) {
 	jobSvc, automationSvc, providerSvc := newJobService(t)
 
 	prov, err := providerSvc.Create(context.Background(), providerapi.ProviderCreateRequest{
@@ -47,28 +47,59 @@ func TestServiceCreateAndUpdateJobLifecycle(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	metadata := api.JobMetadata{"inventory": "true"}
+	metadata := api.JobMetadata{"inventory": "true", "result": "ok"}
+	output := api.JobOutput("dGVzdA==")
 	created, err := jobSvc.Create(context.Background(), auto.Id.String(), api.JobCreateRequest{
 		Id:       "1000",
-		Status:   api.Started,
+		Status:   api.Success,
 		Location: "global",
 		Url:      "https://example.com/#/jobs/playbook/200",
 		Metadata: &metadata,
-	})
-	require.NoError(t, err)
-	require.Equal(t, api.JobStatus("started"), created.Status)
-
-	updateMetadata := api.JobMetadata{"result": "ok"}
-	output := api.JobOutput("dGVzdA==")
-	updated, err := jobSvc.Update(context.Background(), auto.Id.String(), "1000", api.JobUpdateRequest{
-		Status:   api.Success,
-		Metadata: &updateMetadata,
 		Output:   &output,
 	})
 	require.NoError(t, err)
-	require.Equal(t, api.Success, updated.Status)
-	require.NotNil(t, updated.Output)
-	require.Equal(t, "dGVzdA==", string(*updated.Output))
+	require.Equal(t, api.Success, created.Status)
+	require.NotNil(t, created.Output)
+	require.Equal(t, "dGVzdA==", string(*created.Output))
+}
+
+func TestServiceCreateSkippedJobWithoutOutput(t *testing.T) {
+	jobSvc, automationSvc, providerSvc := newJobService(t)
+
+	prov, err := providerSvc.Create(context.Background(), providerapi.ProviderCreateRequest{Name: "awx", Url: providerapi.URL("https://awx.example.com")})
+	require.NoError(t, err)
+
+	url := "https://awx.example.com/#/templates/job_template/1"
+	auto, err := automationSvc.Create(context.Background(), automationapi.AutomationCreateRequest{
+		Name: "deploy", Url: &url, ProviderId: prov.Id,
+	})
+	require.NoError(t, err)
+
+	created, err := jobSvc.Create(context.Background(), auto.Id.String(), api.JobCreateRequest{
+		Id: "1000", Status: api.Skipped, Location: "global", Url: "https://example.com/#/jobs/playbook/200",
+	})
+	require.NoError(t, err)
+	require.Equal(t, api.Skipped, created.Status)
+	require.Nil(t, created.Output)
+}
+
+func TestServiceCreateRejectsSuccessWithoutOutput(t *testing.T) {
+	jobSvc, automationSvc, providerSvc := newJobService(t)
+
+	prov, err := providerSvc.Create(context.Background(), providerapi.ProviderCreateRequest{Name: "awx", Url: providerapi.URL("https://awx.example.com")})
+	require.NoError(t, err)
+
+	url := "https://awx.example.com/#/templates/job_template/1"
+	auto, err := automationSvc.Create(context.Background(), automationapi.AutomationCreateRequest{
+		Name: "deploy", Url: &url, ProviderId: prov.Id,
+	})
+	require.NoError(t, err)
+
+	_, err = jobSvc.Create(context.Background(), auto.Id.String(), api.JobCreateRequest{
+		Id: "1000", Status: api.Success, Location: "global", Url: "https://example.com/#/jobs/playbook/200",
+	})
+	require.Error(t, err)
+	require.ErrorIs(t, err, ErrInvalidOutput)
 }
 
 func TestServiceCreateReturnsInvalidOutputForBadBase64(t *testing.T) {
@@ -90,7 +121,7 @@ func TestServiceCreateReturnsInvalidOutputForBadBase64(t *testing.T) {
 			})
 
 			_, err := jobSvc.Create(ctx, uuid.NewString(), api.JobCreateRequest{
-				Id: "1000", Status: api.Started, Location: "global", Url: "https://example.com/job/1", Output: &testCase.output,
+				Id: "1000", Status: api.Success, Location: "global", Url: "https://example.com/job/1", Output: &testCase.output,
 			})
 
 			require.Error(t, err)
@@ -151,10 +182,6 @@ func (s stubJobRepository) Create(context.Context, Job) (Job, error) {
 	return Job{}, nil
 }
 
-func (s stubJobRepository) Update(context.Context, Job) (Job, error) {
-	return Job{}, nil
-}
-
 func TestServiceGetAllReturnsListError(t *testing.T) {
 	svc := NewService(stubJobRepository{findAllErr: errors.New("boom")}, stubAutomationLookup{}, nil)
 
@@ -167,8 +194,9 @@ func TestServiceCreateReturnsNotFoundForMissingAutomation(t *testing.T) {
 		getByIdError: automation.ErrAutomationNotFound,
 	}, nil)
 
+	output := api.JobOutput("dGVzdA==")
 	_, err := jobSvc.Create(context.Background(), uuid.NewString(), api.JobCreateRequest{
-		Id: "1000", Status: api.Started, Location: "global", Url: "https://example.com/job/1",
+		Id: "1000", Status: api.Success, Location: "global", Url: "https://example.com/job/1", Output: &output,
 	})
 	require.ErrorIs(t, err, automation.ErrAutomationNotFound)
 }
@@ -176,8 +204,9 @@ func TestServiceCreateReturnsNotFoundForMissingAutomation(t *testing.T) {
 func TestServiceCreateReturnsInvalidAutomationID(t *testing.T) {
 	jobSvc := NewService(stubJobRepository{}, stubAutomationLookup{}, nil)
 
+	output := api.JobOutput("dGVzdA==")
 	_, err := jobSvc.Create(context.Background(), "not-a-uuid", api.JobCreateRequest{
-		Id: "1000", Status: api.Started, Location: "global", Url: "https://example.com/job/1",
+		Id: "1000", Status: api.Success, Location: "global", Url: "https://example.com/job/1", Output: &output,
 	})
 	require.ErrorIs(t, err, ErrInvalidAutomationID)
 }

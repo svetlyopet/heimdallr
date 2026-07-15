@@ -69,11 +69,6 @@ tbody tr:hover {
     font-weight: 900;
 }
 
-.badge-started {
-    color: #92400e;
-    background: #fef3c7;
-}
-
 .badge-success {
     color: #166534;
     background: #dcfce7;

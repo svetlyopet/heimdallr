@@ -22,8 +22,6 @@ type stubJobService struct {
 	getError     error
 	createResp   api.Job
 	createError  error
-	updateResp   api.Job
-	updateError  error
 }
 
 func (s stubJobService) GetAll(_ context.Context, _ string, _ int, _ int) ([]api.Job, int64, error) {
@@ -50,14 +48,6 @@ func (s stubJobService) Create(_ context.Context, _ string, _ api.JobCreateReque
 	return s.createResp, nil
 }
 
-func (s stubJobService) Update(_ context.Context, _, _ string, _ api.JobUpdateRequest) (api.Job, error) {
-	if s.updateError != nil {
-		return api.Job{}, s.updateError
-	}
-
-	return s.updateResp, nil
-}
-
 func newJobRouter(t *testing.T, svc Service) *gin.Engine {
 	t.Helper()
 
@@ -76,9 +66,10 @@ func newJobRouter(t *testing.T, svc Service) *gin.Engine {
 
 func TestHandlerCreateReturnsBadRequestForInvalidAutomationID(t *testing.T) {
 	r := newJobRouter(t, stubJobService{})
+	output := api.JobOutput("dGVzdA==")
 
 	rr := testutil.DoGinJSONRequest(t, r, http.MethodPost, "/api/v1/automation/not-a-uuid/job", api.JobCreateRequest{
-		Id: "1000", Status: api.Started, Location: "global", Url: "https://example.com/job/1",
+		Id: "1000", Status: api.Success, Location: "global", Url: "https://example.com/job/1", Output: &output,
 	}, nil)
 	require.Equal(t, http.StatusBadRequest, rr.Code)
 }
@@ -86,41 +77,20 @@ func TestHandlerCreateReturnsBadRequestForInvalidAutomationID(t *testing.T) {
 func TestHandlerCreateReturnsCreated(t *testing.T) {
 	automationID := uuid.New()
 	r := newJobRouter(t, stubJobService{
-		createResp: api.Job{Id: "1000", Status: api.Started},
+		createResp: api.Job{Id: "1000", Status: api.Success},
 	})
 
 	path := "/api/v1/automation/" + automationID.String() + "/job"
 	metadata := api.JobMetadata{"inventory": "true"}
+	output := api.JobOutput("dGVzdA==")
 	rr := testutil.DoGinJSONRequest(t, r, http.MethodPost, path, api.JobCreateRequest{
-		Id: "1000", Status: api.Started, Location: "global", Url: "https://example.com/job/1",
-		Metadata: &metadata,
+		Id: "1000", Status: api.Success, Location: "global", Url: "https://example.com/job/1",
+		Metadata: &metadata, Output: &output,
 	}, nil)
 	response := testutil.AssertJSONStatus(t, rr, http.StatusCreated)
 	data, ok := response["data"].(map[string]any)
 	require.True(t, ok)
-	require.Equal(t, "started", data["status"])
-}
-
-func TestHandlerUpdateReturnsNotFound(t *testing.T) {
-	automationID := uuid.New()
-	r := newJobRouter(t, stubJobService{updateError: ErrJobNotFound})
-
-	path := "/api/v1/automation/" + automationID.String() + "/job/1000"
-	rr := testutil.DoGinJSONRequest(t, r, http.MethodPatch, path, api.JobUpdateRequest{Status: api.Success}, nil)
-	require.Equal(t, http.StatusNotFound, rr.Code)
-}
-
-func TestHandlerUpdateReturnsBadRequestForInvalidOutput(t *testing.T) {
-	automationID := uuid.New()
-	r := newJobRouter(t, stubJobService{})
-
-	path := "/api/v1/automation/" + automationID.String() + "/job/1000"
-	output := api.JobOutput("not-base64!")
-	rr := testutil.DoGinJSONRequest(t, r, http.MethodPatch, path, api.JobUpdateRequest{
-		Status: api.Success,
-		Output: &output,
-	}, nil)
-	require.Equal(t, http.StatusBadRequest, rr.Code)
+	require.Equal(t, "success", data["status"])
 }
 
 func TestHandlerGetReturnsJob(t *testing.T) {

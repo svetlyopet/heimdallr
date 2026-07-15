@@ -35,21 +35,15 @@ func TestOperationsFlow(t *testing.T) {
 	automationID := dataField(t, automationBody)["id"].(string)
 
 	jobPath := "/api/v1/automation/" + automationID + "/job"
-	resp, _ = doRequest(t, ts, http.MethodPost, jobPath, map[string]any{
+	resp, jobBody := doRequest(t, ts, http.MethodPost, jobPath, map[string]any{
 		"id":       "1000",
-		"status":   "started",
+		"status":   "success",
 		"location": "global",
 		"url":      "https://example.com/#/jobs/playbook/200",
-		"metadata": map[string]string{"inventory": "true"},
-	}, headers)
-	require.Equal(t, http.StatusCreated, resp.StatusCode)
-
-	resp, jobBody := doRequest(t, ts, http.MethodPatch, jobPath+"/1000", map[string]any{
-		"status":   "success",
-		"metadata": map[string]string{"result": "ok"},
+		"metadata": map[string]string{"inventory": "true", "result": "ok"},
 		"output":   "dGVzdA==",
 	}, headers)
-	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
 	require.Equal(t, "success", dataField(t, jobBody)["status"])
 	require.Equal(t, "dGVzdA==", dataField(t, jobBody)["output"])
 }

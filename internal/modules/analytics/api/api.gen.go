@@ -44,7 +44,6 @@ type AutomationAnalytics struct {
 	ByAutomation     []AutomationJobAnalytics `json:"by_automation"`
 	ByLocation       []LocationJobAnalytics   `json:"by_location"`
 	FailedJobs       int                      `json:"failed_jobs"`
-	StartedJobs      int                      `json:"started_jobs"`
 	SuccessRate      float64                  `json:"success_rate"`
 	SuccessfulJobs   int                      `json:"successful_jobs"`
 	TotalAutomations int                      `json:"total_automations"`
@@ -57,7 +56,6 @@ type AutomationJobAnalytics struct {
 	AutomationId   string  `json:"automation_id"`
 	FailedJobs     int     `json:"failed_jobs"`
 	Provider       string  `json:"provider"`
-	StartedJobs    int     `json:"started_jobs"`
 	SuccessRate    float64 `json:"success_rate"`
 	SuccessfulJobs int     `json:"successful_jobs"`
 	TotalJobs      int     `json:"total_jobs"`
@@ -114,7 +112,6 @@ type LocationFleetCompliance struct {
 type LocationJobAnalytics struct {
 	FailedJobs     int     `json:"failed_jobs"`
 	Location       string  `json:"location"`
-	StartedJobs    int     `json:"started_jobs"`
 	SuccessRate    float64 `json:"success_rate"`
 	SuccessfulJobs int     `json:"successful_jobs"`
 	TotalJobs      int     `json:"total_jobs"`

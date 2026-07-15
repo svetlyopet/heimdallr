@@ -113,49 +113,6 @@ func (h handler) GetAutomationJob(ctx context.Context, request api.GetAutomation
 	return api.GetAutomationJob200JSONResponse{Data: job}, nil
 }
 
-func (h handler) UpdateAutomationJob(ctx context.Context, request api.UpdateAutomationJobRequestObject) (api.UpdateAutomationJobResponseObject, error) {
-	if request.Body == nil {
-		return api.UpdateAutomationJob400JSONResponse{
-			BadRequestJSONResponse: api.BadRequestJSONResponse{Error: "invalid request body"},
-		}, nil
-	}
-
-	if request.Body.Metadata != nil {
-		if _, err := json.Marshal(request.Body.Metadata); err != nil {
-			return api.UpdateAutomationJob400JSONResponse{
-				BadRequestJSONResponse: api.BadRequestJSONResponse{Error: "invalid metadata"},
-			}, nil
-		}
-	}
-
-	if request.Body.Output != nil && validateOutput(ctx, *request.Body.Output) != nil {
-		return api.UpdateAutomationJob400JSONResponse{
-			BadRequestJSONResponse: api.BadRequestJSONResponse{Error: "invalid output"},
-		}, nil
-	}
-
-	job, err := h.service.Update(ctx, request.AutomationId.String(), request.JobId, *request.Body)
-	if err != nil {
-		if errors.Is(err, ErrJobNotFound) {
-			return api.UpdateAutomationJob404JSONResponse{
-				NotFoundJSONResponse: api.NotFoundJSONResponse{Error: jobErrorMessage(err, "job not found")},
-			}, nil
-		}
-
-		if _, ok := errors.AsType[JobError](err); ok {
-			return api.UpdateAutomationJob400JSONResponse{
-				BadRequestJSONResponse: api.BadRequestJSONResponse{Error: jobErrorMessage(err, "invalid request")},
-			}, nil
-		}
-
-		return api.UpdateAutomationJob500JSONResponse{
-			InternalServerErrorJSONResponse: api.InternalServerErrorJSONResponse{Error: jobErrorMessage(err, "failed to update job")},
-		}, nil
-	}
-
-	return api.UpdateAutomationJob200JSONResponse{Data: job}, nil
-}
-
 func NewHandler(service Service) (Handler, error) {
 	return &handler{
 		service: service,

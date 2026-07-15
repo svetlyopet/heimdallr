@@ -80,7 +80,7 @@ func TestRepositoryGetAutomationOverviewAggregatesData(t *testing.T) {
 
 	createJob(t, db, "job-1", a1, "success", "eu")
 	createJob(t, db, "job-2", a1, "failed", "eu")
-	createJob(t, db, "job-3", a2, "started", "us")
+	createJob(t, db, "job-3", a2, "skipped", "us")
 
 	response, err := repo.GetAutomationOverview(t.Context())
 	require.NoError(t, err)
@@ -88,7 +88,6 @@ func TestRepositoryGetAutomationOverviewAggregatesData(t *testing.T) {
 	require.Equal(t, 3, response.TotalJobs)
 	require.Equal(t, 1, response.SuccessfulJobs)
 	require.Equal(t, 1, response.FailedJobs)
-	require.Equal(t, 1, response.StartedJobs)
 	require.Equal(t, 33.33333333333333, response.SuccessRate)
 	require.Len(t, response.ByLocation, 2)
 	require.Len(t, response.ByAutomation, 2)

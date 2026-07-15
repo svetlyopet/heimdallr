@@ -12,7 +12,6 @@ type Repository interface {
 	FindAll(ctx context.Context, automationId string, limit int, offset int) ([]Job, int64, error)
 	FindById(ctx context.Context, jobId string, automationId string) (Job, error)
 	Create(ctx context.Context, job Job) (Job, error)
-	Update(ctx context.Context, job Job) (Job, error)
 }
 
 type repository struct {
@@ -113,52 +112,6 @@ func (r repository) Create(ctx context.Context, job Job) (Job, error) {
 		}
 
 		returnedJob = createdJob
-		return nil
-	})
-
-	if err != nil {
-		return Job{}, err
-	}
-
-	return returnedJob, nil
-}
-
-func (r repository) Update(ctx context.Context, job Job) (Job, error) {
-	job.ID = strings.TrimSpace(job.ID)
-	job.Status = strings.TrimSpace(job.Status)
-	job.Output = strings.TrimSpace(job.Output)
-
-	if job.ID == "" || job.AutomationID == uuid.Nil {
-		return Job{}, ErrInvalidInput
-	}
-
-	var returnedJob Job
-
-	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		result := tx.
-			Model(&Job{}).
-			Where("id = ? AND automation_id = ?", job.ID, job.AutomationID).
-			Select("status", "metadata", "output").
-			Updates(Job{
-				Status:   job.Status,
-				Metadata: job.Metadata,
-				Output:   job.Output,
-			})
-
-		if result.Error != nil {
-			return result.Error
-		}
-
-		if result.RowsAffected == 0 {
-			return gorm.ErrRecordNotFound
-		}
-
-		updatedJob, err := findJobById(ctx, tx, job.ID, job.AutomationID.String())
-		if err != nil {
-			return err
-		}
-
-		returnedJob = updatedJob
 		return nil
 	})
 

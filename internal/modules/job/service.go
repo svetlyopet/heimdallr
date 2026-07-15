@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/svetlyopet/heimdallr/internal/logger"
@@ -19,7 +20,6 @@ type Service interface {
 	GetAll(ctx context.Context, automationId string, page int, limit int) ([]api.Job, int64, error)
 	GetById(ctx context.Context, jobId string, automationId string) (api.Job, error)
 	Create(ctx context.Context, automationId string, req api.JobCreateRequest) (api.Job, error)
-	Update(ctx context.Context, automationId string, jobId string, req api.JobUpdateRequest) (api.Job, error)
 }
 
 type service struct {
@@ -105,6 +105,13 @@ func (s service) Create(ctx context.Context, automationId string, req api.JobCre
 	if req.Output != nil {
 		output = *req.Output
 	}
+
+	if req.Status == api.Success || req.Status == api.Failed {
+		if strings.TrimSpace(output) == "" {
+			return api.Job{}, NewJobError("output is required for success and failed jobs", ErrInvalidOutput)
+		}
+	}
+
 	if outputErr := validation.ValidateBase64Output(output, requestlimits.MaxDecodedOutputBytes(ctx)); outputErr != nil {
 		return api.Job{}, NewInvalidOutputError(outputErr)
 	}
@@ -161,64 +168,6 @@ func (s service) Create(ctx context.Context, automationId string, req api.JobCre
 			slog.String("automation_id", automationId),
 		)
 		return api.Job{}, ErrCreateJob
-	}
-	return jobResponse, nil
-}
-
-func (s service) Update(ctx context.Context, automationId string, jobId string, req api.JobUpdateRequest) (api.Job, error) {
-	parsedAutomationID, err := uuid.Parse(automationId)
-	if err != nil {
-		return api.Job{}, ErrInvalidAutomationID
-	}
-
-	output := ""
-	if req.Output != nil {
-		output = *req.Output
-	}
-
-	if outputErr := validation.ValidateBase64Output(output, requestlimits.MaxDecodedOutputBytes(ctx)); outputErr != nil {
-		return api.Job{}, NewInvalidOutputError(outputErr)
-	}
-
-	metadata, err := marshalMetadata(req.Metadata)
-	if err != nil {
-		return api.Job{}, NewInvalidMetadataError(err)
-	}
-
-	job := Job{
-		ID:           jobId,
-		AutomationID: parsedAutomationID,
-		Status:       string(req.Status),
-		Metadata:     metadata,
-		Output:       output,
-	}
-
-	updatedJob, err := s.repository.Update(ctx, job)
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return api.Job{}, ErrJobNotFound
-		}
-
-		s.logger.ErrorWithStack(
-			ctx,
-			"failed to update job",
-			err,
-			slog.String("job_id", jobId),
-			slog.String("automation_id", automationId),
-		)
-		return api.Job{}, ErrUpdateJob
-	}
-
-	jobResponse, err := mapEntityToResponse(updatedJob)
-	if err != nil {
-		s.logger.ErrorWithStack(
-			ctx,
-			"failed to map job to response",
-			err,
-			slog.String("job_id", updatedJob.ID),
-			slog.String("automation_id", automationId),
-		)
-		return api.Job{}, ErrUpdateJob
 	}
 	return jobResponse, nil
 }

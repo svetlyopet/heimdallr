@@ -176,7 +176,7 @@ demo_jobs:
   - id: demo-job-007
     automation: demo-deploy
     location: dc1
-    status: started
+    status: skipped
     url: https://example.com/#/jobs/playbook/206
   - id: demo-job-008
     automation: demo-patch
@@ -211,7 +211,7 @@ demo_jobs:
   - id: demo-job-014
     automation: demo-patch
     location: dc2
-    status: started
+    status: skipped
     url: https://example.com/#/jobs/playbook/213
   - id: demo-job-015
     automation: demo-backup

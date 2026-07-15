@@ -26,7 +26,11 @@
           Authorization: "Bearer {{ login_response.json.data.token }}"
           Content-Type: application/json
 
-    - name: Register job
+    - name: Do work
+      ansible.builtin.debug:
+        msg: "Doing work"
+
+    - name: Push successful job
       ansible.builtin.uri:
         url: "{{ heimdallr_url }}/api/v1/automation/{{ automation_id }}/job"
         method: POST
@@ -34,25 +38,11 @@
         body_format: json
         body:
           id: "{{ job_id }}"
-          status: started
+          status: "{{ job_status }}"
           location: global
           url: "https://example.com/#/jobs/playbook/200"
           metadata:
             hypervisor: kvm
             inventory: "true"
-        status_code: 201
-
-    - name: Do work
-      ansible.builtin.debug:
-        msg: "Doing work"
-
-    - name: Set success job status
-      ansible.builtin.uri:
-        url: "{{ heimdallr_url }}/api/v1/automation/{{ automation_id }}/job/{{ job_id }}"
-        method: PATCH
-        headers: "{{ auth_headers }}"
-        body_format: json
-        body:
-          status: "{{ job_status }}"
           output: "{{ '<h2>E2E job output</h2>' | b64encode }}"
-        status_code: 200
+        status_code: 201

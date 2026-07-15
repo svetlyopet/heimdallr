@@ -66,42 +66,14 @@
     body_format: json
     body:
       id: "{{ item.id }}"
-      status: started
+      status: "{{ item.status }}"
       location: "{{ item.location }}"
       url: "{{ item.url }}"
       metadata:
         hypervisor: kvm
         inventory: "true"
+      output: "{{ '<h2>Demo job output</h2>' | b64encode if item.status in ['success', 'failed'] else omit }}"
     status_code: [201, 409, 500]
   loop: "{{ demo_jobs }}"
   loop_control:
     label: "{{ item.id }}"
-
-- name: Finalize jobs
-  ansible.builtin.uri:
-    url: "{{ heimdallr_url }}/api/v1/automation/{{ demo_automation_ids[item.automation] }}/job/{{ item.id }}"
-    method: PATCH
-    headers: "{{ auth_headers }}"
-    body_format: json
-    body:
-      status: "{{ item.status }}"
-      output: "{{ '<h2>Demo job output</h2>' | b64encode }}"
-    status_code: 200
-  loop: "{{ demo_jobs }}"
-  loop_control:
-    label: "{{ item.id }}"
-  when: item.status == 'success'
-
-- name: Mark failed jobs
-  ansible.builtin.uri:
-    url: "{{ heimdallr_url }}/api/v1/automation/{{ demo_automation_ids[item.automation] }}/job/{{ item.id }}"
-    method: PATCH
-    headers: "{{ auth_headers }}"
-    body_format: json
-    body:
-      status: failed
-    status_code: 200
-  loop: "{{ demo_jobs }}"
-  loop_control:
-    label: "{{ item.id }}"
-  when: item.status == 'failed'

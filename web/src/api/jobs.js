@@ -14,10 +14,3 @@ export function createJob(automationId, payload) {
 export function getJob(automationId, jobId) {
     return apiRequest(`/v1/automation/${automationId}/job/${jobId}`);
 }
-
-export function updateJob(automationId, jobId, payload) {
-    return apiRequest(`/v1/automation/${automationId}/job/${jobId}`, {
-        method: "PATCH",
-        body: JSON.stringify(payload),
-    });
-}
