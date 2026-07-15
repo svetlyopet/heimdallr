@@ -69,29 +69,29 @@ func FleetComplianceSeed(t *testing.T, c *Client, runID string) FleetComplianceS
 			return excludeFleetAgentIDs(ids, "Flexera")
 		}},
 		{Suffix: "12", Location: "dc1", AgentIDs: func(ids map[string]string) []string {
-			return excludeFleetAgentIDs(ids, "TrendMicro")
+			return excludeFleetAgentIDs(ids, "CrowdStrike")
 		}},
 		{Suffix: "13", Location: "dc2", AgentIDs: func(ids map[string]string) []string {
-			return excludeFleetAgentIDs(ids, "Qualys")
+			return excludeFleetAgentIDs(ids, "Tenable")
 		}},
 		{Suffix: "14", Location: "dc2", AgentIDs: func(ids map[string]string) []string {
-			return excludeFleetAgentIDs(ids, "Zabbix")
+			return excludeFleetAgentIDs(ids, "Nagios")
 		}},
 		{Suffix: "15", Location: "dc3", AgentIDs: func(ids map[string]string) []string {
 			return excludeFleetAgentIDs(ids, "Tanium")
 		}},
 		{Suffix: "16", Location: "dc1", AgentIDs: func(ids map[string]string) []string {
-			return excludeFleetAgentIDs(ids, "Flexera", "TrendMicro")
+			return excludeFleetAgentIDs(ids, "Flexera", "CrowdStrike")
 		}},
 		{Suffix: "17", Location: "dc2", AgentIDs: func(ids map[string]string) []string {
-			return excludeFleetAgentIDs(ids, "Qualys", "Zabbix")
+			return excludeFleetAgentIDs(ids, "Tenable", "Nagios")
 		}},
 		{Suffix: "18", Location: "dc3", AgentIDs: func(ids map[string]string) []string {
 			return []string{ids["Tanium"]}
 		}},
 		{Suffix: "19", Location: "dc3", AgentIDs: func(map[string]string) []string { return []string{} }},
 		{Suffix: "20", Location: "dc1", AgentIDs: func(ids map[string]string) []string {
-			return excludeFleetAgentIDs(ids, "Zabbix")
+			return excludeFleetAgentIDs(ids, "Nagios")
 		}},
 	}
 
