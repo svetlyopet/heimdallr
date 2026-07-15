@@ -7,6 +7,7 @@ import (
 
 	"github.com/svetlyopet/heimdallr/internal/logger"
 	"github.com/svetlyopet/heimdallr/internal/modules/analytics/api"
+	"github.com/svetlyopet/heimdallr/internal/pagination"
 )
 
 type Service interface {
@@ -14,6 +15,7 @@ type Service interface {
 	GetAutomationOverviewByID(ctx context.Context, automationID string) (api.AutomationAnalytics, error)
 	GetComplianceOverview(ctx context.Context) (api.ComplianceAnalytics, error)
 	GetFleetComplianceOverview(ctx context.Context) (api.FleetComplianceAnalytics, error)
+	ListNonCompliantServers(ctx context.Context, page int, limit int) ([]api.ServerFleetComplianceDetail, api.Pagination, error)
 }
 
 type service struct {
@@ -72,6 +74,23 @@ func (s service) GetFleetComplianceOverview(ctx context.Context) (api.FleetCompl
 	}
 
 	return response, nil
+}
+
+func (s service) ListNonCompliantServers(ctx context.Context, page int, limit int) ([]api.ServerFleetComplianceDetail, api.Pagination, error) {
+	servers, total, err := s.repository.ListNonCompliantServers(ctx, page, limit)
+	if err != nil {
+		s.logger.ErrorWithStack(ctx, "failed to list non-compliant servers", err)
+		return nil, api.Pagination{}, ErrGetFleetAnalytics
+	}
+
+	safeTotal, totalPages := pagination.SafeTotals(total, limit)
+
+	return servers, api.Pagination{
+		Page:       page,
+		Limit:      limit,
+		Total:      safeTotal,
+		TotalPages: totalPages,
+	}, nil
 }
 
 func NewService(repository Repository, appLogger *logger.Logger) Service {

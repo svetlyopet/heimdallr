@@ -119,6 +119,7 @@ type ServerJobListResponse struct {
 
 // ServerListItem defines model for ServerListItem.
 type ServerListItem struct {
+	Compliant       bool                  `json:"compliant"`
 	Hostname        string                `json:"hostname"`
 	Hypervisor      string                `json:"hypervisor"`
 	Id              UUID                  `json:"id"`

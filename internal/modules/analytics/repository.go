@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/svetlyopet/heimdallr/internal/fleetcompliance"
 	"github.com/svetlyopet/heimdallr/internal/modules/analytics/api"
 	"gorm.io/gorm"
 )
@@ -14,6 +15,7 @@ type Repository interface {
 	GetAutomationOverviewByID(ctx context.Context, automationID string) (api.AutomationAnalytics, error)
 	GetComplianceOverview(ctx context.Context) (api.ComplianceAnalytics, error)
 	GetFleetComplianceOverview(ctx context.Context) (api.FleetComplianceAnalytics, error)
+	ListNonCompliantServers(ctx context.Context, page int, limit int) ([]api.ServerFleetComplianceDetail, int64, error)
 }
 
 type repository struct {
@@ -358,23 +360,7 @@ func (r repository) GetComplianceOverview(ctx context.Context) (api.ComplianceAn
 	}, nil
 }
 
-const (
-	fleetNonCompliantDetailsLimit = 50
-	serverCompliantCondition      = `
-		NOT EXISTS (
-			SELECT 1
-			FROM required_agents ra
-			WHERE ra.deleted_at IS NULL
-				AND NOT EXISTS (
-					SELECT 1
-					FROM server_agents sa
-					INNER JOIN agents a ON a.id = sa.agent_id AND a.deleted_at IS NULL
-					WHERE sa.server_id = servers.id
-						AND a.name = ra.agent_name
-				)
-		)
-	`
-)
+var serverCompliantCondition = fleetcompliance.ServerCompliantCondition("servers.id")
 
 type requiredAgentCoverageRow struct {
 	AgentName      string
@@ -415,14 +401,13 @@ func (r repository) GetFleetComplianceOverview(ctx context.Context) (api.FleetCo
 
 	if totalRequiredAgents == 0 {
 		return api.FleetComplianceAnalytics{
-			TotalServers:              int(totalServers),
-			CompliantServers:          int(totalServers),
-			NonCompliantServers:       0,
-			ComplianceRate:            calculateSuccessRate(totalServers, totalServers),
-			TotalRequiredAgents:       0,
-			RequiredAgentCoverage:     []api.RequiredAgentCoverage{},
-			ByLocation:                []api.LocationFleetCompliance{},
-			NonCompliantServerDetails: []api.ServerFleetComplianceDetail{},
+			TotalServers:          int(totalServers),
+			CompliantServers:      int(totalServers),
+			NonCompliantServers:   0,
+			ComplianceRate:        calculateSuccessRate(totalServers, totalServers),
+			TotalRequiredAgents:   0,
+			RequiredAgentCoverage: []api.RequiredAgentCoverage{},
+			ByLocation:            []api.LocationFleetCompliance{},
 		}, nil
 	}
 
@@ -505,11 +490,49 @@ func (r repository) GetFleetComplianceOverview(ctx context.Context) (api.FleetCo
 		})
 	}
 
+	return api.FleetComplianceAnalytics{
+		TotalServers:          int(totalServers),
+		CompliantServers:      int(compliantServers),
+		NonCompliantServers:   int(nonCompliantServers),
+		ComplianceRate:        calculateSuccessRate(compliantServers, totalServers),
+		TotalRequiredAgents:   int(totalRequiredAgents),
+		RequiredAgentCoverage: requiredAgentCoverage,
+		ByLocation:            byLocation,
+	}, nil
+}
+
+func (r repository) ListNonCompliantServers(ctx context.Context, page int, limit int) ([]api.ServerFleetComplianceDetail, int64, error) {
+	var totalRequiredAgents int64
+	if err := r.db.WithContext(ctx).
+		Table("required_agents").
+		Where("deleted_at IS NULL").
+		Count(&totalRequiredAgents).Error; err != nil {
+		return nil, 0, err
+	}
+
+	if totalRequiredAgents == 0 {
+		return []api.ServerFleetComplianceDetail{}, 0, nil
+	}
+
+	serverCompliantForAlias := fleetcompliance.ServerCompliantCondition("s.id")
+	nonCompliantCondition := "NOT (" + serverCompliantForAlias + ")"
+
+	var total int64
+	if err := r.db.WithContext(ctx).
+		Table("servers s").
+		Where("s.deleted_at IS NULL").
+		Where(nonCompliantCondition).
+		Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	offset := (page - 1) * limit
+
 	var detailRows []nonCompliantServerRow
 	if err := r.db.WithContext(ctx).
 		Table("servers s").
 		Where("s.deleted_at IS NULL").
-		Where("NOT (" + strings.ReplaceAll(serverCompliantCondition, "servers.id", "s.id") + ")").
+		Where(nonCompliantCondition).
 		Select(`
 			s.id AS server_id,
 			s.hostname AS hostname,
@@ -531,19 +554,20 @@ func (r repository) GetFleetComplianceOverview(ctx context.Context) (api.FleetCo
 			) AS missing_agents
 		`).
 		Order("s.hostname ASC").
-		Limit(fleetNonCompliantDetailsLimit).
+		Limit(limit).
+		Offset(offset).
 		Find(&detailRows).Error; err != nil {
-		return api.FleetComplianceAnalytics{}, err
+		return nil, 0, err
 	}
 
-	nonCompliantDetails := make([]api.ServerFleetComplianceDetail, 0, len(detailRows))
+	details := make([]api.ServerFleetComplianceDetail, 0, len(detailRows))
 	for _, row := range detailRows {
 		serverID, err := uuid.Parse(row.ServerID)
 		if err != nil {
-			return api.FleetComplianceAnalytics{}, err
+			return nil, 0, err
 		}
 
-		nonCompliantDetails = append(nonCompliantDetails, api.ServerFleetComplianceDetail{
+		details = append(details, api.ServerFleetComplianceDetail{
 			ServerId:      serverID,
 			Hostname:      row.Hostname,
 			Location:      row.Location,
@@ -551,16 +575,7 @@ func (r repository) GetFleetComplianceOverview(ctx context.Context) (api.FleetCo
 		})
 	}
 
-	return api.FleetComplianceAnalytics{
-		TotalServers:              int(totalServers),
-		CompliantServers:          int(compliantServers),
-		NonCompliantServers:       int(nonCompliantServers),
-		ComplianceRate:            calculateSuccessRate(compliantServers, totalServers),
-		TotalRequiredAgents:       int(totalRequiredAgents),
-		RequiredAgentCoverage:     requiredAgentCoverage,
-		ByLocation:                byLocation,
-		NonCompliantServerDetails: nonCompliantDetails,
-	}, nil
+	return details, total, nil
 }
 
 func splitMissingAgents(raw string) []string {

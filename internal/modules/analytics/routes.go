@@ -12,6 +12,7 @@ var Policies = map[string]string{
 	"GetAutomationAnalyticsOverviewByID":  rbac.ScopeRead,
 	"GetComplianceAnalyticsOverview":      rbac.ScopeRead,
 	"GetFleetComplianceAnalyticsOverview": rbac.ScopeRead,
+	"ListNonCompliantServers":             rbac.ScopeRead,
 }
 
 func RegisterRoutes(rg *gin.RouterGroup, handler Handler, authorizer rbac.Authorizer, appLogger *logger.Logger) {

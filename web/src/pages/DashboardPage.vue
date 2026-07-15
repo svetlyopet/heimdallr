@@ -7,7 +7,7 @@
       </div>
 
       <div class="topbar-actions">
-        <button class="button button-secondary" type="button" @click="loadAnalytics">
+        <button class="button button-secondary" type="button" @click="refreshDashboard">
           Refresh
         </button>
       </div>
@@ -192,10 +192,23 @@
             <p class="eyebrow">Fleet</p>
             <h3>Non-compliant servers</h3>
           </div>
+
+          <div class="page-size">
+            <label>
+              Limit
+              <select v-model.number="nonCompliantPagination.limit" @change="changeNonCompliantLimit">
+                <option :value="5">5</option>
+                <option :value="10">10</option>
+                <option :value="20">20</option>
+              </select>
+            </label>
+          </div>
         </div>
 
-        <div v-if="loading" class="empty-state">Loading fleet analytics...</div>
-        <div v-else-if="fleet.non_compliant_server_details.length === 0" class="empty-state">
+        <div v-if="loading && nonCompliantServers.length === 0" class="empty-state">
+          Loading fleet analytics...
+        </div>
+        <div v-else-if="fleet.non_compliant_servers === 0" class="empty-state">
           <strong>All servers compliant</strong>
           <span>Every tracked server has the required agents installed.</span>
         </div>
@@ -210,7 +223,7 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-for="row in fleet.non_compliant_server_details" :key="row.server_id">
+              <tr v-for="row in nonCompliantServers" :key="row.server_id">
                 <td data-label="Hostname"><strong>{{ row.hostname }}</strong></td>
                 <td data-label="Location">{{ row.location }}</td>
                 <td data-label="Missing agents">{{ row.missing_agents.join(", ") }}</td>
@@ -226,6 +239,15 @@
             </tbody>
           </table>
         </div>
+
+        <PaginationControls
+          v-if="fleet.non_compliant_servers > 0"
+          :page="nonCompliantPagination.page"
+          :total-pages="nonCompliantPagination.total_pages"
+          :loading="nonCompliantLoading"
+          @previous="previousNonCompliantPage"
+          @next="nextNonCompliantPage"
+        />
       </article>
 
       <section class="stats-grid">
@@ -346,12 +368,15 @@
 <script setup>
 import { onMounted, reactive, ref } from "vue";
 import { RouterLink } from "vue-router";
-import { getAutomationAnalytics, getComplianceAnalytics, getFleetComplianceAnalytics } from "../api/analytics";
+import { getAutomationAnalytics, getComplianceAnalytics, getFleetComplianceAnalytics, listNonCompliantServers } from "../api/analytics";
 import AppAlert from "../components/AppAlert.vue";
+import PaginationControls from "../components/PaginationControls.vue";
 import { formatPercent } from "../utils/format";
 
 const loading = ref(false);
+const nonCompliantLoading = ref(false);
 const errorMessage = ref("");
+const nonCompliantServers = ref([]);
 
 const analytics = reactive({
   total_automations: 0,
@@ -383,10 +408,18 @@ const fleet = reactive({
   total_required_agents: 0,
   required_agent_coverage: [],
   by_location: [],
-  non_compliant_server_details: [],
 });
 
-onMounted(loadAnalytics);
+const nonCompliantPagination = reactive({
+  page: 1,
+  limit: 10,
+  total: 0,
+  total_pages: 0,
+});
+
+onMounted(async () => {
+  await Promise.all([loadAnalytics(), loadNonCompliantServers()]);
+});
 
 async function loadAnalytics() {
   loading.value = true;
@@ -407,5 +440,45 @@ async function loadAnalytics() {
   } finally {
     loading.value = false;
   }
+}
+
+async function loadNonCompliantServers() {
+  nonCompliantLoading.value = true;
+  errorMessage.value = "";
+
+  try {
+    const response = await listNonCompliantServers({
+      page: nonCompliantPagination.page,
+      limit: nonCompliantPagination.limit,
+    });
+
+    nonCompliantServers.value = response.data || [];
+    Object.assign(nonCompliantPagination, response.pagination || nonCompliantPagination);
+  } catch (error) {
+    errorMessage.value = error.message;
+  } finally {
+    nonCompliantLoading.value = false;
+  }
+}
+
+async function previousNonCompliantPage() {
+  if (nonCompliantPagination.page <= 1) return;
+  nonCompliantPagination.page -= 1;
+  await loadNonCompliantServers();
+}
+
+async function nextNonCompliantPage() {
+  if (nonCompliantPagination.page >= nonCompliantPagination.total_pages) return;
+  nonCompliantPagination.page += 1;
+  await loadNonCompliantServers();
+}
+
+async function changeNonCompliantLimit() {
+  nonCompliantPagination.page = 1;
+  await loadNonCompliantServers();
+}
+
+async function refreshDashboard() {
+  await Promise.all([loadAnalytics(), loadNonCompliantServers()]);
 }
 </script>

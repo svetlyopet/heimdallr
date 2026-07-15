@@ -84,6 +84,11 @@ tbody tr:hover {
     background: #fee2e2;
 }
 
+.badge-non-compliant {
+    color: #c2410c;
+    background: #ffedd5;
+}
+
 .row-actions {
     display: flex;
     justify-content: flex-end;

@@ -1201,6 +1201,29 @@ paths:
         "500":
           $ref: "#/components/responses/InternalServerError"
 
+  /v1/analytics/fleet/non-compliant-servers:
+    get:
+      tags:
+        - Analytics
+      summary: List non-compliant servers
+      operationId: listNonCompliantServers
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Non-compliant servers returned successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NonCompliantServerListResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
   /v1/required-agent:
     get:
       tags:
@@ -2034,9 +2057,12 @@ components:
         - type: object
           required:
             - relations
+            - compliant
           properties:
             relations:
               $ref: "#/components/schemas/ServerRelationSummary"
+            compliant:
+              type: boolean
 
     ServerWithRelations:
       allOf:
@@ -2957,7 +2983,6 @@ components:
         - total_required_agents
         - required_agent_coverage
         - by_location
-        - non_compliant_server_details
       properties:
         total_servers:
           type: integer
@@ -2982,10 +3007,19 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LocationFleetCompliance"
-        non_compliant_server_details:
+
+    NonCompliantServerListResponse:
+      type: object
+      required:
+        - data
+        - pagination
+      properties:
+        data:
           type: array
           items:
             $ref: "#/components/schemas/ServerFleetComplianceDetail"
+        pagination:
+          $ref: "#/components/schemas/Pagination"
 
     RequiredAgentCoverage:
       type: object

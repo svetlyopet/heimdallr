@@ -39,6 +39,10 @@ func (s stubRepository) GetFleetComplianceOverview(_ context.Context) (api.Fleet
 	return api.FleetComplianceAnalytics{}, nil
 }
 
+func (s stubRepository) ListNonCompliantServers(_ context.Context, _ int, _ int) ([]api.ServerFleetComplianceDetail, int64, error) {
+	return nil, 0, nil
+}
+
 func TestServiceGetAutomationOverviewByIDReturnsNotFound(t *testing.T) {
 	svc := NewService(stubRepository{getAutomationOverviewByIDError: ErrAutomationNotFound}, nil)
 

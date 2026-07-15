@@ -15,3 +15,7 @@ export function getComplianceAnalytics() {
 export function getFleetComplianceAnalytics() {
     return apiRequest("/v1/analytics/fleet");
 }
+
+export function listNonCompliantServers({ page = 1, limit = 10 } = {}) {
+    return apiRequest(`/v1/analytics/fleet/non-compliant-servers?page=${page}&limit=${limit}`);
+}

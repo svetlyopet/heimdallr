@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 	"github.com/svetlyopet/heimdallr/internal/modules/analytics/api"
+	"github.com/svetlyopet/heimdallr/internal/pagination"
 	"github.com/svetlyopet/heimdallr/internal/rbac"
 	"github.com/svetlyopet/heimdallr/internal/testutil"
 )
@@ -23,6 +24,9 @@ type stubService struct {
 	getComplianceError      error
 	getFleetResponse        api.FleetComplianceAnalytics
 	getFleetError           error
+	listNonCompliantResp    []api.ServerFleetComplianceDetail
+	listNonCompliantTotal   int64
+	listNonCompliantError   error
 }
 
 func (s stubService) GetAutomationOverview(_ context.Context) (api.AutomationAnalytics, error) {
@@ -55,6 +59,21 @@ func (s stubService) GetFleetComplianceOverview(_ context.Context) (api.FleetCom
 	}
 
 	return s.getFleetResponse, nil
+}
+
+func (s stubService) ListNonCompliantServers(_ context.Context, _ int, _ int) ([]api.ServerFleetComplianceDetail, api.Pagination, error) {
+	if s.listNonCompliantError != nil {
+		return nil, api.Pagination{}, s.listNonCompliantError
+	}
+
+	safeTotal, totalPages := pagination.SafeTotals(s.listNonCompliantTotal, 10)
+
+	return s.listNonCompliantResp, api.Pagination{
+		Page:       1,
+		Limit:      10,
+		Total:      safeTotal,
+		TotalPages: totalPages,
+	}, nil
 }
 
 func newAnalyticsRouter(t *testing.T, svc Service) *gin.Engine {

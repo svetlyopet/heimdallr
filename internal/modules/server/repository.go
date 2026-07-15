@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/svetlyopet/heimdallr/internal/fleetcompliance"
 	"gorm.io/gorm"
 )
 
@@ -33,6 +34,7 @@ type ServerWithCounts struct {
 	AgentCount   int64
 	JobCount     int64
 	ReleaseCount int64
+	Compliant    bool
 }
 
 type RelationSummary struct {
@@ -85,7 +87,8 @@ func (r repository) FindAll(ctx context.Context, agentID string, limit int, offs
 			servers.*,
 			(SELECT COUNT(*) FROM server_agents WHERE server_agents.server_id = servers.id) AS agent_count,
 			(SELECT COUNT(*) FROM server_jobs WHERE server_jobs.server_id = servers.id) AS job_count,
-			(SELECT COUNT(*) FROM server_releases WHERE server_releases.server_id = servers.id) AS release_count
+			(SELECT COUNT(*) FROM server_releases WHERE server_releases.server_id = servers.id) AS release_count,
+			(` + fleetcompliance.ServerCompliantSelectExpr("servers.id") + `) AS compliant
 		`).
 		Where("servers.deleted_at IS NULL")
 

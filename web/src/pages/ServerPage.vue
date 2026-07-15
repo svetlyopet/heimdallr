@@ -109,6 +109,7 @@
                 <th>Location</th>
                 <th>OS</th>
                 <th>Hypervisor</th>
+                <th>Compliance</th>
                 <th>Agents</th>
                 <th>Jobs</th>
                 <th>Releases</th>
@@ -127,6 +128,14 @@
                 <td>{{ server.location || "—" }}</td>
                 <td>{{ server.operating_system || "—" }}</td>
                 <td>{{ server.hypervisor || "—" }}</td>
+                <td data-label="Compliance">
+                  <span
+                    class="badge"
+                    :class="server.compliant ? 'badge-success' : 'badge-non-compliant'"
+                  >
+                    {{ server.compliant ? "Compliant" : "Non-compliant" }}
+                  </span>
+                </td>
                 <td>{{ server.relations?.agent_count ?? 0 }}</td>
                 <td>{{ server.relations?.job_count ?? 0 }}</td>
                 <td>{{ server.relations?.release_count ?? 0 }}</td>

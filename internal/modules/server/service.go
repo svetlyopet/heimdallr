@@ -544,6 +544,7 @@ func (s service) mapServerListItem(ctx context.Context, server ServerWithCounts)
 		OperatingSystem: server.OperatingSystem,
 		Hypervisor:      server.Hypervisor,
 		Location:        server.Location,
+		Compliant:       server.Compliant,
 		Relations: api.ServerRelationSummary{
 			AgentCount:   int(server.AgentCount),
 			JobCount:     int(server.JobCount),

@@ -87,14 +87,13 @@ type ErrorResponse struct {
 
 // FleetComplianceAnalytics defines model for FleetComplianceAnalytics.
 type FleetComplianceAnalytics struct {
-	ByLocation                []LocationFleetCompliance     `json:"by_location"`
-	ComplianceRate            float64                       `json:"compliance_rate"`
-	CompliantServers          int                           `json:"compliant_servers"`
-	NonCompliantServerDetails []ServerFleetComplianceDetail `json:"non_compliant_server_details"`
-	NonCompliantServers       int                           `json:"non_compliant_servers"`
-	RequiredAgentCoverage     []RequiredAgentCoverage       `json:"required_agent_coverage"`
-	TotalRequiredAgents       int                           `json:"total_required_agents"`
-	TotalServers              int                           `json:"total_servers"`
+	ByLocation            []LocationFleetCompliance `json:"by_location"`
+	ComplianceRate        float64                   `json:"compliance_rate"`
+	CompliantServers      int                       `json:"compliant_servers"`
+	NonCompliantServers   int                       `json:"non_compliant_servers"`
+	RequiredAgentCoverage []RequiredAgentCoverage   `json:"required_agent_coverage"`
+	TotalRequiredAgents   int                       `json:"total_required_agents"`
+	TotalServers          int                       `json:"total_servers"`
 }
 
 // FleetComplianceAnalyticsDataResponse defines model for FleetComplianceAnalyticsDataResponse.
@@ -121,6 +120,20 @@ type LocationJobAnalytics struct {
 	TotalJobs      int     `json:"total_jobs"`
 }
 
+// NonCompliantServerListResponse defines model for NonCompliantServerListResponse.
+type NonCompliantServerListResponse struct {
+	Data       []ServerFleetComplianceDetail `json:"data"`
+	Pagination Pagination                    `json:"pagination"`
+}
+
+// Pagination defines model for Pagination.
+type Pagination struct {
+	Limit      int `json:"limit"`
+	Page       int `json:"page"`
+	Total      int `json:"total"`
+	TotalPages int `json:"total_pages"`
+}
+
 // RequiredAgentCoverage defines model for RequiredAgentCoverage.
 type RequiredAgentCoverage struct {
 	AgentName      string  `json:"agent_name"`
@@ -143,6 +156,12 @@ type UUID = uuid.UUID
 // AutomationIDPath defines model for AutomationIDPath.
 type AutomationIDPath = openapi_types.UUID
 
+// Limit defines model for Limit.
+type Limit = int
+
+// Page defines model for Page.
+type Page = int
+
 // BadRequest defines model for BadRequest.
 type BadRequest = ErrorResponse
 
@@ -161,6 +180,12 @@ type bearerAuthContextKey string
 // sessionCookieContextKey is the context key for SessionCookie security scheme
 type sessionCookieContextKey string
 
+// ListNonCompliantServersParams defines parameters for ListNonCompliantServers.
+type ListNonCompliantServersParams struct {
+	Page  *Page  `form:"page,omitempty" json:"page,omitempty"`
+	Limit *Limit `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
 	// Get automation analytics overview
@@ -175,6 +200,9 @@ type ServerInterface interface {
 	// Get fleet compliance analytics overview
 	// (GET /v1/analytics/fleet)
 	GetFleetComplianceAnalyticsOverview(c *gin.Context)
+	// List non-compliant servers
+	// (GET /v1/analytics/fleet/non-compliant-servers)
+	ListNonCompliantServers(c *gin.Context, params ListNonCompliantServersParams)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -266,6 +294,45 @@ func (siw *ServerInterfaceWrapper) GetFleetComplianceAnalyticsOverview(c *gin.Co
 	siw.Handler.GetFleetComplianceAnalyticsOverview(c)
 }
 
+// ListNonCompliantServers operation middleware
+func (siw *ServerInterfaceWrapper) ListNonCompliantServers(c *gin.Context) {
+
+	var err error
+	_ = err
+
+	c.Set(string(BearerAuthScopes), []string{})
+
+	c.Set(string(SessionCookieScopes), []string{})
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListNonCompliantServersParams
+
+	// ------------- Optional query parameter "page" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "page", c.Request.URL.Query(), &params.Page, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter page: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", c.Request.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter limit: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.ListNonCompliantServers(c, params)
+}
+
 // GinServerOptions provides options for the Gin server.
 type GinServerOptions struct {
 	BaseURL      string
@@ -297,6 +364,7 @@ func RegisterHandlersWithOptions(router gin.IRouter, si ServerInterface, options
 	router.GET(options.BaseURL+"/v1/analytics/automation/:automation_id", wrapper.GetAutomationAnalyticsOverviewByID)
 	router.GET(options.BaseURL+"/v1/analytics/compliance", wrapper.GetComplianceAnalyticsOverview)
 	router.GET(options.BaseURL+"/v1/analytics/fleet", wrapper.GetFleetComplianceAnalyticsOverview)
+	router.GET(options.BaseURL+"/v1/analytics/fleet/non-compliant-servers", wrapper.ListNonCompliantServers)
 }
 
 type BadRequestJSONResponse ErrorResponse
@@ -512,6 +580,72 @@ func (response GetFleetComplianceAnalyticsOverview500JSONResponse) VisitGetFleet
 	return err
 }
 
+type ListNonCompliantServersRequestObject struct {
+	Params ListNonCompliantServersParams
+}
+
+type ListNonCompliantServersResponseObject interface {
+	VisitListNonCompliantServersResponse(w http.ResponseWriter) error
+}
+
+type ListNonCompliantServers200JSONResponse NonCompliantServerListResponse
+
+func (response ListNonCompliantServers200JSONResponse) VisitListNonCompliantServersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListNonCompliantServers400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response ListNonCompliantServers400JSONResponse) VisitListNonCompliantServersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListNonCompliantServers401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response ListNonCompliantServers401JSONResponse) VisitListNonCompliantServersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListNonCompliantServers500JSONResponse struct {
+	InternalServerErrorJSONResponse
+}
+
+func (response ListNonCompliantServers500JSONResponse) VisitListNonCompliantServersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
 	// Get automation analytics overview
@@ -526,6 +660,9 @@ type StrictServerInterface interface {
 	// Get fleet compliance analytics overview
 	// (GET /v1/analytics/fleet)
 	GetFleetComplianceAnalyticsOverview(ctx context.Context, request GetFleetComplianceAnalyticsOverviewRequestObject) (GetFleetComplianceAnalyticsOverviewResponseObject, error)
+	// List non-compliant servers
+	// (GET /v1/analytics/fleet/non-compliant-servers)
+	ListNonCompliantServers(ctx context.Context, request ListNonCompliantServersRequestObject) (ListNonCompliantServersResponseObject, error)
 }
 
 type StrictHandlerFunc func(ctx *gin.Context, request any) (any, error)
@@ -688,6 +825,34 @@ func (sh *strictHandler) GetFleetComplianceAnalyticsOverview(ctx *gin.Context) {
 		sh.options.HandlerErrorFunc(ctx, err)
 	} else if validResponse, ok := response.(GetFleetComplianceAnalyticsOverviewResponseObject); ok {
 		if err := validResponse.VisitGetFleetComplianceAnalyticsOverviewResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListNonCompliantServers operation middleware
+func (sh *strictHandler) ListNonCompliantServers(ctx *gin.Context, params ListNonCompliantServersParams) {
+	var request ListNonCompliantServersRequestObject
+
+	request.Params = params
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.ListNonCompliantServers(ctx.Request.Context(), request.(ListNonCompliantServersRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListNonCompliantServers")
+	}
+
+	ctx.Set("operation_id", "ListNonCompliantServers")
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(ListNonCompliantServersResponseObject); ok {
+		if err := validResponse.VisitListNonCompliantServersResponse(ctx.Writer); err != nil {
 			sh.options.ResponseErrorHandlerFunc(ctx, err)
 		}
 	} else if response != nil {

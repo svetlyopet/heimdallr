@@ -127,9 +127,17 @@ func FleetComplianceVerify(t *testing.T, c *Client) {
 	require.True(t, ok)
 	require.Len(t, coverage, 5)
 
-	details, ok := data["non_compliant_server_details"].([]any)
+	detailsResp, detailsBody := c.Request(http.MethodGet, "/api/v1/analytics/fleet/non-compliant-servers?page=1&limit=10", nil, nil)
+	require.Equal(t, http.StatusOK, detailsResp.StatusCode)
+
+	detailsData := DataField(t, detailsBody)
+	details, ok := detailsData["data"].([]any)
 	require.True(t, ok)
 	require.Len(t, details, 10)
+
+	pagination, ok := detailsData["pagination"].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, float64(10), pagination["total"])
 }
 
 // RunFleetComplianceFlow executes the full fleet compliance E2E seed and verify flow.

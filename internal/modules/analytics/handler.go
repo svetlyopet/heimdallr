@@ -65,6 +65,27 @@ func (h handler) GetFleetComplianceAnalyticsOverview(ctx context.Context, _ api.
 	return api.GetFleetComplianceAnalyticsOverview200JSONResponse{Data: response}, nil
 }
 
+func (h handler) ListNonCompliantServers(ctx context.Context, request api.ListNonCompliantServersRequestObject) (api.ListNonCompliantServersResponseObject, error) {
+	page, limit, ok := paginationParams(request.Params.Page, request.Params.Limit)
+	if !ok {
+		return api.ListNonCompliantServers400JSONResponse{
+			BadRequestJSONResponse: api.BadRequestJSONResponse{Error: "page and limit must be positive integers"},
+		}, nil
+	}
+
+	servers, paginationResponse, err := h.service.ListNonCompliantServers(ctx, page, limit)
+	if err != nil {
+		return api.ListNonCompliantServers500JSONResponse{
+			InternalServerErrorJSONResponse: api.InternalServerErrorJSONResponse{Error: analyticsErrorMessage(err, "failed to list non-compliant servers")},
+		}, nil
+	}
+
+	return api.ListNonCompliantServers200JSONResponse{
+		Data:       servers,
+		Pagination: paginationResponse,
+	}, nil
+}
+
 func NewHandler(service Service) (Handler, error) {
 	if service == nil {
 		return nil, errors.New("analytics service is required")
@@ -79,4 +100,18 @@ func analyticsErrorMessage(err error, fallback string) string {
 	}
 
 	return fallback
+}
+
+func paginationParams(pagePtr, limitPtr *api.Page) (page int, limit int, ok bool) {
+	page = 1
+	limit = 10
+
+	if pagePtr != nil {
+		page = int(*pagePtr)
+	}
+	if limitPtr != nil {
+		limit = int(*limitPtr)
+	}
+
+	return page, limit, page >= 1 && limit >= 1
 }

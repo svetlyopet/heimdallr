@@ -11,6 +11,7 @@ import (
 	"github.com/svetlyopet/heimdallr/internal/modules/job"
 	"github.com/svetlyopet/heimdallr/internal/modules/provider"
 	"github.com/svetlyopet/heimdallr/internal/modules/release"
+	"github.com/svetlyopet/heimdallr/internal/modules/requiredagent"
 	"github.com/svetlyopet/heimdallr/internal/testutil"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
@@ -62,6 +63,61 @@ func TestRepositoryFindAllReturnsServers(t *testing.T) {
 	require.Len(t, servers, 1)
 	require.Equal(t, created.ID, servers[0].ID)
 	require.Equal(t, int64(0), servers[0].AgentCount)
+}
+
+func TestRepositoryFindAllReturnsComplianceStatus(t *testing.T) {
+	db := newServerTestDB(t)
+	repo := NewRepository(db)
+
+	require.NoError(t, db.Create(&requiredagent.RequiredAgent{
+		ID:        uuid.New(),
+		AgentName: "crowdstrike",
+		AgentType: "security",
+	}).Error)
+
+	compliantServerID := uuid.New()
+	nonCompliantServerID := uuid.New()
+	agentID := uuid.New()
+
+	_, err := repo.Create(context.Background(), Server{
+		ID:              compliantServerID,
+		Hostname:        "compliant.example.com",
+		Metadata:        datatypes.JSON([]byte(`{}`)),
+		OperatingSystem: "linux",
+	})
+	require.NoError(t, err)
+
+	_, err = repo.Create(context.Background(), Server{
+		ID:              nonCompliantServerID,
+		Hostname:        "non-compliant.example.com",
+		Metadata:        datatypes.JSON([]byte(`{}`)),
+		OperatingSystem: "linux",
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, db.Create(&testAgent{
+		ID:       agentID,
+		Name:     "crowdstrike",
+		Type:     "security",
+		Metadata: datatypes.JSON([]byte(`{}`)),
+	}).Error)
+	require.NoError(t, db.Create(&testServerAgent{
+		ServerID: compliantServerID,
+		AgentID:  agentID,
+	}).Error)
+
+	servers, total, err := repo.FindAll(context.Background(), "", 10, 0)
+	require.NoError(t, err)
+	require.Equal(t, int64(2), total)
+	require.Len(t, servers, 2)
+
+	byHostname := map[string]ServerWithCounts{}
+	for _, server := range servers {
+		byHostname[server.Hostname] = server
+	}
+
+	require.True(t, byHostname["compliant.example.com"].Compliant)
+	require.False(t, byHostname["non-compliant.example.com"].Compliant)
 }
 
 func TestRepositoryFindByIdReturnsNotFound(t *testing.T) {
