@@ -21,8 +21,6 @@ type stubService struct {
 	getAllGlobalError    error
 	createResponse       api.Report
 	createError          error
-	updateResponse       api.Report
-	updateError          error
 }
 
 func (s stubService) GetAll(_ context.Context, _ string, _ string, _ int, _ int) ([]api.Report, int64, error) {
@@ -47,14 +45,6 @@ func (s stubService) Create(_ context.Context, _ string, _ string, _ api.ReportC
 	}
 
 	return s.createResponse, nil
-}
-
-func (s stubService) Update(_ context.Context, _ string, _ string, _ string, _ api.ReportUpdateRequest) (api.Report, error) {
-	if s.updateError != nil {
-		return api.Report{}, s.updateError
-	}
-
-	return s.updateResponse, nil
 }
 
 func newReportRouter(t *testing.T, svc Service) *gin.Engine {
@@ -106,7 +96,7 @@ func TestListAllReturnsReports(t *testing.T) {
 				Application:   "demo-app",
 				Version:       "v1.0.0",
 				Type:          api.ReportTypeSast,
-				Status:        api.JobStatusFailed,
+				Status:        api.Failed,
 			},
 		},
 		getAllGlobalTotal: 1,
@@ -133,6 +123,7 @@ func TestCreateReportReturnsCreated(t *testing.T) {
 	applicationID := uuid.MustParse("5d8dd803-fca6-4f7c-9dd2-24417622d630")
 	releaseID := uuid.MustParse("8b1e2f4a-9c3d-4e5f-a6b7-c8d9e0f1a2b3")
 	location := "ci"
+	output := "dGVzdA=="
 
 	r := newReportRouter(t, stubService{
 		createResponse: api.Report{
@@ -140,27 +131,16 @@ func TestCreateReportReturnsCreated(t *testing.T) {
 			ApplicationId: applicationID,
 			ReleaseId:     releaseID,
 			Type:          api.ReportTypeSast,
-			Status:        api.JobStatusStarted,
+			Status:        api.Success,
 		},
 	})
 
 	path := "/api/v1/application/" + applicationID.String() + "/release/" + releaseID.String() + "/report"
 	rr := testutil.DoGinJSONRequest(t, r, http.MethodPost, path, api.ReportCreateRequest{
-		Id: "sast-1", Type: api.ReportTypeSast, Status: api.JobStatusStarted, Location: &location,
+		Id: "sast-1", Type: api.ReportTypeSast, Status: api.Success, Location: &location, Output: &output,
 	}, nil)
 	response := testutil.AssertJSONStatus(t, rr, http.StatusCreated)
 	data, ok := response["data"].(map[string]any)
 	require.True(t, ok)
-	require.Equal(t, "started", data["status"])
-}
-
-func TestUpdateReportReturnsNotFound(t *testing.T) {
-	applicationID := uuid.MustParse("5d8dd803-fca6-4f7c-9dd2-24417622d630")
-	releaseID := uuid.MustParse("8b1e2f4a-9c3d-4e5f-a6b7-c8d9e0f1a2b3")
-
-	r := newReportRouter(t, stubService{updateError: ErrReportNotFound})
-
-	path := "/api/v1/application/" + applicationID.String() + "/release/" + releaseID.String() + "/report/sast-1"
-	rr := testutil.DoGinJSONRequest(t, r, http.MethodPatch, path, api.ReportUpdateRequest{Status: api.JobStatusSuccess}, nil)
-	require.Equal(t, http.StatusNotFound, rr.Code)
+	require.Equal(t, "success", data["status"])
 }

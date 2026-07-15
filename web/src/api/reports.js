@@ -25,13 +25,3 @@ export function createReport(applicationId, releaseId, payload) {
         },
     );
 }
-
-export function updateReport(applicationId, releaseId, reportId, payload) {
-    return apiRequest(
-        `/v1/application/${applicationId}/release/${releaseId}/report/${reportId}`,
-        {
-            method: "PATCH",
-            body: JSON.stringify(payload),
-        },
-    );
-}

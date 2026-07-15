@@ -22,24 +22,21 @@ const (
 	SessionCookieScopes sessionCookieContextKey = "SessionCookie.Scopes"
 )
 
-// Defines values for JobStatus.
+// Defines values for ReportStatus.
 const (
-	JobStatusFailed  JobStatus = "failed"
-	JobStatusSkipped JobStatus = "skipped"
-	JobStatusStarted JobStatus = "started"
-	JobStatusSuccess JobStatus = "success"
+	Failed  ReportStatus = "failed"
+	Skipped ReportStatus = "skipped"
+	Success ReportStatus = "success"
 )
 
-// Valid indicates whether the value is a known member of the JobStatus enum.
-func (e JobStatus) Valid() bool {
+// Valid indicates whether the value is a known member of the ReportStatus enum.
+func (e ReportStatus) Valid() bool {
 	switch e {
-	case JobStatusFailed:
+	case Failed:
 		return true
-	case JobStatusSkipped:
+	case Skipped:
 		return true
-	case JobStatusStarted:
-		return true
-	case JobStatusSuccess:
+	case Success:
 		return true
 	default:
 		return false
@@ -67,30 +64,6 @@ func (e ReportType) Valid() bool {
 	case ReportTypeSast:
 		return true
 	case ReportTypeSbom:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for ListReportsGlobalParamsStatus.
-const (
-	ListReportsGlobalParamsStatusFailed  ListReportsGlobalParamsStatus = "failed"
-	ListReportsGlobalParamsStatusSkipped ListReportsGlobalParamsStatus = "skipped"
-	ListReportsGlobalParamsStatusStarted ListReportsGlobalParamsStatus = "started"
-	ListReportsGlobalParamsStatusSuccess ListReportsGlobalParamsStatus = "success"
-)
-
-// Valid indicates whether the value is a known member of the ListReportsGlobalParamsStatus enum.
-func (e ListReportsGlobalParamsStatus) Valid() bool {
-	switch e {
-	case ListReportsGlobalParamsStatusFailed:
-		return true
-	case ListReportsGlobalParamsStatusSkipped:
-		return true
-	case ListReportsGlobalParamsStatusStarted:
-		return true
-	case ListReportsGlobalParamsStatusSuccess:
 		return true
 	default:
 		return false
@@ -129,9 +102,6 @@ type ErrorResponse struct {
 	Error string `json:"error"`
 }
 
-// JobStatus defines model for JobStatus.
-type JobStatus string
-
 // Pagination defines model for Pagination.
 type Pagination struct {
 	Limit      int `json:"limit"`
@@ -150,12 +120,12 @@ type Report struct {
 	Metadata      *ReportMetadata `json:"metadata,omitempty"`
 
 	// Output Base64-encoded output. Decoded content is limited to 4 MiB by default.
-	Output    *string    `json:"output,omitempty"`
-	ReleaseId UUID       `json:"release_id"`
-	Status    JobStatus  `json:"status"`
-	Type      ReportType `json:"type"`
-	Url       *string    `json:"url,omitempty"`
-	Version   string     `json:"version"`
+	Output    *string      `json:"output,omitempty"`
+	ReleaseId UUID         `json:"release_id"`
+	Status    ReportStatus `json:"status"`
+	Type      ReportType   `json:"type"`
+	Url       *string      `json:"url,omitempty"`
+	Version   string       `json:"version"`
 }
 
 // ReportCreateRequest defines model for ReportCreateRequest.
@@ -164,11 +134,11 @@ type ReportCreateRequest struct {
 	Location *string         `json:"location,omitempty"`
 	Metadata *ReportMetadata `json:"metadata,omitempty"`
 
-	// Output Base64-encoded output. Decoded content is limited to 4 MiB by default.
-	Output *string    `json:"output,omitempty"`
-	Status JobStatus  `json:"status"`
-	Type   ReportType `json:"type"`
-	Url    *URL       `json:"url,omitempty"`
+	// Output Base64-encoded output. Required when status is success or failed. Decoded content is limited to 4 MiB by default.
+	Output *string      `json:"output,omitempty"`
+	Status ReportStatus `json:"status"`
+	Type   ReportType   `json:"type"`
+	Url    *URL         `json:"url,omitempty"`
 }
 
 // ReportDataResponse defines model for ReportDataResponse.
@@ -185,17 +155,11 @@ type ReportListResponse struct {
 // ReportMetadata defines model for ReportMetadata.
 type ReportMetadata = map[string]interface{}
 
+// ReportStatus defines model for ReportStatus.
+type ReportStatus string
+
 // ReportType defines model for ReportType.
 type ReportType string
-
-// ReportUpdateRequest defines model for ReportUpdateRequest.
-type ReportUpdateRequest struct {
-	Metadata *ReportMetadata `json:"metadata,omitempty"`
-
-	// Output Base64-encoded output. Decoded content is limited to 4 MiB by default.
-	Output *string   `json:"output,omitempty"`
-	Status JobStatus `json:"status"`
-}
 
 // URL defines model for URL.
 type URL = string
@@ -247,25 +211,19 @@ type ListReleaseReportsParams struct {
 
 // ListReportsGlobalParams defines parameters for ListReportsGlobal.
 type ListReportsGlobalParams struct {
-	Page          *Page                          `form:"page,omitempty" json:"page,omitempty"`
-	Limit         *Limit                         `form:"limit,omitempty" json:"limit,omitempty"`
-	ApplicationId *UUID                          `form:"application_id,omitempty" json:"application_id,omitempty"`
-	ReleaseId     *UUID                          `form:"release_id,omitempty" json:"release_id,omitempty"`
-	Status        *ListReportsGlobalParamsStatus `form:"status,omitempty" json:"status,omitempty"`
-	Type          *ListReportsGlobalParamsType   `form:"type,omitempty" json:"type,omitempty"`
+	Page          *Page                        `form:"page,omitempty" json:"page,omitempty"`
+	Limit         *Limit                       `form:"limit,omitempty" json:"limit,omitempty"`
+	ApplicationId *UUID                        `form:"application_id,omitempty" json:"application_id,omitempty"`
+	ReleaseId     *UUID                        `form:"release_id,omitempty" json:"release_id,omitempty"`
+	Status        *ReportStatus                `form:"status,omitempty" json:"status,omitempty"`
+	Type          *ListReportsGlobalParamsType `form:"type,omitempty" json:"type,omitempty"`
 }
-
-// ListReportsGlobalParamsStatus defines parameters for ListReportsGlobal.
-type ListReportsGlobalParamsStatus string
 
 // ListReportsGlobalParamsType defines parameters for ListReportsGlobal.
 type ListReportsGlobalParamsType string
 
 // CreateReleaseReportJSONRequestBody defines body for CreateReleaseReport for application/json ContentType.
 type CreateReleaseReportJSONRequestBody = ReportCreateRequest
-
-// UpdateReleaseReportJSONRequestBody defines body for UpdateReleaseReport for application/json ContentType.
-type UpdateReleaseReportJSONRequestBody = ReportUpdateRequest
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
@@ -278,9 +236,6 @@ type ServerInterface interface {
 	// Get report by ID
 	// (GET /v1/application/{application_id}/release/{release_id}/report/{report_id})
 	GetReleaseReport(c *gin.Context, applicationId ApplicationIDPath, releaseId ReleaseIDPath, reportId ReportIDPath)
-	// Update report status
-	// (PATCH /v1/application/{application_id}/release/{release_id}/report/{report_id})
-	UpdateReleaseReport(c *gin.Context, applicationId ApplicationIDPath, releaseId ReleaseIDPath, reportId ReportIDPath)
 	// List reports across applications
 	// (GET /v1/report)
 	ListReportsGlobal(c *gin.Context, params ListReportsGlobalParams)
@@ -437,53 +392,6 @@ func (siw *ServerInterfaceWrapper) GetReleaseReport(c *gin.Context) {
 	siw.Handler.GetReleaseReport(c, applicationId, releaseId, reportId)
 }
 
-// UpdateReleaseReport operation middleware
-func (siw *ServerInterfaceWrapper) UpdateReleaseReport(c *gin.Context) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "application_id" -------------
-	var applicationId ApplicationIDPath
-
-	err = runtime.BindStyledParameterWithOptions("simple", "application_id", c.Param("application_id"), &applicationId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
-	if err != nil {
-		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter application_id: %w", err), http.StatusBadRequest)
-		return
-	}
-
-	// ------------- Path parameter "release_id" -------------
-	var releaseId ReleaseIDPath
-
-	err = runtime.BindStyledParameterWithOptions("simple", "release_id", c.Param("release_id"), &releaseId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
-	if err != nil {
-		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter release_id: %w", err), http.StatusBadRequest)
-		return
-	}
-
-	// ------------- Path parameter "report_id" -------------
-	var reportId ReportIDPath
-
-	err = runtime.BindStyledParameterWithOptions("simple", "report_id", c.Param("report_id"), &reportId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
-	if err != nil {
-		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter report_id: %w", err), http.StatusBadRequest)
-		return
-	}
-
-	c.Set(string(BearerAuthScopes), []string{})
-
-	c.Set(string(SessionCookieScopes), []string{})
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		middleware(c)
-		if c.IsAborted() {
-			return
-		}
-	}
-
-	siw.Handler.UpdateReleaseReport(c, applicationId, releaseId, reportId)
-}
-
 // ListReportsGlobal operation middleware
 func (siw *ServerInterfaceWrapper) ListReportsGlobal(c *gin.Context) {
 
@@ -585,7 +493,6 @@ func RegisterHandlersWithOptions(router gin.IRouter, si ServerInterface, options
 	router.GET(options.BaseURL+"/v1/application/:application_id/release/:release_id/report", wrapper.ListReleaseReports)
 	router.POST(options.BaseURL+"/v1/application/:application_id/release/:release_id/report", wrapper.CreateReleaseReport)
 	router.GET(options.BaseURL+"/v1/application/:application_id/release/:release_id/report/:report_id", wrapper.GetReleaseReport)
-	router.PATCH(options.BaseURL+"/v1/application/:application_id/release/:release_id/report/:report_id", wrapper.UpdateReleaseReport)
 	router.GET(options.BaseURL+"/v1/report", wrapper.ListReportsGlobal)
 }
 
@@ -859,89 +766,6 @@ func (response GetReleaseReport500JSONResponse) VisitGetReleaseReportResponse(w 
 	return err
 }
 
-type UpdateReleaseReportRequestObject struct {
-	ApplicationId ApplicationIDPath `json:"application_id"`
-	ReleaseId     ReleaseIDPath     `json:"release_id"`
-	ReportId      ReportIDPath      `json:"report_id"`
-	Body          *UpdateReleaseReportJSONRequestBody
-}
-
-type UpdateReleaseReportResponseObject interface {
-	VisitUpdateReleaseReportResponse(w http.ResponseWriter) error
-}
-
-type UpdateReleaseReport200JSONResponse ReportDataResponse
-
-func (response UpdateReleaseReport200JSONResponse) VisitUpdateReleaseReportResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(200)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type UpdateReleaseReport400JSONResponse struct{ BadRequestJSONResponse }
-
-func (response UpdateReleaseReport400JSONResponse) VisitUpdateReleaseReportResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(400)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type UpdateReleaseReport401JSONResponse struct{ UnauthorizedJSONResponse }
-
-func (response UpdateReleaseReport401JSONResponse) VisitUpdateReleaseReportResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(401)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type UpdateReleaseReport404JSONResponse struct{ NotFoundJSONResponse }
-
-func (response UpdateReleaseReport404JSONResponse) VisitUpdateReleaseReportResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(404)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type UpdateReleaseReport500JSONResponse struct {
-	InternalServerErrorJSONResponse
-}
-
-func (response UpdateReleaseReport500JSONResponse) VisitUpdateReleaseReportResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(500)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
 type ListReportsGlobalRequestObject struct {
 	Params ListReportsGlobalParams
 }
@@ -1005,9 +829,6 @@ type StrictServerInterface interface {
 	// Get report by ID
 	// (GET /v1/application/{application_id}/release/{release_id}/report/{report_id})
 	GetReleaseReport(ctx context.Context, request GetReleaseReportRequestObject) (GetReleaseReportResponseObject, error)
-	// Update report status
-	// (PATCH /v1/application/{application_id}/release/{release_id}/report/{report_id})
-	UpdateReleaseReport(ctx context.Context, request UpdateReleaseReportRequestObject) (UpdateReleaseReportResponseObject, error)
 	// List reports across applications
 	// (GET /v1/report)
 	ListReportsGlobal(ctx context.Context, request ListReportsGlobalRequestObject) (ListReportsGlobalResponseObject, error)
@@ -1163,43 +984,6 @@ func (sh *strictHandler) GetReleaseReport(ctx *gin.Context, applicationId Applic
 		sh.options.HandlerErrorFunc(ctx, err)
 	} else if validResponse, ok := response.(GetReleaseReportResponseObject); ok {
 		if err := validResponse.VisitGetReleaseReportResponse(ctx.Writer); err != nil {
-			sh.options.ResponseErrorHandlerFunc(ctx, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// UpdateReleaseReport operation middleware
-func (sh *strictHandler) UpdateReleaseReport(ctx *gin.Context, applicationId ApplicationIDPath, releaseId ReleaseIDPath, reportId ReportIDPath) {
-	var request UpdateReleaseReportRequestObject
-
-	request.ApplicationId = applicationId
-	request.ReleaseId = releaseId
-	request.ReportId = reportId
-
-	var body UpdateReleaseReportJSONRequestBody
-	if err := ctx.ShouldBindJSON(&body); err != nil {
-		sh.options.RequestErrorHandlerFunc(ctx, err)
-		return
-	}
-	request.Body = &body
-
-	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
-		return sh.ssi.UpdateReleaseReport(ctx.Request.Context(), request.(UpdateReleaseReportRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "UpdateReleaseReport")
-	}
-
-	ctx.Set("operation_id", "UpdateReleaseReport")
-
-	response, err := handler(ctx, request)
-
-	if err != nil {
-		sh.options.HandlerErrorFunc(ctx, err)
-	} else if validResponse, ok := response.(UpdateReleaseReportResponseObject); ok {
-		if err := validResponse.VisitUpdateReleaseReportResponse(ctx.Writer); err != nil {
 			sh.options.ResponseErrorHandlerFunc(ctx, err)
 		}
 	} else if response != nil {

@@ -35,8 +35,13 @@ jobs:
 
           echo "RELEASE_ID=$(jq -r '.data.id' release.json)" >> "$GITHUB_ENV"
 
-      - name: Register report (started)
+      - name: Run SAST scanner
         run: |
+          echo "<h1>SAST report placeholder</h1>" > sast-report.html
+
+      - name: Push SAST report
+        run: |
+          OUTPUT_B64=$(base64 -w0 sast-report.html 2>/dev/null || base64 sast-report.html | tr -d '\n')
           curl -sf -X POST \
             -H "Authorization: Bearer ${HEIMDALLR_TOKEN}" \
             -H "Content-Type: application/json" \
@@ -44,25 +49,9 @@ jobs:
             -d "{
               \"id\": \"${REPORT_ID}\",
               \"type\": \"sast\",
-              \"status\": \"started\",
+              \"status\": \"success\",
               \"location\": \"ci\",
               \"url\": \"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\",
-              \"metadata\": {\"tool\": \"example-sast\", \"workflow\": \"${{ github.workflow }}\"}
-            }"
-
-      - name: Run SAST scanner
-        run: |
-          echo "<h1>SAST report placeholder</h1>" > sast-report.html
-
-      - name: Push report results
-        run: |
-          OUTPUT_B64=$(base64 -w0 sast-report.html 2>/dev/null || base64 sast-report.html | tr -d '\n')
-          curl -sf -X PATCH \
-            -H "Authorization: Bearer ${HEIMDALLR_TOKEN}" \
-            -H "Content-Type: application/json" \
-            "${HEIMDALLR_URL}/api/v1/application/${HEIMDALLR_APPLICATION}/release/${RELEASE_ID}/report/${REPORT_ID}" \
-            -d "{
-              \"status\": \"success\",
-              \"metadata\": {\"findings\": 0, \"tool\": \"example-sast\"},
+              \"metadata\": {\"findings\": 0, \"tool\": \"example-sast\", \"workflow\": \"${{ github.workflow }}\"},
               \"output\": \"${OUTPUT_B64}\"
             }"

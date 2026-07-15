@@ -68,7 +68,6 @@
               <select v-model="filters.status" @change="resetPageAndLoad">
                 <option value="">All statuses</option>
                 <option value="failed">Failed</option>
-                <option value="started">Started</option>
                 <option value="success">Success</option>
                 <option value="skipped">Skipped</option>
               </select>

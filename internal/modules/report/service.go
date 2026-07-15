@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/svetlyopet/heimdallr/internal/logger"
@@ -20,7 +21,6 @@ type Service interface {
 	GetAllGlobal(ctx context.Context, filters ListFilters, page int, limit int) ([]api.Report, int64, error)
 	GetById(ctx context.Context, applicationID string, releaseID string, reportID string) (api.Report, error)
 	Create(ctx context.Context, applicationID string, releaseID string, req api.ReportCreateRequest) (api.Report, error)
-	Update(ctx context.Context, applicationID string, releaseID string, reportID string, req api.ReportUpdateRequest) (api.Report, error)
 }
 
 type service struct {
@@ -128,6 +128,13 @@ func (s service) Create(ctx context.Context, applicationID string, releaseID str
 	if req.Output != nil {
 		output = *req.Output
 	}
+
+	if req.Status == api.Success || req.Status == api.Failed {
+		if strings.TrimSpace(output) == "" {
+			return api.Report{}, NewReportError("output is required for success and failed reports", ErrInvalidOutput)
+		}
+	}
+
 	if outputErr := validation.ValidateBase64Output(output, requestlimits.MaxDecodedOutputBytes(ctx)); outputErr != nil {
 		return api.Report{}, NewInvalidOutputError(outputErr)
 	}
@@ -179,55 +186,6 @@ func (s service) Create(ctx context.Context, applicationID string, releaseID str
 	return mapEntityToResponse(created)
 }
 
-func (s service) Update(ctx context.Context, applicationID string, releaseID string, reportID string, req api.ReportUpdateRequest) (api.Report, error) {
-	parsedReleaseID, err := uuid.Parse(releaseID)
-	if err != nil {
-		return api.Report{}, ErrInvalidReleaseID
-	}
-
-	parsedApplicationID, err := uuid.Parse(applicationID)
-	if err != nil {
-		return api.Report{}, ErrInvalidApplicationID
-	}
-
-	metadata, err := marshalMetadata(req.Metadata)
-	if err != nil {
-		return api.Report{}, NewInvalidMetadataError(err)
-	}
-
-	output := ""
-	if req.Output != nil {
-		output = *req.Output
-	}
-	if outputErr := validation.ValidateBase64Output(output, requestlimits.MaxDecodedOutputBytes(ctx)); outputErr != nil {
-		return api.Report{}, NewInvalidOutputError(outputErr)
-	}
-
-	report := Report{
-		ID:            reportID,
-		ReleaseID:     parsedReleaseID,
-		ApplicationID: parsedApplicationID,
-		Status:        string(req.Status),
-		Metadata:      metadata,
-		Output:        output,
-	}
-
-	updated, err := s.repository.Update(ctx, report)
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return api.Report{}, ErrReportNotFound
-		}
-
-		s.logger.ErrorWithStack(ctx, "failed to update report", err,
-			slog.String("report_id", reportID),
-			slog.String("release_id", releaseID),
-		)
-		return api.Report{}, ErrUpdateReport
-	}
-
-	return mapEntityToResponse(updated)
-}
-
 func NewService(
 	repository Repository,
 	releaseLookupService release.LookupService,
@@ -276,7 +234,7 @@ func mapEntityToResponse(report Report) (api.Report, error) {
 		Application:   report.Application,
 		Version:       report.Version,
 		Type:          api.ReportType(report.Type),
-		Status:        api.JobStatus(report.Status),
+		Status:        api.ReportStatus(report.Status),
 		Location:      locationPtr,
 		Url:           urlPtr,
 		Metadata:      metadataPtr,

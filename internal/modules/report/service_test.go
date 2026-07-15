@@ -29,7 +29,7 @@ func newReportService(t *testing.T) (Service, application.Service, release.Servi
 	return reportSvc, appSvc, releaseSvc
 }
 
-func TestServiceCreateAndUpdateReportLifecycle(t *testing.T) {
+func TestServiceCreateReport(t *testing.T) {
 	reportSvc, appSvc, releaseSvc := newReportService(t)
 
 	app, err := appSvc.Create(context.Background(), appapi.ApplicationCreateRequest{Name: "report-app"})
@@ -44,31 +44,66 @@ func TestServiceCreateAndUpdateReportLifecycle(t *testing.T) {
 	}, true)
 	require.NoError(t, err)
 
-	metadata := api.ReportMetadata{"tool": "example"}
+	metadata := api.ReportMetadata{"tool": "example", "findings": 0}
 	url := api.URL("https://example.com/run/1")
 	location := "ci"
+	output := "dGVzdA=="
 	created, err := reportSvc.Create(context.Background(), app.Id.String(), rel.Id.String(), api.ReportCreateRequest{
 		Id:       "sast-1",
 		Type:     api.ReportTypeSast,
-		Status:   api.JobStatusStarted,
+		Status:   api.Success,
 		Location: &location,
 		Url:      &url,
 		Metadata: &metadata,
-	})
-	require.NoError(t, err)
-	require.Equal(t, api.JobStatusStarted, created.Status)
-
-	updateMetadata := api.ReportMetadata{"findings": 0}
-	output := "dGVzdA=="
-	updated, err := reportSvc.Update(context.Background(), app.Id.String(), rel.Id.String(), "sast-1", api.ReportUpdateRequest{
-		Status:   api.JobStatusSuccess,
-		Metadata: &updateMetadata,
 		Output:   &output,
 	})
 	require.NoError(t, err)
-	require.Equal(t, api.JobStatusSuccess, updated.Status)
-	require.NotNil(t, updated.Output)
-	require.Equal(t, "dGVzdA==", *updated.Output)
+	require.Equal(t, api.Success, created.Status)
+	require.NotNil(t, created.Output)
+	require.Equal(t, "dGVzdA==", *created.Output)
+}
+
+func TestServiceCreateSkippedReportWithoutOutput(t *testing.T) {
+	reportSvc, appSvc, releaseSvc := newReportService(t)
+
+	app, err := appSvc.Create(context.Background(), appapi.ApplicationCreateRequest{Name: "skipped-report-app"})
+	require.NoError(t, err)
+
+	pipelineURL := releaseapi.URL("https://example.com")
+	rel, err := releaseSvc.Create(context.Background(), app.Id.String(), releaseapi.ReleaseCreateRequest{
+		Version: "v1.0.0", CommitSha: ptr("abc"), PipelineUrl: &pipelineURL, Branch: ptr("main"),
+	}, true)
+	require.NoError(t, err)
+
+	created, err := reportSvc.Create(context.Background(), app.Id.String(), rel.Id.String(), api.ReportCreateRequest{
+		Id:     "sast-skipped",
+		Type:   api.ReportTypeSast,
+		Status: api.Skipped,
+	})
+	require.NoError(t, err)
+	require.Equal(t, api.Skipped, created.Status)
+	require.Nil(t, created.Output)
+}
+
+func TestServiceCreateRejectsSuccessWithoutOutput(t *testing.T) {
+	reportSvc, appSvc, releaseSvc := newReportService(t)
+
+	app, err := appSvc.Create(context.Background(), appapi.ApplicationCreateRequest{Name: "no-output-app"})
+	require.NoError(t, err)
+
+	pipelineURL := releaseapi.URL("https://example.com")
+	rel, err := releaseSvc.Create(context.Background(), app.Id.String(), releaseapi.ReleaseCreateRequest{
+		Version: "v1.0.0", CommitSha: ptr("abc"), PipelineUrl: &pipelineURL, Branch: ptr("main"),
+	}, true)
+	require.NoError(t, err)
+
+	_, err = reportSvc.Create(context.Background(), app.Id.String(), rel.Id.String(), api.ReportCreateRequest{
+		Id:     "sast-1",
+		Type:   api.ReportTypeSast,
+		Status: api.Success,
+	})
+	require.Error(t, err)
+	require.ErrorIs(t, err, ErrInvalidOutput)
 }
 
 func TestServiceGetByIdReturnsNotFound(t *testing.T) {
@@ -90,8 +125,9 @@ func TestServiceGetByIdReturnsNotFound(t *testing.T) {
 func TestServiceCreateReturnsNotFoundForMissingRelease(t *testing.T) {
 	reportSvc, _, _ := newReportService(t)
 
+	output := "dGVzdA=="
 	_, err := reportSvc.Create(context.Background(), uuid.New().String(), uuid.New().String(), api.ReportCreateRequest{
-		Id: "sast-1", Type: api.ReportTypeSast, Status: api.JobStatusStarted,
+		Id: "sast-1", Type: api.ReportTypeSast, Status: api.Success, Output: &output,
 	})
 	require.ErrorIs(t, err, ErrReportNotFound)
 }
@@ -115,7 +151,7 @@ func TestServiceCreateRejectsInvalidOutputBeforeReleaseLookup(t *testing.T) {
 			})
 
 			_, err := reportSvc.Create(ctx, uuid.NewString(), uuid.NewString(), api.ReportCreateRequest{
-				Id: "sast-1", Type: api.ReportTypeSast, Status: api.JobStatusStarted, Output: &testCase.output,
+				Id: "sast-1", Type: api.ReportTypeSast, Status: api.Success, Output: &testCase.output,
 			})
 
 			require.Error(t, err)
@@ -151,10 +187,6 @@ func (stubReportRepository) FindById(context.Context, string, string, string) (R
 }
 
 func (stubReportRepository) Create(context.Context, Report) (Report, error) {
-	return Report{}, nil
-}
-
-func (stubReportRepository) Update(context.Context, Report) (Report, error) {
 	return Report{}, nil
 }
 

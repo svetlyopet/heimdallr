@@ -61,23 +61,17 @@ func SoftwareRun(t *testing.T, c *Client, state *SoftwareState) {
 	state.ReleaseID = DataField(t, releaseBody)["id"].(string)
 
 	reportPath := fmt.Sprintf("/api/v1/application/%s/release/%s/report", state.ApplicationID, state.ReleaseID)
+	output := base64.StdEncoding.EncodeToString([]byte("<h1>E2E SAST report</h1>"))
 	resp, _ = tokenClient.Request(http.MethodPost, reportPath, map[string]any{
 		"id":       state.ReportID,
 		"type":     "sast",
-		"status":   "started",
+		"status":   "success",
 		"location": "ci",
 		"url":      "https://example.com/run/e2e",
-		"metadata": map[string]string{"tool": "e2e"},
-	}, nil)
-	require.Equal(t, http.StatusCreated, resp.StatusCode)
-
-	output := base64.StdEncoding.EncodeToString([]byte("<h1>E2E SAST report</h1>"))
-	resp, _ = tokenClient.Request(http.MethodPatch, reportPath+"/"+state.ReportID, map[string]any{
-		"status":   "success",
 		"metadata": map[string]any{"findings": 0, "tool": "e2e"},
 		"output":   output,
 	}, nil)
-	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
 }
 
 // SoftwareVerify asserts the desired software catalog state via GET requests.

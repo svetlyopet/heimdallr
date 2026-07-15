@@ -13,7 +13,6 @@ type Repository interface {
 	FindAllGlobal(ctx context.Context, filters ListFilters, limit int, offset int) ([]Report, int64, error)
 	FindById(ctx context.Context, reportID string, releaseID string, applicationID string) (Report, error)
 	Create(ctx context.Context, report Report) (Report, error)
-	Update(ctx context.Context, report Report) (Report, error)
 }
 
 type repository struct {
@@ -166,52 +165,6 @@ func (r repository) Create(ctx context.Context, report Report) (Report, error) {
 		}
 
 		returned = created
-		return nil
-	})
-
-	if err != nil {
-		return Report{}, err
-	}
-
-	return returned, nil
-}
-
-func (r repository) Update(ctx context.Context, report Report) (Report, error) {
-	report.ID = strings.TrimSpace(report.ID)
-	report.Status = strings.TrimSpace(report.Status)
-	report.Output = strings.TrimSpace(report.Output)
-
-	if report.ID == "" || report.ReleaseID == uuid.Nil {
-		return Report{}, gorm.ErrRecordNotFound
-	}
-
-	var returned Report
-
-	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		result := tx.
-			Model(&Report{}).
-			Where("id = ? AND release_id = ? AND application_id = ?", report.ID, report.ReleaseID, report.ApplicationID).
-			Select("status", "metadata", "output").
-			Updates(Report{
-				Status:   report.Status,
-				Metadata: report.Metadata,
-				Output:   report.Output,
-			})
-
-		if result.Error != nil {
-			return result.Error
-		}
-
-		if result.RowsAffected == 0 {
-			return gorm.ErrRecordNotFound
-		}
-
-		updated, err := findReportById(ctx, tx, report.ID, report.ReleaseID.String(), report.ApplicationID.String())
-		if err != nil {
-			return err
-		}
-
-		returned = updated
 		return nil
 	})
 

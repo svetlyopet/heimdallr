@@ -161,7 +161,7 @@ const release = ref(null);
 const reports = ref([]);
 const loading = ref(false);
 const errorMessage = ref("");
-const reportStatuses = ["success", "failed", "started", "skipped"];
+const reportStatuses = ["success", "failed", "skipped"];
 
 const pagination = reactive({
   page: 1,

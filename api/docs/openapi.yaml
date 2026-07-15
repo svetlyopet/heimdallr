@@ -291,37 +291,6 @@ paths:
         "500":
           $ref: "#/components/responses/InternalServerError"
 
-    patch:
-      tags:
-        - Report
-      summary: Update report status
-      operationId: updateReleaseReport
-      parameters:
-        - $ref: "#/components/parameters/ApplicationIDPath"
-        - $ref: "#/components/parameters/ReleaseIDPath"
-        - $ref: "#/components/parameters/ReportIDPath"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ReportUpdateRequest"
-      responses:
-        "200":
-          description: Report updated successfully
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ReportDataResponse"
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "404":
-          $ref: "#/components/responses/NotFound"
-        "500":
-          $ref: "#/components/responses/InternalServerError"
-
   /v1/provider:
     get:
       tags:
@@ -629,12 +598,7 @@ paths:
           in: query
           required: false
           schema:
-            type: string
-            enum:
-              - started
-              - skipped
-              - success
-              - failed
+            $ref: "#/components/schemas/ReportStatus"
         - name: type
           in: query
           required: false
@@ -2388,7 +2352,7 @@ components:
         type:
           $ref: "#/components/schemas/ReportType"
         status:
-          $ref: "#/components/schemas/JobStatus"
+          $ref: "#/components/schemas/ReportStatus"
         location:
           type: string
         url:
@@ -2402,6 +2366,13 @@ components:
         created_at:
           type: string
           format: date-time
+
+    ReportStatus:
+      type: string
+      enum:
+        - skipped
+        - success
+        - failed
 
     ReportType:
       type: string
@@ -2429,7 +2400,7 @@ components:
         type:
           $ref: "#/components/schemas/ReportType"
         status:
-          $ref: "#/components/schemas/JobStatus"
+          $ref: "#/components/schemas/ReportStatus"
         location:
           type: string
         url:
@@ -2438,20 +2409,7 @@ components:
           $ref: "#/components/schemas/ReportMetadata"
         output:
           type: string
-          description: Base64-encoded output. Decoded content is limited to 4 MiB by default.
-
-    ReportUpdateRequest:
-      type: object
-      required:
-        - status
-      properties:
-        status:
-          $ref: "#/components/schemas/JobStatus"
-        metadata:
-          $ref: "#/components/schemas/ReportMetadata"
-        output:
-          type: string
-          description: Base64-encoded output. Decoded content is limited to 4 MiB by default.
+          description: Base64-encoded output. Required when status is success or failed. Decoded content is limited to 4 MiB by default.
 
     ReportDataResponse:
       type: object

@@ -22,10 +22,10 @@
   loop:
     - id: "{{ app_item.name }}-{{ release_version }}-sast"
       type: sast
-      final_status: "{{ ['success', 'failed', 'started'][(release_index + 0) % 3] }}"
+      final_status: "{{ ['success', 'failed', 'skipped'][(release_index + 0) % 3] }}"
     - id: "{{ app_item.name }}-{{ release_version }}-sbom"
       type: sbom
-      final_status: "{{ ['success', 'started', 'failed'][(release_index + 1) % 3] }}"
+      final_status: "{{ ['success', 'skipped', 'failed'][(release_index + 1) % 3] }}"
   loop_control:
     loop_var: report_item
     label: "{{ report_item.id }}"

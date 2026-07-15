@@ -106,49 +106,6 @@ func (h handler) GetReleaseReport(ctx context.Context, request api.GetReleaseRep
 	return api.GetReleaseReport200JSONResponse{Data: report}, nil
 }
 
-func (h handler) UpdateReleaseReport(ctx context.Context, request api.UpdateReleaseReportRequestObject) (api.UpdateReleaseReportResponseObject, error) {
-	if request.Body == nil {
-		return api.UpdateReleaseReport400JSONResponse{
-			BadRequestJSONResponse: api.BadRequestJSONResponse{Error: "invalid request body"},
-		}, nil
-	}
-
-	if request.Body.Metadata != nil {
-		if _, err := json.Marshal(request.Body.Metadata); err != nil {
-			return api.UpdateReleaseReport400JSONResponse{
-				BadRequestJSONResponse: api.BadRequestJSONResponse{Error: "invalid metadata"},
-			}, nil
-		}
-	}
-
-	if request.Body.Output != nil && validateOutput(ctx, *request.Body.Output) != nil {
-		return api.UpdateReleaseReport400JSONResponse{
-			BadRequestJSONResponse: api.BadRequestJSONResponse{Error: "invalid output"},
-		}, nil
-	}
-
-	report, err := h.service.Update(ctx, request.ApplicationId.String(), request.ReleaseId.String(), request.ReportId, *request.Body)
-	if err != nil {
-		if errors.Is(err, ErrReportNotFound) {
-			return api.UpdateReleaseReport404JSONResponse{
-				NotFoundJSONResponse: api.NotFoundJSONResponse{Error: reportErrorMessage(err, "report not found")},
-			}, nil
-		}
-
-		if _, ok := errors.AsType[ReportError](err); ok {
-			return api.UpdateReleaseReport400JSONResponse{
-				BadRequestJSONResponse: api.BadRequestJSONResponse{Error: reportErrorMessage(err, "invalid request")},
-			}, nil
-		}
-
-		return api.UpdateReleaseReport500JSONResponse{
-			InternalServerErrorJSONResponse: api.InternalServerErrorJSONResponse{Error: reportErrorMessage(err, "failed to update report")},
-		}, nil
-	}
-
-	return api.UpdateReleaseReport200JSONResponse{Data: report}, nil
-}
-
 func (h handler) ListReportsGlobal(ctx context.Context, request api.ListReportsGlobalRequestObject) (api.ListReportsGlobalResponseObject, error) {
 	page, limit, ok := paginationParams(request.Params.Page, request.Params.Limit)
 	if !ok {
@@ -159,7 +116,7 @@ func (h handler) ListReportsGlobal(ctx context.Context, request api.ListReportsG
 
 	if request.Params.Status != nil && !request.Params.Status.Valid() {
 		return api.ListReportsGlobal400JSONResponse{
-			BadRequestJSONResponse: api.BadRequestJSONResponse{Error: "status must be one of started, skipped, success, failed"},
+			BadRequestJSONResponse: api.BadRequestJSONResponse{Error: "status must be one of skipped, success, failed"},
 		}, nil
 	}
 

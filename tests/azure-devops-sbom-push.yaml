@@ -33,6 +33,12 @@ steps:
 
   - bash: |
       set -euo pipefail
+      echo '{"bomFormat":"CycloneDX","specVersion":"1.5"}' > sbom.json
+    displayName: Generate SBOM
+
+  - bash: |
+      set -euo pipefail
+      OUTPUT_B64=$(base64 -w0 sbom.json 2>/dev/null || base64 sbom.json | tr -d '\n')
       curl -sf -X POST \
         -H "Authorization: Bearer $(heimdallrToken)" \
         -H "Content-Type: application/json" \
@@ -40,27 +46,9 @@ steps:
         -d "{
           \"id\": \"$(reportId)\",
           \"type\": \"sbom\",
-          \"status\": \"started\",
-          \"location\": \"ci\",
-          \"metadata\": {\"format\": \"cyclonedx\", \"tool\": \"syft\"}
-        }"
-    displayName: Register SBOM report
-
-  - bash: |
-      set -euo pipefail
-      echo '{"bomFormat":"CycloneDX","specVersion":"1.5"}' > sbom.json
-    displayName: Generate SBOM
-
-  - bash: |
-      set -euo pipefail
-      OUTPUT_B64=$(base64 -w0 sbom.json 2>/dev/null || base64 sbom.json | tr -d '\n')
-      curl -sf -X PATCH \
-        -H "Authorization: Bearer $(heimdallrToken)" \
-        -H "Content-Type: application/json" \
-        "$(heimdallrUrl)/api/v1/application/$(heimdallrApplicationId)/release/$(releaseId)/report/$(reportId)" \
-        -d "{
           \"status\": \"success\",
-          \"metadata\": {\"format\": \"cyclonedx\", \"components\": 1},
+          \"location\": \"ci\",
+          \"metadata\": {\"format\": \"cyclonedx\", \"components\": 1, \"tool\": \"syft\"},
           \"output\": \"${OUTPUT_B64}\"
         }"
     displayName: Push SBOM report

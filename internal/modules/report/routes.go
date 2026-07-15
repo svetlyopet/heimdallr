@@ -11,7 +11,6 @@ var Policies = map[string]string{
 	"ListReleaseReports":  rbac.ScopeRead,
 	"CreateReleaseReport": rbac.ScopeApplicationWrite,
 	"GetReleaseReport":    rbac.ScopeRead,
-	"UpdateReleaseReport": rbac.ScopeApplicationWrite,
 	"ListReportsGlobal":   rbac.ScopeRead,
 }
 

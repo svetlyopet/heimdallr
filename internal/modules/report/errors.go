@@ -14,7 +14,6 @@ const (
 	ErrMsgInvalidOutput        = "invalid output encoding"
 	ErrMsgInvalidReportType    = "invalid report type"
 	ErrMsgCreateReport         = "failed to create report"
-	ErrMsgUpdateReport         = "failed to update report"
 	ErrMsgGetReport            = "failed to get report"
 	ErrMsgListReports          = "failed to list reports"
 )
@@ -28,7 +27,6 @@ var (
 	ErrInvalidOutput        = errors.New(ErrMsgInvalidOutput)
 	ErrInvalidReportType    = errors.New(ErrMsgInvalidReportType)
 	ErrCreateReport         = errors.New(ErrMsgCreateReport)
-	ErrUpdateReport         = errors.New(ErrMsgUpdateReport)
 	ErrGetReport            = errors.New(ErrMsgGetReport)
 	ErrListReports          = errors.New(ErrMsgListReports)
 )
@@ -84,10 +82,6 @@ func NewInvalidOutputError(err error) error {
 
 func NewCreateReportError(err error) error {
 	return NewReportError(ErrCreateReport.Error(), err)
-}
-
-func NewUpdateReportError(err error) error {
-	return NewReportError(ErrUpdateReport.Error(), err)
 }
 
 func NewGetReportError(err error) error {
