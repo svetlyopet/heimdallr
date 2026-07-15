@@ -27,8 +27,8 @@
           <div class="page-size">
             <label>
               Automation
-              <select v-model="selectedAutomationId">
-                <option value="" disabled>Select automation</option>
+              <select v-model="filters.automation_id" @change="resetPageAndLoad">
+                <option value="">All automations</option>
                 <option v-for="automation in automations" :key="automation.id" :value="automation.id">
                   {{ automation.name }}
                 </option>
@@ -37,7 +37,7 @@
 
             <label>
               Limit
-              <select v-model.number="pagination.limit" @change="changeLimit">
+              <select v-model.number="pagination.limit" @change="resetPageAndLoad">
                 <option :value="5">5</option>
                 <option :value="10">10</option>
                 <option :value="20">20</option>
@@ -46,16 +46,11 @@
           </div>
         </div>
 
-        <div v-if="!selectedAutomationId" class="empty-state">
-          <strong>Select an automation</strong>
-          <span>Jobs are scoped by automation.</span>
-        </div>
-
-        <div v-else-if="loading" class="empty-state">Loading jobs...</div>
+        <div v-if="loading" class="empty-state">Loading jobs...</div>
 
         <div v-else-if="jobs.length === 0" class="empty-state">
-          <strong>No jobs yet</strong>
-          <span>No jobs were found for this automation.</span>
+          <strong>No jobs found</strong>
+          <span>Adjust filters or run automations to populate this list.</span>
         </div>
 
         <div v-else class="table-wrapper">
@@ -67,18 +62,20 @@
                 <th>Provider</th>
                 <th>Status</th>
                 <th>Location</th>
+                <th>Created</th>
                 <th>URL</th>
                 <th></th>
               </tr>
             </thead>
 
             <tbody>
-              <tr v-for="job in jobs" :key="`${selectedAutomationId}:${job.id}`">
+              <tr v-for="job in jobs" :key="`${job.automation_id}:${job.id}`">
                 <td data-label="Job ID"><strong>{{ job.id }}</strong></td>
                 <td data-label="Automation">{{ job.automation }}</td>
                 <td data-label="Provider"><span class="badge">{{ job.provider }}</span></td>
                 <td data-label="Status"><span class="badge" :class="`badge-${job.status}`">{{ job.status }}</span></td>
                 <td data-label="Location">{{ job.location }}</td>
+                <td data-label="Created">{{ formatDateTime(job.created_at) }}</td>
                 <td data-label="URL">
                   <a v-if="job.url" :href="job.url" target="_blank" rel="noreferrer">Open</a>
                   <span v-else>—</span>
@@ -90,7 +87,7 @@
                       :to="{
                         name: 'job-detail',
                         params: {
-                          automationId: selectedAutomationId,
+                          automationId: job.automation_id,
                           jobId: job.id,
                         },
                       }"
@@ -118,73 +115,77 @@
 
 <script setup>
 import { onMounted, reactive, ref, watch } from "vue";
-import { RouterLink } from "vue-router";
+import { RouterLink, useRoute, useRouter } from "vue-router";
 import { listAutomations } from "../api/automations";
-import { listJobs } from "../api/jobs";
+import { listAllJobs } from "../api/jobs";
 import AppAlert from "../components/AppAlert.vue";
 import PaginationControls from "../components/PaginationControls.vue";
 import StatsGrid from "../components/StatsGrid.vue";
+import { formatDateTime } from "../utils/format";
+
+const route = useRoute();
+const router = useRouter();
 
 const automations = ref([]);
 const jobs = ref([]);
-const selectedAutomationId = ref("");
 const loading = ref(false);
 const errorMessage = ref("");
 
+const filters = reactive({
+  automation_id: route.query.automation_id || "",
+});
+
 const pagination = reactive({
-  page: 1,
-  limit: 10,
+  page: Number(route.query.page) || 1,
+  limit: Number(route.query.limit) || 10,
   total: 0,
   total_pages: 0,
 });
 
 onMounted(loadAll);
 
-watch(selectedAutomationId, async () => {
-  pagination.page = 1;
-  await loadJobsForAutomation();
-});
+watch(
+  () => ({ ...filters, page: pagination.page, limit: pagination.limit }),
+  (query) => {
+    router.replace({
+      name: "jobs",
+      query: {
+        automation_id: query.automation_id || undefined,
+        page: query.page > 1 ? String(query.page) : undefined,
+        limit: query.limit !== 10 ? String(query.limit) : undefined,
+      },
+    });
+  },
+);
 
 async function loadAll() {
-  loading.value = true;
   errorMessage.value = "";
 
   try {
     const automationResponse = await listAutomations({ page: 1, limit: 100 });
     automations.value = automationResponse.data || [];
-
-    if (!selectedAutomationId.value && automations.value.length > 0) {
-      selectedAutomationId.value = automations.value[0].id;
-    }
-
-    await loadJobsForAutomation();
   } catch (error) {
     errorMessage.value = error.message;
-  } finally {
-    loading.value = false;
   }
+
+  await loadJobs();
 }
 
-async function loadJobsForAutomation() {
-  if (!selectedAutomationId.value) {
-    jobs.value = [];
-    Object.assign(pagination, {
-      page: 1,
-      limit: pagination.limit,
-      total: 0,
-      total_pages: 0,
-    });
-    return;
-  }
-
+async function loadJobs() {
   loading.value = true;
   errorMessage.value = "";
 
   try {
-    const response = await listJobs(selectedAutomationId.value, {
+    const params = {
       page: pagination.page,
       limit: pagination.limit,
-    });
+    };
+
+    if (filters.automation_id) {
+      params.automation_id = filters.automation_id;
+    }
+
+    const response = await listAllJobs(params);
 
     jobs.value = response.data || [];
     Object.assign(pagination, response.pagination || pagination);
@@ -195,20 +196,20 @@ async function loadJobsForAutomation() {
   }
 }
 
+async function resetPageAndLoad() {
+  pagination.page = 1;
+  await loadJobs();
+}
+
 async function previousPage() {
   if (pagination.page <= 1) return;
   pagination.page -= 1;
-  await loadJobsForAutomation();
+  await loadJobs();
 }
 
 async function nextPage() {
   if (pagination.page >= pagination.total_pages) return;
   pagination.page += 1;
-  await loadJobsForAutomation();
-}
-
-async function changeLimit() {
-  pagination.page = 1;
-  await loadJobsForAutomation();
+  await loadJobs();
 }
 </script>

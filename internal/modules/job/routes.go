@@ -8,6 +8,7 @@ import (
 )
 
 var Policies = map[string]string{
+	"ListJobsGlobal":      rbac.ScopeRead,
 	"ListAutomationJobs":  rbac.ScopeRead,
 	"CreateAutomationJob": rbac.ScopeAutomationWrite,
 	"GetAutomationJob":    rbac.ScopeRead,

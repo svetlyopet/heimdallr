@@ -41,6 +41,47 @@ func (h handler) ListAutomationJobs(ctx context.Context, request api.ListAutomat
 	}, nil
 }
 
+func (h handler) ListJobsGlobal(ctx context.Context, request api.ListJobsGlobalRequestObject) (api.ListJobsGlobalResponseObject, error) {
+	page, limit, ok := paginationParams(request.Params.Page, request.Params.Limit)
+	if !ok {
+		return api.ListJobsGlobal400JSONResponse{
+			BadRequestJSONResponse: api.BadRequestJSONResponse{Error: "page and limit must be positive integers"},
+		}, nil
+	}
+
+	if request.Params.Status != nil && !request.Params.Status.Valid() {
+		return api.ListJobsGlobal400JSONResponse{
+			BadRequestJSONResponse: api.BadRequestJSONResponse{Error: "status must be one of skipped, success, failed"},
+		}, nil
+	}
+
+	filters := ListFilters{}
+	if request.Params.AutomationId != nil {
+		filters.AutomationID = request.Params.AutomationId.String()
+	}
+	if request.Params.Status != nil {
+		filters.Status = string(*request.Params.Status)
+	}
+
+	jobs, total, err := h.service.GetAllGlobal(ctx, filters, page, limit)
+	if err != nil {
+		if errors.Is(err, ErrInvalidAutomationID) {
+			return api.ListJobsGlobal400JSONResponse{
+				BadRequestJSONResponse: api.BadRequestJSONResponse{Error: jobErrorMessage(err, "invalid query param value")},
+			}, nil
+		}
+
+		return api.ListJobsGlobal500JSONResponse{
+			InternalServerErrorJSONResponse: api.InternalServerErrorJSONResponse{Error: jobErrorMessage(err, "failed to list jobs")},
+		}, nil
+	}
+
+	return api.ListJobsGlobal200JSONResponse{
+		Data:       jobs,
+		Pagination: buildPagination(page, limit, total),
+	}, nil
+}
+
 func (h handler) CreateAutomationJob(ctx context.Context, request api.CreateAutomationJobRequestObject) (api.CreateAutomationJobResponseObject, error) {
 	if request.Body == nil {
 		return api.CreateAutomationJob400JSONResponse{

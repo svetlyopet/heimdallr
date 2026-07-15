@@ -71,7 +71,8 @@
 
 .nav-scroll {
     display: grid;
-    gap: 2px;
+    gap: 0;
+    align-content: start;
     flex: 1 1 auto;
     min-height: 0;
     overflow-y: auto;
@@ -126,7 +127,7 @@
     border: 0;
     border-radius: 12px;
     margin: 0;
-    padding: 10px 12px;
+    padding: 2px 12px;
     min-height: 0;
     color: #94a3b8;
     background: transparent;
@@ -138,7 +139,7 @@
     font-size: 13px;
     font-weight: 700;
     letter-spacing: 0.02em;
-    line-height: 1.2;
+    line-height: 3;
     cursor: pointer;
     transition:
         color 0.2s ease,
@@ -178,6 +179,7 @@
 .nav-group-panel {
     display: grid;
     grid-template-rows: 0fr;
+    min-height: 30px;
     transition: grid-template-rows 0.24s ease;
 }
 
@@ -187,6 +189,7 @@
 
 .nav-group-panel-inner {
     overflow: hidden;
+    min-height: 30px;
 }
 
 .nav-group-items {
@@ -195,6 +198,10 @@
     padding: 2px 0 2px 10px;
     opacity: 0;
     transition: opacity 0.18s ease;
+}
+
+.nav-group-panel:not(.nav-group-panel-expanded) .nav-group-items {
+    padding: 0;
 }
 
 .nav-group-panel-expanded .nav-group-items {

@@ -72,3 +72,48 @@ func TestRepositoryFindByIdReturnsNotFoundForDeletedAutomation(t *testing.T) {
 	require.NoError(t, db.Unscoped().Model(&job.Job{}).Where("id = ?", created.ID).Count(&rawCount).Error)
 	require.Equal(t, int64(1), rawCount)
 }
+
+func TestRepositoryFindAllGlobalFiltersByAutomationAndStatus(t *testing.T) {
+	db := newJobTestDB(t)
+	repo := job.NewRepository(db)
+
+	fixtureA := testfixtures.SeedProviderAutomation(t, db, "awx-a", "deploy-a")
+	fixtureB := testfixtures.SeedProviderAutomation(t, db, "awx-b", "deploy-b")
+
+	createdA, err := repo.Create(context.Background(), job.Job{
+		ID:           "1000",
+		AutomationID: fixtureA.Automation.ID,
+		Automation:   fixtureA.Automation.Name,
+		Provider:     fixtureA.Provider.Name,
+		ProviderID:   fixtureA.Provider.ID,
+		Status:       "success",
+		Location:     "global",
+		Url:          "https://example.com/#/jobs/playbook/200",
+		Metadata:     []byte(`{}`),
+		Output:       "dGVzdA==",
+	})
+	require.NoError(t, err)
+
+	_, err = repo.Create(context.Background(), job.Job{
+		ID:           "1001",
+		AutomationID: fixtureB.Automation.ID,
+		Automation:   fixtureB.Automation.Name,
+		Provider:     fixtureB.Provider.Name,
+		ProviderID:   fixtureB.Provider.ID,
+		Status:       "failed",
+		Location:     "global",
+		Url:          "https://example.com/#/jobs/playbook/201",
+		Metadata:     []byte(`{}`),
+		Output:       "dGVzdA==",
+	})
+	require.NoError(t, err)
+
+	found, total, err := repo.FindAllGlobal(context.Background(), job.ListFilters{
+		AutomationID: fixtureA.Automation.ID.String(),
+		Status:       "success",
+	}, 10, 0)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), total)
+	require.Len(t, found, 1)
+	require.Equal(t, createdA.ID, found[0].ID)
+}

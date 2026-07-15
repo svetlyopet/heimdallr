@@ -9,8 +9,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
+	uuid "github.com/google/uuid"
 	"github.com/oapi-codegen/runtime"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
@@ -48,10 +50,12 @@ type ErrorResponse struct {
 
 // Job defines model for Job.
 type Job struct {
-	Automation string       `json:"automation"`
-	Id         string       `json:"id"`
-	Location   string       `json:"location"`
-	Metadata   *JobMetadata `json:"metadata,omitempty"`
+	Automation   string       `json:"automation"`
+	AutomationId UUID         `json:"automation_id"`
+	CreatedAt    time.Time    `json:"created_at"`
+	Id           string       `json:"id"`
+	Location     string       `json:"location"`
+	Metadata     *JobMetadata `json:"metadata,omitempty"`
 
 	// Output Base64-encoded output. Decoded content is limited to 4 MiB by default.
 	Output   *JobOutput `json:"output,omitempty"`
@@ -103,6 +107,9 @@ type Pagination struct {
 // URL defines model for URL.
 type URL = string
 
+// UUID defines model for UUID.
+type UUID = uuid.UUID
+
 // AutomationIDPath defines model for AutomationIDPath.
 type AutomationIDPath = openapi_types.UUID
 
@@ -136,6 +143,14 @@ type ListAutomationJobsParams struct {
 	Limit *Limit `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
+// ListJobsGlobalParams defines parameters for ListJobsGlobal.
+type ListJobsGlobalParams struct {
+	Page         *Page      `form:"page,omitempty" json:"page,omitempty"`
+	Limit        *Limit     `form:"limit,omitempty" json:"limit,omitempty"`
+	AutomationId *UUID      `form:"automation_id,omitempty" json:"automation_id,omitempty"`
+	Status       *JobStatus `form:"status,omitempty" json:"status,omitempty"`
+}
+
 // CreateAutomationJobJSONRequestBody defines body for CreateAutomationJob for application/json ContentType.
 type CreateAutomationJobJSONRequestBody = JobCreateRequest
 
@@ -150,6 +165,9 @@ type ServerInterface interface {
 	// Get job by composite ID
 	// (GET /v1/automation/{automation_id}/job/{job_id})
 	GetAutomationJob(c *gin.Context, automationId AutomationIDPath, jobId JobID)
+	// List jobs across automations
+	// (GET /v1/job)
+	ListJobsGlobal(c *gin.Context, params ListJobsGlobalParams)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -276,6 +294,61 @@ func (siw *ServerInterfaceWrapper) GetAutomationJob(c *gin.Context) {
 	siw.Handler.GetAutomationJob(c, automationId, jobId)
 }
 
+// ListJobsGlobal operation middleware
+func (siw *ServerInterfaceWrapper) ListJobsGlobal(c *gin.Context) {
+
+	var err error
+	_ = err
+
+	c.Set(string(BearerAuthScopes), []string{})
+
+	c.Set(string(SessionCookieScopes), []string{})
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListJobsGlobalParams
+
+	// ------------- Optional query parameter "page" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "page", c.Request.URL.Query(), &params.Page, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter page: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", c.Request.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter limit: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Optional query parameter "automation_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "automation_id", c.Request.URL.Query(), &params.AutomationId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter automation_id: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Optional query parameter "status" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "status", c.Request.URL.Query(), &params.Status, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter status: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.ListJobsGlobal(c, params)
+}
+
 // GinServerOptions provides options for the Gin server.
 type GinServerOptions struct {
 	BaseURL      string
@@ -306,6 +379,7 @@ func RegisterHandlersWithOptions(router gin.IRouter, si ServerInterface, options
 	router.GET(options.BaseURL+"/v1/automation/:automation_id/job", wrapper.ListAutomationJobs)
 	router.POST(options.BaseURL+"/v1/automation/:automation_id/job", wrapper.CreateAutomationJob)
 	router.GET(options.BaseURL+"/v1/automation/:automation_id/job/:job_id", wrapper.GetAutomationJob)
+	router.GET(options.BaseURL+"/v1/job", wrapper.ListJobsGlobal)
 }
 
 type BadRequestJSONResponse ErrorResponse
@@ -515,6 +589,58 @@ func (response GetAutomationJob500JSONResponse) VisitGetAutomationJobResponse(w 
 	return err
 }
 
+type ListJobsGlobalRequestObject struct {
+	Params ListJobsGlobalParams
+}
+
+type ListJobsGlobalResponseObject interface {
+	VisitListJobsGlobalResponse(w http.ResponseWriter) error
+}
+
+type ListJobsGlobal200JSONResponse JobListResponse
+
+func (response ListJobsGlobal200JSONResponse) VisitListJobsGlobalResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListJobsGlobal400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response ListJobsGlobal400JSONResponse) VisitListJobsGlobalResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListJobsGlobal500JSONResponse struct {
+	InternalServerErrorJSONResponse
+}
+
+func (response ListJobsGlobal500JSONResponse) VisitListJobsGlobalResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
 	// List jobs for automation
@@ -526,6 +652,9 @@ type StrictServerInterface interface {
 	// Get job by composite ID
 	// (GET /v1/automation/{automation_id}/job/{job_id})
 	GetAutomationJob(ctx context.Context, request GetAutomationJobRequestObject) (GetAutomationJobResponseObject, error)
+	// List jobs across automations
+	// (GET /v1/job)
+	ListJobsGlobal(ctx context.Context, request ListJobsGlobalRequestObject) (ListJobsGlobalResponseObject, error)
 }
 
 type StrictHandlerFunc func(ctx *gin.Context, request any) (any, error)
@@ -675,6 +804,34 @@ func (sh *strictHandler) GetAutomationJob(ctx *gin.Context, automationId Automat
 		sh.options.HandlerErrorFunc(ctx, err)
 	} else if validResponse, ok := response.(GetAutomationJobResponseObject); ok {
 		if err := validResponse.VisitGetAutomationJobResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListJobsGlobal operation middleware
+func (sh *strictHandler) ListJobsGlobal(ctx *gin.Context, params ListJobsGlobalParams) {
+	var request ListJobsGlobalRequestObject
+
+	request.Params = params
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.ListJobsGlobal(ctx.Request.Context(), request.(ListJobsGlobalRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListJobsGlobal")
+	}
+
+	ctx.Set("operation_id", "ListJobsGlobal")
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(ListJobsGlobalResponseObject); ok {
+		if err := validResponse.VisitListJobsGlobalResponse(ctx.Writer); err != nil {
 			sh.options.ResponseErrorHandlerFunc(ctx, err)
 		}
 	} else if response != nil {

@@ -10,6 +10,7 @@ import (
 
 type Repository interface {
 	FindAll(ctx context.Context, automationId string, limit int, offset int) ([]Job, int64, error)
+	FindAllGlobal(ctx context.Context, filters ListFilters, limit int, offset int) ([]Job, int64, error)
 	FindById(ctx context.Context, jobId string, automationId string) (Job, error)
 	Create(ctx context.Context, job Job) (Job, error)
 }
@@ -39,6 +40,58 @@ func (r repository) FindAll(ctx context.Context, automationId string, limit int,
 		Joins("JOIN automations ON automations.id = jobs.automation_id AND automations.deleted_at IS NULL").
 		Joins("JOIN providers ON providers.id = automations.provider_id AND providers.deleted_at IS NULL").
 		Where("jobs.deleted_at IS NULL AND jobs.automation_id = ?", automationId)
+
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	findQuery := query.
+		Select(`
+			jobs.id,
+			automations.name AS automation,
+			jobs.automation_id,
+			providers.name AS provider,
+			providers.id AS provider_id,
+			jobs.status,
+			jobs.location,
+			jobs.url,
+			jobs.created_at,
+			jobs.updated_at
+		`).
+		Order("jobs.created_at DESC")
+
+	if limit > 0 {
+		findQuery = findQuery.Limit(limit)
+	}
+
+	if offset > 0 {
+		findQuery = findQuery.Offset(offset)
+	}
+
+	if err := findQuery.Find(&jobs).Error; err != nil {
+		return nil, 0, err
+	}
+
+	return jobs, total, nil
+}
+
+func (r repository) FindAllGlobal(ctx context.Context, filters ListFilters, limit int, offset int) ([]Job, int64, error) {
+	var jobs []Job
+	var total int64
+
+	query := r.db.WithContext(ctx).
+		Table("jobs").
+		Joins("JOIN automations ON automations.id = jobs.automation_id AND automations.deleted_at IS NULL").
+		Joins("JOIN providers ON providers.id = automations.provider_id AND providers.deleted_at IS NULL").
+		Where("jobs.deleted_at IS NULL")
+
+	if filters.AutomationID != "" {
+		query = query.Where("jobs.automation_id = ?", filters.AutomationID)
+	}
+
+	if filters.Status != "" {
+		query = query.Where("jobs.status = ?", filters.Status)
+	}
 
 	if err := query.Count(&total).Error; err != nil {
 		return nil, 0, err

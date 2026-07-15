@@ -174,6 +174,10 @@ func (s stubJobRepository) FindAll(context.Context, string, int, int) ([]Job, in
 	return nil, 0, s.findAllErr
 }
 
+func (s stubJobRepository) FindAllGlobal(context.Context, ListFilters, int, int) ([]Job, int64, error) {
+	return nil, 0, s.findAllErr
+}
+
 func (s stubJobRepository) FindById(context.Context, string, string) (Job, error) {
 	return Job{}, nil
 }

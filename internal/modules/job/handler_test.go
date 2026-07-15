@@ -15,13 +15,16 @@ import (
 )
 
 type stubJobService struct {
-	listResponse []api.Job
-	listTotal    int64
-	listError    error
-	getResponse  api.Job
-	getError     error
-	createResp   api.Job
-	createError  error
+	listResponse       []api.Job
+	listTotal          int64
+	listError          error
+	listGlobalResponse []api.Job
+	listGlobalTotal    int64
+	listGlobalError    error
+	getResponse        api.Job
+	getError           error
+	createResp         api.Job
+	createError        error
 }
 
 func (s stubJobService) GetAll(_ context.Context, _ string, _ int, _ int) ([]api.Job, int64, error) {
@@ -30,6 +33,14 @@ func (s stubJobService) GetAll(_ context.Context, _ string, _ int, _ int) ([]api
 	}
 
 	return s.listResponse, s.listTotal, nil
+}
+
+func (s stubJobService) GetAllGlobal(_ context.Context, _ ListFilters, _ int, _ int) ([]api.Job, int64, error) {
+	if s.listGlobalError != nil {
+		return nil, 0, s.listGlobalError
+	}
+
+	return s.listGlobalResponse, s.listGlobalTotal, nil
 }
 
 func (s stubJobService) GetById(_ context.Context, _, _ string) (api.Job, error) {
@@ -114,5 +125,32 @@ func TestHandlerListReturnsInternalServerError(t *testing.T) {
 
 	path := "/api/v1/automation/" + automationID.String() + "/job"
 	rr := testutil.DoGinJSONRequest(t, r, http.MethodGet, path, nil, nil)
+	require.Equal(t, http.StatusInternalServerError, rr.Code)
+}
+
+func TestHandlerListGlobalReturnsBadRequestForInvalidStatus(t *testing.T) {
+	r := newJobRouter(t, stubJobService{})
+
+	rr := testutil.DoGinJSONRequest(t, r, http.MethodGet, "/api/v1/job?status=unknown", nil, nil)
+	require.Equal(t, http.StatusBadRequest, rr.Code)
+}
+
+func TestHandlerListGlobalReturnsJobs(t *testing.T) {
+	automationID := uuid.New()
+	r := newJobRouter(t, stubJobService{
+		listGlobalResponse: []api.Job{
+			{Id: "1000", AutomationId: automationID, Status: api.Success},
+		},
+		listGlobalTotal: 1,
+	})
+
+	rr := testutil.DoGinJSONRequest(t, r, http.MethodGet, "/api/v1/job?status=success", nil, nil)
+	require.Equal(t, http.StatusOK, rr.Code)
+}
+
+func TestHandlerListGlobalReturnsInternalServerError(t *testing.T) {
+	r := newJobRouter(t, stubJobService{listGlobalError: errors.New("boom")})
+
+	rr := testutil.DoGinJSONRequest(t, r, http.MethodGet, "/api/v1/job", nil, nil)
 	require.Equal(t, http.StatusInternalServerError, rr.Code)
 }

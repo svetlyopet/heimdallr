@@ -18,6 +18,7 @@ import (
 
 type Service interface {
 	GetAll(ctx context.Context, automationId string, page int, limit int) ([]api.Job, int64, error)
+	GetAllGlobal(ctx context.Context, filters ListFilters, page int, limit int) ([]api.Job, int64, error)
 	GetById(ctx context.Context, jobId string, automationId string) (api.Job, error)
 	Create(ctx context.Context, automationId string, req api.JobCreateRequest) (api.Job, error)
 }
@@ -55,6 +56,46 @@ func (s service) GetAll(ctx context.Context, automationId string, page int, limi
 				err,
 				slog.String("job_id", job.ID),
 				slog.String("automation_id", automationId),
+			)
+			return nil, 0, ErrListJobs
+		}
+		responses = append(responses, jobResponse)
+	}
+
+	return responses, total, nil
+}
+
+func (s service) GetAllGlobal(ctx context.Context, filters ListFilters, page int, limit int) ([]api.Job, int64, error) {
+	if filters.AutomationID != "" {
+		if _, err := uuid.Parse(filters.AutomationID); err != nil {
+			return nil, 0, ErrInvalidAutomationID
+		}
+	}
+
+	offset := (page - 1) * limit
+
+	jobs, total, err := s.repository.FindAllGlobal(ctx, filters, limit, offset)
+	if err != nil {
+		s.logger.ErrorWithStack(
+			ctx,
+			"failed to find jobs globally",
+			err,
+			slog.Int("page", page),
+			slog.Int("limit", limit),
+			slog.Int("offset", offset),
+		)
+		return nil, 0, ErrListJobs
+	}
+
+	responses := make([]api.Job, 0, len(jobs))
+	for _, job := range jobs {
+		jobResponse, err := mapEntityToResponse(job)
+		if err != nil {
+			s.logger.ErrorWithStack(
+				ctx,
+				"failed to map job to response",
+				err,
+				slog.String("job_id", job.ID),
 			)
 			return nil, 0, ErrListJobs
 		}
@@ -203,14 +244,16 @@ func mapEntityToResponse(job Job) (api.Job, error) {
 	}
 
 	return api.Job{
-		Id:         job.ID,
-		Automation: job.Automation,
-		Provider:   job.Provider,
-		Status:     api.JobStatus(job.Status),
-		Location:   job.Location,
-		Url:        job.Url,
-		Metadata:   metadataPtr,
-		Output:     outputPtr,
+		Id:           job.ID,
+		AutomationId: job.AutomationID,
+		Automation:   job.Automation,
+		Provider:     job.Provider,
+		Status:       api.JobStatus(job.Status),
+		Location:     job.Location,
+		Url:          job.Url,
+		Metadata:     metadataPtr,
+		Output:       outputPtr,
+		CreatedAt:    job.CreatedAt,
 	}, nil
 }
 

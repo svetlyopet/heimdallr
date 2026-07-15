@@ -471,6 +471,37 @@ paths:
         "500":
           $ref: "#/components/responses/InternalServerError"
 
+  /v1/job:
+    get:
+      tags:
+        - Job
+      summary: List jobs across automations
+      operationId: listJobsGlobal
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+        - name: automation_id
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/UUID"
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/JobStatus"
+      responses:
+        "200":
+          description: Jobs returned successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobListResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
   /v1/automation/{automation_id}/job:
     get:
       tags:
@@ -1841,15 +1872,19 @@ components:
       type: object
       required:
         - id
+        - automation_id
         - automation
         - provider
         - status
         - location
         - url
+        - created_at
       properties:
         id:
           type: string
           minLength: 1
+        automation_id:
+          $ref: "#/components/schemas/UUID"
         automation:
           type: string
           minLength: 1
@@ -1867,6 +1902,9 @@ components:
           $ref: "#/components/schemas/JobMetadata"
         output:
           $ref: "#/components/schemas/JobOutput"
+        created_at:
+          type: string
+          format: date-time
 
     JobCreateRequest:
       type: object
