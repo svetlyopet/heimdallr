@@ -116,7 +116,7 @@ func (h handler) ListReportsGlobal(ctx context.Context, request api.ListReportsG
 
 	if request.Params.Status != nil && !request.Params.Status.Valid() {
 		return api.ListReportsGlobal400JSONResponse{
-			BadRequestJSONResponse: api.BadRequestJSONResponse{Error: "status must be one of skipped, success, failed"},
+			BadRequestJSONResponse: api.BadRequestJSONResponse{Error: "status must be one of success, failed"},
 		}, nil
 	}
 

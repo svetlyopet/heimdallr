@@ -63,28 +63,6 @@ func TestServiceCreateReport(t *testing.T) {
 	require.Equal(t, "dGVzdA==", *created.Output)
 }
 
-func TestServiceCreateSkippedReportWithoutOutput(t *testing.T) {
-	reportSvc, appSvc, releaseSvc := newReportService(t)
-
-	app, err := appSvc.Create(context.Background(), appapi.ApplicationCreateRequest{Name: "skipped-report-app"})
-	require.NoError(t, err)
-
-	pipelineURL := releaseapi.URL("https://example.com")
-	rel, err := releaseSvc.Create(context.Background(), app.Id.String(), releaseapi.ReleaseCreateRequest{
-		Version: "v1.0.0", CommitSha: ptr("abc"), PipelineUrl: &pipelineURL, Branch: ptr("main"),
-	}, true)
-	require.NoError(t, err)
-
-	created, err := reportSvc.Create(context.Background(), app.Id.String(), rel.Id.String(), api.ReportCreateRequest{
-		Id:     "sast-skipped",
-		Type:   api.ReportTypeSast,
-		Status: api.Skipped,
-	})
-	require.NoError(t, err)
-	require.Equal(t, api.Skipped, created.Status)
-	require.Nil(t, created.Output)
-}
-
 func TestServiceCreateRejectsSuccessWithoutOutput(t *testing.T) {
 	reportSvc, appSvc, releaseSvc := newReportService(t)
 

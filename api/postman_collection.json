@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Heimdallr API",
-    "description": "API for managing software applications, releases, reports, servers, agents, providers, automations, and automation jobs.",
+    "description": "API for managing applications, releases, compliance reports, servers, agents, providers, automations, and automation jobs.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
     "version": "1.0.0"
   },
@@ -616,7 +616,7 @@
             "method": "POST",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id\": \"<string>\",\n  \"type\": \"sbom\",\n  \"status\": \"success\",\n  \"location\": \"<string>\",\n  \"url\": \"<uri>\",\n  \"metadata\": {},\n  \"output\": \"<string>\"\n}",
+              "raw": "{\n  \"id\": \"<string>\",\n  \"type\": \"sbom\",\n  \"status\": \"started\",\n  \"location\": \"<string>\",\n  \"url\": \"<uri>\",\n  \"metadata\": {},\n  \"output\": \"<string>\"\n}",
               "options": {
                 "raw": {
                   "headerFamily": "json",
@@ -763,7 +763,7 @@
                 {
                   "disabled": false,
                   "description": {
-                    "content": " (This can only be one of skipped,success,failed)",
+                    "content": " (This can only be one of started,skipped,success,failed)",
                     "type": "text/plain"
                   },
                   "key": "status",
@@ -3220,6 +3220,174 @@
             ],
             "method": "DELETE",
             "body": {},
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{bearer_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Other",
+      "item": [
+        {
+          "name": "Update report status",
+          "request": {
+            "name": "Update report status",
+            "description": {},
+            "url": {
+              "path": [
+                "v1",
+                "application",
+                ":application_id",
+                "release",
+                ":release_id",
+                "report",
+                ":report_id"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": [
+                {
+                  "type": "any",
+                  "value": "{{application_id}}",
+                  "key": "application_id",
+                  "disabled": false,
+                  "description": {
+                    "content": "(Required) ",
+                    "type": "text/plain"
+                  }
+                },
+                {
+                  "type": "any",
+                  "value": "{{release_id}}",
+                  "key": "release_id",
+                  "disabled": false,
+                  "description": {
+                    "content": "(Required) ",
+                    "type": "text/plain"
+                  }
+                },
+                {
+                  "type": "any",
+                  "value": "{{report_id}}",
+                  "key": "report_id",
+                  "disabled": false,
+                  "description": {
+                    "content": "(Required) ",
+                    "type": "text/plain"
+                  }
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "PATCH",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"failed\",\n  \"metadata\": {},\n  \"output\": \"<string>\"\n}",
+              "options": {
+                "raw": {
+                  "headerFamily": "json",
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{bearer_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update job status",
+          "request": {
+            "name": "Update job status",
+            "description": {
+              "content": "Updates a job scoped by automation ID and job ID.",
+              "type": "text/plain"
+            },
+            "url": {
+              "path": [
+                "v1",
+                "automation",
+                ":automation_id",
+                "job",
+                ":job_id"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": [
+                {
+                  "type": "any",
+                  "value": "{{automation_id}}",
+                  "key": "automation_id",
+                  "disabled": false,
+                  "description": {
+                    "content": "(Required) ",
+                    "type": "text/plain"
+                  }
+                },
+                {
+                  "type": "any",
+                  "value": "{{job_id}}",
+                  "key": "job_id",
+                  "disabled": false,
+                  "description": {
+                    "content": "(Required) ",
+                    "type": "text/plain"
+                  }
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "PATCH",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"skipped\",\n  \"metadata\": {\n    \"key_0\": 2461,\n    \"key_1\": false\n  },\n  \"output\": \"<string>\"\n}",
+              "options": {
+                "raw": {
+                  "headerFamily": "json",
+                  "language": "json"
+                }
+              }
+            },
             "auth": {
               "type": "bearer",
               "bearer": [

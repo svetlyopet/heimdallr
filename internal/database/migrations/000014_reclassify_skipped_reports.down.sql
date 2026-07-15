@@ -1,0 +1,1 @@
+-- Data migration is not safely reversible without tracking affected row IDs.

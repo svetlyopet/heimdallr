@@ -25,7 +25,6 @@ const (
 // Defines values for ReportStatus.
 const (
 	Failed  ReportStatus = "failed"
-	Skipped ReportStatus = "skipped"
 	Success ReportStatus = "success"
 )
 
@@ -33,8 +32,6 @@ const (
 func (e ReportStatus) Valid() bool {
 	switch e {
 	case Failed:
-		return true
-	case Skipped:
 		return true
 	case Success:
 		return true

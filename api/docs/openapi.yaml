@@ -2329,7 +2329,6 @@ components:
     ReportStatus:
       type: string
       enum:
-        - skipped
         - success
         - failed
 

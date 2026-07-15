@@ -69,7 +69,6 @@
                 <option value="">All statuses</option>
                 <option value="failed">Failed</option>
                 <option value="success">Success</option>
-                <option value="skipped">Skipped</option>
               </select>
             </label>
 
