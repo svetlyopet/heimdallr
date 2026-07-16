@@ -1,3 +1,5 @@
+name: heimdallr
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -6,7 +8,7 @@ services:
       POSTGRES_PASSWORD: heimdallr
       POSTGRES_DB: heimdallr
     ports:
-      - "5432:5432"
+      - "${POSTGRES_HOST_PORT:-5432}:5432"
     volumes:
       - heimdallr_pg_data:/var/lib/postgresql/data
     healthcheck:
@@ -16,7 +18,11 @@ services:
       retries: 5
 
   heimdallr:
-    build: .
+    profiles: ["app"]
+    image: ${HEIMDALLR_IMAGE:-heimdallr:local}
+    build:
+      context: ..
+      dockerfile: Dockerfile
     depends_on:
       postgres:
         condition: service_healthy

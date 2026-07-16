@@ -17,8 +17,6 @@ them into searchable records and dashboard summaries.
   to understand where software ran and what changed it.
 - **Operational summaries** — view software catalog totals, compliance success rates, and automation
   outcomes from the dashboard.
-- **Controlled API access** — use admin and reader accounts for people, and
-  scoped tokens for CI or automation clients.
 
 Heimdallr collects and presents results; it does not run scanners or automation
 jobs itself.
@@ -78,7 +76,7 @@ flowchart LR
 Docker Compose starts Heimdallr and PostgreSQL:
 
 ```bash
-make docker-up
+make e2e-up
 ```
 
 Open [http://localhost:8080](http://localhost:8080) and sign in with:
@@ -93,7 +91,7 @@ deployment.
 Stop the stack with:
 
 ```bash
-make docker-down
+make e2e-down
 ```
 
 For a source-based setup, frontend development, or test commands, see

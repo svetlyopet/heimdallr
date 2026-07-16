@@ -19,6 +19,11 @@ TEST_DB_MANAGED ?= 1
 TEST_POSTGRES_URL ?= postgres://heimdallr:heimdallr@127.0.0.1:5433/heimdallr?sslmode=disable
 export TEST_POSTGRES_URL
 
+COMPOSE_FILE := docker/docker-compose.yaml
+COMPOSE := docker compose -f $(COMPOSE_FILE)
+HEIMDALLR_IMAGE ?= heimdallr:local
+COMPOSE_BUILD ?= 1
+
 DATABASE_URL ?=
 
 .PHONY: out-reports
@@ -145,13 +150,13 @@ lint-api: test-web-stub ## Lints all code with golangci-lint
 .PHONY: test-db-up
 test-db-up:
 	@if [ "$(TEST_DB_MANAGED)" = "1" ]; then \
-		docker compose -f docker-compose.test.yml up -d --wait; \
+		POSTGRES_HOST_PORT=5433 $(COMPOSE) up -d --wait postgres; \
 	fi
 
 .PHONY: test-db-down
 test-db-down:
 	@if [ "$(TEST_DB_MANAGED)" = "1" ]; then \
-		docker compose -f docker-compose.test.yml down -v --remove-orphans; \
+		$(COMPOSE) down -v --remove-orphans; \
 	fi
 
 test-unit: test-web-stub test-db-up ## Run unit tests
@@ -163,23 +168,13 @@ test-integration: test-web-stub test-db-up ## Run integration tests
 
 .PHONY: e2e-up
 e2e-up: ## Start docker-compose stack and wait for health
-	@docker compose down -v --remove-orphans 2>/dev/null || true
-	@docker compose up --build -d
-	@HEIMDALLR_PASSWORD=e2e-test-password ./scripts/wait-for-health.sh
-
-.PHONY: e2e-up-ci
-e2e-up-ci:
-	@docker compose -f docker-compose.yml -f docker-compose.ci.yml down -v --remove-orphans 2>/dev/null || true
-	@docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d
+	@$(COMPOSE) --profile app down -v --remove-orphans 2>/dev/null || true
+	@HEIMDALLR_IMAGE=$(HEIMDALLR_IMAGE) $(COMPOSE) --profile app up $(if $(filter 1,$(COMPOSE_BUILD)),--build,--no-build) -d
 	@HEIMDALLR_PASSWORD=e2e-test-password ./scripts/wait-for-health.sh
 
 .PHONY: e2e-down
 e2e-down: ## Stop docker-compose stack
-	@docker compose down -v
-
-.PHONY: e2e-down-ci
-e2e-down-ci: ## Stop CI docker-compose stack
-	@docker compose -f docker-compose.yml -f docker-compose.ci.yml down -v
+	@$(COMPOSE) --profile app down -v
 
 .PHONY: e2e-operations-run
 e2e-operations-run: ## Run operations E2E scripts
@@ -231,14 +226,6 @@ run-debug: build-web test-db-up ## Run web app in debug mode
 .PHONY: run-release
 run-release: build-web test-db-up ## Run web app in release mode
 	@GIN_MODE=release DATABASE_URL=$(TEST_POSTGRES_URL) go run $(MAIN_PATH) -log-format=$(LOG_FORMAT) -log-level=$(LOG_LEVEL)
-
-.PHONY: docker-up
-docker-up: ## Start Postgres and Heimdallr via docker-compose
-	@docker compose up --build -d
-
-.PHONY: docker-down
-docker-down: ## Stop Postgres and Heimdallr docker services
-	@docker compose down
 
 .PHONY: migrate
 migrate: ## Migrations run automatically on startup (Postgres via DATABASE_URL)

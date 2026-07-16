@@ -87,20 +87,20 @@ requests to the API on port 8080.
 ### PostgreSQL with Docker (full stack)
 
 ```bash
-make docker-up
+make e2e-up
 ```
 
 This starts PostgreSQL and a production-style Heimdallr container at
 [http://localhost:8080](http://localhost:8080). Stop the stack with
-`make docker-down`.
+`make e2e-down`.
 
 The Compose credentials are for local development only:
 `root` / `e2e-test-password`.
 
 ### Demo data
 
-With Heimdallr already running (`make run-debug`, `make docker-up`, or
-`make e2e-up`), seed demo fleet, software, and operations data:
+With Heimdallr already running (`make run-debug` or `make e2e-up`), seed
+demo fleet, software, and operations data:
 
 ```bash
 make demo-seed
