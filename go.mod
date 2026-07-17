@@ -8,7 +8,7 @@ require (
 	github.com/golangci/golangci-lint/v2 v2.12.2
 	github.com/google/uuid v1.6.0
 	github.com/oapi-codegen/oapi-codegen/v2 v2.7.2
-	github.com/oapi-codegen/runtime v1.4.2
+	github.com/oapi-codegen/runtime v1.6.0
 	github.com/samber/do/v2 v2.0.0
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/crypto v0.54.0
