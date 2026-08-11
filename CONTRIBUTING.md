@@ -8,7 +8,7 @@ working development environment and the checks expected before a pull request.
 For backend and full-stack development:
 
 - Go 1.26.5
-- Node.js 22 and npm
+- Node.js 22 and pnpm (enable with `corepack enable`)
 - Git and Make
 
 Install these only when you need the related workflow:
@@ -78,7 +78,7 @@ make run-debug
 
 # Terminal 2
 cd web
-npm run dev
+pnpm run dev
 ```
 
 Open [http://127.0.0.1:5173](http://127.0.0.1:5173). Vite proxies `/api`
@@ -172,8 +172,8 @@ changes affect models, constraints, or queries.
 
 ### Web changes
 
-Frontend source is under `web/src/`. Use `npm run dev` for live development and
-`npm run build` (or `make build-web`) to verify a production build.
+Frontend source is under `web/src/`. Use `pnpm run dev` for live development and
+`pnpm run build` (or `make build-web`) to verify a production build.
 
 The Go binary embeds `web/dist/`. Go-only tests use `make test-web-stub` to
 create the minimum required asset, so a full frontend build is not needed for

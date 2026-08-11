@@ -39,6 +39,7 @@ reports/
 # Web assets and deps
 web/node_modules/
 web/dist/
+.pnpm-store/
 
 # E2E generated state
 tests/e2e/operations/.automation_id

@@ -82,7 +82,7 @@ $(REPORTS_DIR)/report.json: out-reports test-web-stub test-db-up
 
 .PHONY: web-install-deps
 web-install-deps: ## Install web dependencies
-	cd $(WEB_DIR) && npm install
+	cd $(WEB_DIR) && pnpm install
 
 .PHONY: generate-automation-api
 generate-automation-api:
@@ -211,7 +211,7 @@ demo-up: e2e-up demo-seed ## Start stack and seed demo data
 
 .PHONY: build-web
 build-web: out-web
-	@cd $(WEB_DIR) && npm run build
+	@cd $(WEB_DIR) && pnpm run build
 
 .PHONY: build-api
 build-api: out-api generate-api

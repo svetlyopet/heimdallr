@@ -1,9 +1,11 @@
 FROM node:22-alpine AS web
+ENV CI=true
 WORKDIR /app/web
-COPY web/package.json web/package-lock.json ./
-RUN npm ci
+RUN corepack enable
+COPY web/package.json web/pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
 COPY web/ ./
-RUN npm run build
+RUN pnpm run build
 
 FROM golang:1.26-alpine AS api
 WORKDIR /app
