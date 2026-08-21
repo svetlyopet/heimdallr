@@ -88,11 +88,12 @@ jobs:
       - name: govulncheck
         run: make govulncheck
       - name: Run gosec
+        id: gosec
         uses: securego/gosec@master
         with:
           args: -no-fail -fmt sarif -out gosec.sarif ./...
       - name: Upload gosec SARIF
-        if: always()
+        if: steps.gosec.outcome != 'skipped'
         uses: github/codeql-action/upload-sarif@v4.37.6
         with:
           sarif_file: gosec.sarif
